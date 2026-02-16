@@ -236,7 +236,7 @@ export default function ClientesPage() {
         }
       />
 
-      <div className="p-6 space-y-4">
+      <div className="p-4 lg:p-6 space-y-4">
 
         {/* Resumo executivo */}
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
@@ -304,8 +304,8 @@ export default function ClientesPage() {
             )}
           </div>
 
-          {/* Linha 2: pills de filtro */}
-          <div className="flex items-center gap-2 flex-wrap">
+          {/* Linha 2: pills de filtro — scroll horizontal no mobile */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none -mx-4 px-4 lg:mx-0 lg:px-0 lg:flex-wrap">
             {/* Ícone filtro */}
             <Filter className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
 
@@ -377,10 +377,10 @@ export default function ClientesPage() {
               return (
                 <Card key={client.id} className={cn('border-zinc-800 hover:border-zinc-700 transition-colors', isInactive ? 'bg-zinc-900/50 opacity-70' : 'bg-zinc-900')}>
                   <CardContent className="p-4">
-                    <div className="flex items-start gap-4">
+                    <div className="flex items-start gap-3">
 
-                      {/* Score gauge */}
-                      <div className="shrink-0 pt-1">
+                      {/* Score gauge — menor em mobile */}
+                      <div className="shrink-0 pt-0.5">
                         {isObservacao ? (
                           <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center">
                             <Clock className="w-5 h-5 text-zinc-500" />
@@ -456,7 +456,7 @@ export default function ClientesPage() {
                       </div>
 
                       {/* Valor + link */}
-                      <div className="flex flex-col items-end gap-3 shrink-0">
+                      <div className="flex flex-col items-end gap-2 shrink-0">
                         <div className="text-right">
                           {client.clientType === 'mrr' ? (
                             <>

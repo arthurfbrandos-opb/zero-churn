@@ -620,7 +620,7 @@ function ClientePerfilInner() {
 
       {/* Header do perfil */}
       <div className="border-b border-zinc-800 bg-zinc-950 sticky top-0 z-10">
-        <div className="px-6 pt-4 pb-0">
+        <div className="px-4 lg:px-6 pt-4 pb-0">
 
           {/* Breadcrumb + ações */}
           <div className="flex items-center justify-between mb-4">
@@ -750,7 +750,7 @@ function ClientePerfilInner() {
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-0 -mb-px">
+          <div className="flex gap-0 -mb-px overflow-x-auto scrollbar-none">
             {TABS.map(tab => {
               const Icon = tab.icon
               const isActive = activeTab === tab.id
@@ -772,7 +772,7 @@ function ClientePerfilInner() {
       </div>
 
       {/* Conteúdo da tab */}
-      <div className="p-6 max-w-4xl">
+      <div className="p-4 lg:p-6 max-w-4xl">
         {activeTab === 'visao-geral' && <TabVisaoGeral client={client} />}
         {activeTab === 'integracoes' && <TabIntegracoes integrations={client.integrations} />}
         {activeTab === 'formularios' && <TabFormularios clientId={client.id} />}

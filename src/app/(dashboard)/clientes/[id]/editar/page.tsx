@@ -92,7 +92,7 @@ export default function EditarClientePage() {
 
   const renderStep0 = () => (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Field label="Nome completo da empresa *">
           <Input value={form.name} onChange={e => set('name', e.target.value)}
             className={inputCls} placeholder="Ex: Clínica Estética Bella Forma" />
@@ -103,7 +103,7 @@ export default function EditarClientePage() {
         </Field>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Field label="Nome do decisor *">
           <Input value={form.nomeDecisor} onChange={e => set('nomeDecisor', e.target.value)}
             className={inputCls} placeholder="Ex: Maria Silva" />
@@ -114,7 +114,7 @@ export default function EditarClientePage() {
         </Field>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Field label="E-mail de contato">
           <Input value={form.email} type="email" onChange={e => set('email', e.target.value)}
             className={inputCls} placeholder="contato@empresa.com.br" />
@@ -174,7 +174,7 @@ export default function EditarClientePage() {
       </div>
 
       {form.clientType === 'mrr' ? (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Valor mensal (R$) *">
             <Input value={form.contractValue} type="number" onChange={e => set('contractValue', e.target.value)}
               className={inputCls} placeholder="5000" />
@@ -191,7 +191,7 @@ export default function EditarClientePage() {
         </Field>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Field label={form.clientType === 'mrr' ? 'Início do contrato *' : 'Início do projeto *'}>
           <Input value={form.contractStartDate} type="date" onChange={e => set('contractStartDate', e.target.value)}
             className={inputCls} />

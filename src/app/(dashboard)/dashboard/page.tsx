@@ -198,46 +198,34 @@ export default function DashboardPage() {
 
         {/* ── 0. BARRA RESUMO ──────────────────────────────────────── */}
         <Card className="bg-zinc-900 border-zinc-800">
-          <CardContent className="px-5 py-3">
-            <div className="flex flex-wrap items-center gap-0 divide-x divide-zinc-800">
+          <CardContent className="px-4 lg:px-5 py-3">
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:items-center sm:gap-0 sm:divide-x sm:divide-zinc-800 gap-3">
 
-              <div className="flex items-center gap-3 pr-5">
+              <div className="flex items-center gap-2 sm:pr-5">
                 <div>
-                  <p className="text-zinc-500 text-xs">Clientes ativos</p>
+                  <p className="text-zinc-500 text-xs">Ativos</p>
                   <p className="text-white text-xl font-bold leading-tight">{clients.length}</p>
                 </div>
               </div>
-
-              <div className="flex items-center gap-3 px-5">
+              <div className="flex items-center gap-2 sm:px-5">
                 <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
                 <div>
                   <p className="text-zinc-500 text-xs">MRR</p>
-                  <p className="text-white text-xl font-bold leading-tight">
-                    {mrrClients.length}
-                    <span className="text-zinc-500 text-xs font-normal ml-1">clientes</span>
-                  </p>
+                  <p className="text-white text-xl font-bold leading-tight">{mrrClients.length}<span className="text-zinc-500 text-xs font-normal ml-1">cli.</span></p>
                 </div>
               </div>
-
-              <div className="flex items-center gap-3 px-5">
+              <div className="flex items-center gap-2 sm:px-5">
                 <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
                 <div>
                   <p className="text-zinc-500 text-xs">TCV</p>
-                  <p className="text-white text-xl font-bold leading-tight">
-                    {tcvClients.length}
-                    <span className="text-zinc-500 text-xs font-normal ml-1">projetos</span>
-                  </p>
+                  <p className="text-white text-xl font-bold leading-tight">{tcvClients.length}<span className="text-zinc-500 text-xs font-normal ml-1">proj.</span></p>
                 </div>
               </div>
-
-              <div className="flex items-center gap-3 px-5">
+              <div className="flex items-center gap-2 sm:px-5">
                 <div className="w-2 h-2 rounded-full bg-zinc-500 shrink-0" />
                 <div>
-                  <p className="text-zinc-500 text-xs">Em observação</p>
-                  <p className="text-white text-xl font-bold leading-tight">
-                    {riskCounts.observacao}
-                    <span className="text-zinc-500 text-xs font-normal ml-1">novos</span>
-                  </p>
+                  <p className="text-zinc-500 text-xs">Observação</p>
+                  <p className="text-white text-xl font-bold leading-tight">{riskCounts.observacao}<span className="text-zinc-500 text-xs font-normal ml-1">novos</span></p>
                 </div>
               </div>
 
@@ -403,7 +391,7 @@ export default function DashboardPage() {
                   )}
 
                   {/* Legenda */}
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                     <div className="bg-emerald-500/8 border border-emerald-500/20 rounded-lg p-2.5 text-center">
                       <ThumbsUp className="w-4 h-4 text-emerald-400 mx-auto mb-1" />
                       <p className="text-emerald-400 text-xl font-bold">{npsDist.promotores}</p>

@@ -110,7 +110,7 @@ export function ChurnModal({ clientName, clientType, onConfirm, onClose }: Churn
       onClick={onClose}
     >
       <div
-        className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden"
+        className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden mx-2 sm:mx-0"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}

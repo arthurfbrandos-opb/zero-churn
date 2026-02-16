@@ -91,10 +91,10 @@ export default function OperacionalPage() {
         description="Saúde das integrações, uso de IA e status dos jobs mensais"
       />
 
-      <div className="p-6 space-y-5">
+      <div className="p-4 lg:p-6 space-y-4 lg:space-y-5">
 
         {/* ── Resumo rápido ─────────────────────────────────────── */}
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <Card className="bg-zinc-900 border-zinc-800">
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-2">
@@ -259,7 +259,7 @@ export default function OperacionalPage() {
                 })}
               </div>
 
-              <div className="grid grid-cols-3 gap-3 pt-3 border-t border-zinc-800">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-zinc-800">
                 <div>
                   <p className="text-zinc-500 text-xs">Total (3 meses)</p>
                   <p className="text-zinc-200 font-bold text-sm">R$ {totalCost.toFixed(2)}</p>

@@ -629,7 +629,7 @@ export default function NovoClientePage() {
         }
       />
 
-      <div className="p-6 max-w-2xl mx-auto space-y-6">
+      <div className="p-4 lg:p-6 max-w-2xl mx-auto space-y-6">
 
         {/* Steps indicator */}
         <div className="flex items-center gap-0">
@@ -694,7 +694,7 @@ export default function NovoClientePage() {
               <CardContent className="p-5 space-y-4">
                 <h2 className="text-white font-semibold">Dados da empresa</h2>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="col-span-2">
                     <Field label="Razão Social">
                       <Input value={form.razaoSocial} onChange={e => set('razaoSocial', e.target.value)}
@@ -754,7 +754,7 @@ export default function NovoClientePage() {
             <CardContent className="p-5 space-y-4">
               <h2 className="text-white font-semibold">Endereço de cobrança</h2>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field label="CEP">
                   <div className="relative">
                     <Input value={form.cep} onChange={e => handleCep(e.target.value)}
@@ -918,7 +918,7 @@ export default function NovoClientePage() {
                 <CardContent className="p-5 space-y-4">
                   <h2 className="text-white font-semibold">Detalhes MRR</h2>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Field label="Data de início do contrato">
                       <Input type="date" value={form.contractStartDate}
                         onChange={e => set('contractStartDate', e.target.value)}
@@ -959,7 +959,7 @@ export default function NovoClientePage() {
                       <Toggle checked={form.hasImplementationFee} onToggle={() => set('hasImplementationFee', !form.hasImplementationFee)} />
                     </div>
                     {form.hasImplementationFee && (
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <Field label="Valor da implementação (R$)">
                           <Input value={form.implementationFeeValue}
                             onChange={e => set('implementationFeeValue', e.target.value)}
@@ -983,7 +983,7 @@ export default function NovoClientePage() {
                 <CardContent className="p-5 space-y-4">
                   <h2 className="text-white font-semibold">Detalhes TCV</h2>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Field label="Data de início do projeto">
                       <Input type="date" value={form.contractStartDate}
                         onChange={e => set('contractStartDate', e.target.value)}
@@ -1039,7 +1039,7 @@ export default function NovoClientePage() {
                         {/* Parcelas iguais */}
                         {form.installmentsType === 'equal' && (
                           <div className="space-y-3">
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                               <Field label="Número de parcelas">
                                 <Input type="number" value={form.installmentsCount}
                                   onChange={e => set('installmentsCount', e.target.value)}

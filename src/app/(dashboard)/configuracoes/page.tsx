@@ -1161,25 +1161,44 @@ export default function ConfiguracoesPage() {
     <div className="min-h-screen">
       <Header title="Configurações" description="Gerencie sua agência, integrações e preferências" />
 
-      <div className="p-6 flex gap-6 max-w-5xl mx-auto">
+      {/* Nav mobile: tabs horizontais com scroll */}
+      <div className="lg:hidden border-b border-zinc-800 overflow-x-auto scrollbar-none">
+        <div className="flex px-4 gap-1 min-w-max pb-0">
+          {NAV.map(item => {
+            const Icon = item.icon
+            const isActive = active === item.id
+            return (
+              <button key={item.id} onClick={() => setActive(item.id)}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-3 text-xs font-medium whitespace-nowrap border-b-2 transition-all',
+                  isActive
+                    ? 'border-emerald-500 text-white'
+                    : 'border-transparent text-zinc-500 hover:text-zinc-300'
+                )}>
+                <Icon className={cn('w-3.5 h-3.5', isActive && 'text-emerald-400')} />
+                {item.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
 
-        {/* Nav lateral */}
-        <aside className="w-48 shrink-0">
-          <nav className="space-y-1 sticky top-6">
+      <div className="p-4 lg:p-6 lg:flex lg:gap-6 max-w-5xl mx-auto">
+
+        {/* Nav lateral — só desktop */}
+        <aside className="hidden lg:block w-48 shrink-0">
+          <nav className="space-y-1 sticky top-20">
             {NAV.map(item => {
               const Icon = item.icon
               const isActive = active === item.id
               return (
-                <button
-                  key={item.id}
-                  onClick={() => setActive(item.id)}
+                <button key={item.id} onClick={() => setActive(item.id)}
                   className={cn(
                     'w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm transition-all text-left',
                     isActive
                       ? 'bg-zinc-800 text-white font-medium'
                       : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
-                  )}
-                >
+                  )}>
                   <Icon className={cn('w-4 h-4 shrink-0', isActive ? 'text-emerald-400' : '')} />
                   {item.label}
                 </button>
@@ -1189,7 +1208,7 @@ export default function ConfiguracoesPage() {
         </aside>
 
         {/* Conteúdo */}
-        <main className="flex-1 min-w-0">
+        <main className="flex-1 min-w-0 mt-4 lg:mt-0">
           {SECTIONS[active]}
         </main>
       </div>

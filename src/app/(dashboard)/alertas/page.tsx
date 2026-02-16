@@ -101,10 +101,10 @@ export default function AlertasPage() {
         }
       />
 
-      <div className="p-6 space-y-5">
+      <div className="p-4 lg:p-6 space-y-4 lg:space-y-5">
 
         {/* ── Resumo por severidade ─────────────────────────────── */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {(['high', 'medium', 'low'] as const).map(sev => {
             const count = alerts.filter(a => a.severity === sev).length
             const unread = alerts.filter(a => a.severity === sev && !a.isRead).length

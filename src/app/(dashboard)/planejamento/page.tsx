@@ -291,7 +291,7 @@ export default function PlanejamentoPage() {
         description="Kanban de sprints e tasks do projeto Zero Churn"
       />
 
-      <div className="p-6 space-y-5">
+      <div className="p-4 lg:p-6 space-y-4 lg:space-y-5">
 
         {/* ── Progresso geral ────────────────────────────────────── */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
@@ -317,7 +317,7 @@ export default function PlanejamentoPage() {
           </div>
 
           {/* Stats por status */}
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {([
               { label: 'Concluídas',  value: done,       color: 'text-emerald-400' },
               { label: 'Em progresso',value: 0,           color: 'text-blue-400'   },
@@ -333,7 +333,7 @@ export default function PlanejamentoPage() {
         </div>
 
         {/* ── Sprints summary ────────────────────────────────────── */}
-        <div className="grid grid-cols-5 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
           {(Object.entries(SPRINTS) as [SprintId, typeof SPRINTS[SprintId]][]).map(([id, sp]) => {
             const spTasks = TASKS.filter(t => t.sprint === id)
             const spDone  = spTasks.filter(t => t.status === 'done').length
@@ -395,7 +395,9 @@ export default function PlanejamentoPage() {
         )}
 
         {/* ── Kanban ─────────────────────────────────────────────── */}
-        <div className="grid grid-cols-4 gap-4 items-start">
+        {/* Kanban — scroll horizontal em mobile, grid em desktop */}
+        <div className="overflow-x-auto -mx-4 px-4 lg:mx-0 lg:px-0 pb-2">
+        <div className="grid grid-cols-4 gap-3 min-w-[720px] lg:min-w-0 items-start">
           {STATUS_ORDER.map(status => {
             const col   = COLUMN_CONFIG[status]
             const tasks = byStatus(status)
@@ -430,6 +432,7 @@ export default function PlanejamentoPage() {
             )
           })}
         </div>
+        </div>{/* fim scroll wrapper */}
 
       </div>
 

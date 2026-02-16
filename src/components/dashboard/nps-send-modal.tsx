@@ -106,7 +106,7 @@ export function NpsSendModal({ clients, onClose, preselectedClientId }: NpsSendM
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col">
+      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col mx-2 sm:mx-0">
 
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-zinc-800 shrink-0">
