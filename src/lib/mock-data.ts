@@ -364,6 +364,26 @@ export function getAverageHealthScore(): number {
   return Math.round(total / clientsWithScore.length)
 }
 
+export function getRiskCounts() {
+  const counts = { high: 0, medium: 0, low: 0, observacao: 0 }
+  mockClients.forEach((c) => {
+    const risk = c.healthScore?.churnRisk ?? 'observacao'
+    counts[risk]++
+  })
+  return counts
+}
+
+export function getRevenueByRisk() {
+  const revenue = { high: 0, medium: 0, low: 0 }
+  mockClients.forEach((c) => {
+    const risk = c.healthScore?.churnRisk
+    if (risk === 'high') revenue.high += c.contractValue
+    else if (risk === 'medium') revenue.medium += c.contractValue
+    else if (risk === 'low') revenue.low += c.contractValue
+  })
+  return revenue
+}
+
 export function getClientsSortedByRisk(): ClientWithScore[] {
   const riskOrder: Record<string, number> = { high: 0, medium: 1, low: 2, observacao: 3 }
   return [...mockClients].sort((a, b) => {
