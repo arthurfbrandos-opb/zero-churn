@@ -59,6 +59,8 @@ interface FormData {
   serviceId: string
   entregaveisIncluidos: string[]   // ids dos entregáveis que ficaram no contrato
   bonusIncluidos: string[]          // ids dos bônus incluídos
+  // Compartilhado MRR + TCV
+  contractStartDate: string
   // MRR
   contractValue: string
   contractMonths: string
@@ -93,6 +95,7 @@ const INITIAL: FormData = {
   cep: '', logradouro: '', numero: '', complemento: '',
   bairro: '', cidade: '', estado: '',
   clientType: 'mrr', serviceId: '', entregaveisIncluidos: [], bonusIncluidos: [],
+  contractStartDate: '',
   contractValue: '', contractMonths: '12',
   hasImplementationFee: false, implementationFeeValue: '', implementationFeeDate: '',
   totalProjectValue: '', projectDeadlineDays: '90',
@@ -122,11 +125,18 @@ function maskCep(v: string) {
   return v.replace(/\D/g, '').slice(0, 8).replace(/(\d{5})(\d{3})/, '$1-$2')
 }
 
-function calcEndDate(_: string, months: string) {
+function calcEndDate(startDate: string, months: string) {
   if (!months) return ''
-  const d = new Date()
-  d.setMonth(d.getMonth() + parseInt(months))
-  return d.toLocaleDateString('pt-BR')
+  const base = startDate ? new Date(startDate + 'T00:00:00') : new Date()
+  base.setMonth(base.getMonth() + parseInt(months))
+  return base.toLocaleDateString('pt-BR')
+}
+
+function calcEndDateTCV(startDate: string, days: string) {
+  if (!days) return ''
+  const base = startDate ? new Date(startDate + 'T00:00:00') : new Date()
+  base.setDate(base.getDate() + parseInt(days))
+  return base.toLocaleDateString('pt-BR')
 }
 
 function calcInstallmentValue(total: string, count: string) {
@@ -909,9 +919,10 @@ export default function NovoClientePage() {
                   <h2 className="text-white font-semibold">Detalhes MRR</h2>
 
                   <div className="grid grid-cols-2 gap-4">
-                    <Field label="Valor da mensalidade (R$)">
-                      <Input value={form.contractValue} onChange={e => set('contractValue', e.target.value)}
-                        placeholder="3.500,00" className={inputCls} />
+                    <Field label="Data de início do contrato">
+                      <Input type="date" value={form.contractStartDate}
+                        onChange={e => set('contractStartDate', e.target.value)}
+                        className={inputCls} />
                     </Field>
 
                     <Field label="Prazo do contrato (meses)">
@@ -919,12 +930,25 @@ export default function NovoClientePage() {
                         onChange={e => set('contractMonths', e.target.value)}
                         placeholder="12" className={inputCls} min={1} />
                     </Field>
+
+                    <div className="col-span-2">
+                      <Field label="Valor da mensalidade (R$)">
+                        <Input value={form.contractValue} onChange={e => set('contractValue', e.target.value)}
+                          placeholder="3.500,00" className={inputCls} />
+                      </Field>
+                    </div>
                   </div>
 
                   {form.contractMonths && (
                     <p className="text-zinc-500 text-xs">
-                      Vigência até:{' '}
-                      <span className="text-zinc-300">{calcEndDate('', form.contractMonths)}</span>
+                      Vigência:{' '}
+                      <span className="text-zinc-300">
+                        {form.contractStartDate
+                          ? new Date(form.contractStartDate + 'T00:00:00').toLocaleDateString('pt-BR')
+                          : '—'}
+                        {' até '}
+                        {calcEndDate(form.contractStartDate, form.contractMonths)}
+                      </span>
                     </p>
                   )}
 
@@ -960,17 +984,35 @@ export default function NovoClientePage() {
                   <h2 className="text-white font-semibold">Detalhes TCV</h2>
 
                   <div className="grid grid-cols-2 gap-4">
-                    <Field label="Valor total do projeto (R$)">
-                      <Input value={form.totalProjectValue}
-                        onChange={e => set('totalProjectValue', e.target.value)}
-                        placeholder="18.000,00" className={inputCls} />
+                    <Field label="Data de início do projeto">
+                      <Input type="date" value={form.contractStartDate}
+                        onChange={e => set('contractStartDate', e.target.value)}
+                        className={inputCls} />
                     </Field>
+
                     <Field label="Prazo do projeto (dias)">
                       <Input type="number" value={form.projectDeadlineDays}
                         onChange={e => set('projectDeadlineDays', e.target.value)}
                         placeholder="90" className={inputCls} />
                     </Field>
+
+                    <div className="col-span-2">
+                      <Field label="Valor total do projeto (R$)">
+                        <Input value={form.totalProjectValue}
+                          onChange={e => set('totalProjectValue', e.target.value)}
+                          placeholder="18.000,00" className={inputCls} />
+                      </Field>
+                    </div>
                   </div>
+
+                  {form.contractStartDate && form.projectDeadlineDays && (
+                    <p className="text-zinc-500 text-xs">
+                      Entrega prevista:{' '}
+                      <span className="text-zinc-300">
+                        {calcEndDateTCV(form.contractStartDate, form.projectDeadlineDays)}
+                      </span>
+                    </p>
+                  )}
 
                   {/* Parcelamento */}
                   <div className="pt-2 border-t border-zinc-800 space-y-3">
@@ -1128,17 +1170,6 @@ export default function NovoClientePage() {
 
             <Card className="bg-zinc-900 border-zinc-800">
               <CardContent className="p-5 space-y-5">
-
-                <Field
-                  label="Nicho específico do cliente"
-                  hint="Descreva com mais detalhe o negócio, público-alvo, região de atuação, etc.">
-                  <Input
-                    value={form.nichoEspecifico}
-                    onChange={e => set('nichoEspecifico', e.target.value)}
-                    placeholder="Ex: Clínica de estética focada em micropigmentação, atende mulheres 30-50 anos em Campinas"
-                    className={inputCls}
-                  />
-                </Field>
 
                 <Field
                   label="O que foi discutido na reunião de fechamento"
