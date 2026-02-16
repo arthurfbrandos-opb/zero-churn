@@ -915,6 +915,7 @@ function UsuariosSection() {
 function AnalisadorSection() {
   const [day, setDay] = useState(5)
   const [npsGrace, setNpsGrace] = useState<7 | 15>(7)
+  const [observationDays, setObservationDays] = useState(60)
   const [saved, setSaved] = useState(false)
 
   const PILLARS = [
@@ -924,7 +925,9 @@ function AnalisadorSection() {
     { label: 'NPS',                    weight: 10, color: 'bg-yellow-500' },
   ]
 
-  async function handleSave() {
+  function handleSave() {
+    // Persiste o período de observação
+    try { localStorage.setItem('zc_observation_days', String(observationDays)) } catch {}
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -970,6 +973,43 @@ function AnalisadorSection() {
                 {d} dias
               </button>
             ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Período de observação */}
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardContent className="p-4 space-y-3">
+          <div>
+            <p className="text-zinc-200 text-sm font-medium">Período de observação de novos clientes</p>
+            <p className="text-zinc-500 text-xs mt-0.5">
+              Clientes cadastrados há menos desse período ficam em status <span className="text-zinc-300 font-medium">"Em Observação"</span>:
+              não recebem health score, não aparecem no ranking de risco e não podem receber formulário NPS.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            {[30, 45, 60, 90].map(d => (
+              <button key={d} onClick={() => setObservationDays(d)}
+                className={cn('px-4 py-2 rounded-lg border text-sm font-medium transition-all',
+                  observationDays === d
+                    ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400'
+                    : 'border-zinc-700 bg-zinc-800 text-zinc-400 hover:border-zinc-600')}>
+                {d} dias
+              </button>
+            ))}
+            <div className="flex items-center gap-2">
+              <Input
+                type="number" value={observationDays}
+                onChange={e => setObservationDays(Math.max(7, Math.min(180, +e.target.value)))}
+                className="bg-zinc-800 border-zinc-700 text-zinc-200 w-20 text-center focus-visible:ring-emerald-500 h-9"
+                min={7} max={180}
+              />
+              <span className="text-zinc-500 text-sm">dias (personalizado)</span>
+            </div>
+          </div>
+          <div className="bg-zinc-800/50 rounded-lg px-3 py-2 text-xs text-zinc-500">
+            ⚠️ Com <span className="text-zinc-300 font-medium">{observationDays} dias</span> configurado,
+            o botão NPS fica bloqueado para clientes cadastrados há menos de {observationDays} dias.
           </div>
         </CardContent>
       </Card>

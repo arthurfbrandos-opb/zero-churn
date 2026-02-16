@@ -17,6 +17,7 @@ import { RiskBadge } from '@/components/dashboard/risk-badge'
 import { ScoreGauge } from '@/components/dashboard/score-gauge'
 import { NpsSendModal } from '@/components/dashboard/nps-send-modal'
 import { getClientsSortedByRisk, getClientSummary } from '@/lib/mock-data'
+import { getNpsClassification, isInObservation } from '@/lib/nps-utils'
 import { Integration, ChurnRisk, ClientType, PaymentStatus } from '@/types'
 import { cn } from '@/lib/utils'
 
@@ -326,10 +327,11 @@ export default function ClientesPage() {
               const score = client.healthScore?.scoreTotal
               const isObservacao = !client.healthScore
 
-              const whatsapp = client.integrations.find(i => i.type === 'whatsapp')
-              const asaas    = client.integrations.find(i => i.type === 'asaas')
-              const dom      = client.integrations.find(i => i.type === 'dom_pagamentos')
-              const ads      = client.integrations.find(i => i.type === 'meta_ads' || i.type === 'google_ads')
+              const whatsapp     = client.integrations.find(i => i.type === 'whatsapp')
+              const asaas        = client.integrations.find(i => i.type === 'asaas')
+              const dom          = client.integrations.find(i => i.type === 'dom_pagamentos')
+              const ads          = client.integrations.find(i => i.type === 'meta_ads' || i.type === 'google_ads')
+              const inObservacao = isInObservation(client.createdAt)
 
               return (
                 <Card key={client.id} className="bg-zinc-900 border-zinc-800 hover:border-zinc-700 transition-colors">
@@ -364,17 +366,16 @@ export default function ClientesPage() {
                             {client.clientType.toUpperCase()}
                           </Badge>
                           <PaymentBadge status={client.paymentStatus} />
-                          {/* Badge NPS se respondido recentemente */}
-                          {client.lastFormSubmission?.npsScore !== undefined && (
-                            <span className={cn(
-                              'text-xs px-1.5 py-0.5 rounded border font-medium',
-                              client.lastFormSubmission.npsScore >= 9 ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
-                              : client.lastFormSubmission.npsScore >= 7 ? 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10'
-                              : 'text-red-400 border-red-500/30 bg-red-500/10'
-                            )}>
-                              NPS {client.lastFormSubmission.npsScore}
-                            </span>
-                          )}
+                          {/* Badge NPS + classificação */}
+                          {client.lastFormSubmission?.npsScore !== undefined && (() => {
+                            const nps = client.lastFormSubmission!.npsScore!
+                            const cls = getNpsClassification(nps)
+                            return (
+                              <span className={cn('text-xs px-1.5 py-0.5 rounded border font-medium', cls.color, cls.bg, cls.border)}>
+                                NPS {nps} · {cls.label}
+                              </span>
+                            )
+                          })()}
                         </div>
 
                         {/* Linha 2: detalhes */}
@@ -424,9 +425,15 @@ export default function ClientesPage() {
                         <div className="flex items-center gap-1.5">
                           <Button
                             size="sm" variant="outline"
-                            onClick={() => openNpsForClient(client.id)}
-                            className="border-zinc-700 text-zinc-500 hover:text-emerald-400 hover:border-emerald-500/40 hover:bg-emerald-500/5 text-xs gap-1"
-                            title="Enviar formulário NPS"
+                            onClick={() => !inObservacao && openNpsForClient(client.id)}
+                            disabled={inObservacao}
+                            className={cn(
+                              'text-xs gap-1',
+                              inObservacao
+                                ? 'border-zinc-800 text-zinc-700 cursor-not-allowed opacity-50'
+                                : 'border-zinc-700 text-zinc-500 hover:text-emerald-400 hover:border-emerald-500/40 hover:bg-emerald-500/5'
+                            )}
+                            title={inObservacao ? 'Cliente em período de observação' : 'Enviar formulário NPS'}
                           >
                             <Send className="w-3 h-3" /> NPS
                           </Button>

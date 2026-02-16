@@ -3,12 +3,13 @@
 import { useState } from 'react'
 import {
   X, MessageCircle, Mail, Send, Check, Loader2,
-  Users, ChevronDown, ChevronUp, CheckSquare, Square,
+  Users, Clock,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { ClientWithScore } from '@/types'
+import { isInObservation, getObservationDays } from '@/lib/nps-utils'
 import { cn } from '@/lib/utils'
 
 interface NpsSendModalProps {
@@ -29,8 +30,19 @@ type Step = 'config' | 'sending' | 'done'
 
 export function NpsSendModal({ clients, onClose, preselectedClientId }: NpsSendModalProps) {
   const locked = !!preselectedClientId
+  const obsDays = getObservationDays()
+
+  // Separa clientes elegíveis (fora do período de observação)
+  const eligibleClients = clients.filter(c => !isInObservation(c.createdAt, obsDays))
+  const observacaoClients = clients.filter(c => isInObservation(c.createdAt, obsDays))
+
+  // Se modo locked e o cliente está em observação, bloqueia tudo
+  const lockedClientInObs = locked && preselectedClientId
+    ? isInObservation(clients.find(c => c.id === preselectedClientId)?.createdAt ?? '', obsDays)
+    : false
+
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
-    locked ? new Set([preselectedClientId!]) : new Set(clients.map(c => c.id))
+    locked ? new Set([preselectedClientId!]) : new Set(eligibleClients.map(c => c.id))
   )
   const [channels, setChannels] = useState<Set<Channel>>(new Set(['whatsapp_group', 'whatsapp_private', 'email']))
   const [followup1, setFollowup1] = useState('3')
@@ -39,8 +51,8 @@ export function NpsSendModal({ clients, onClose, preselectedClientId }: NpsSendM
   const [sendingMsg, setSendingMsg] = useState('')
   const [expandClients, setExpandClients] = useState(false)
 
-  const allSelected = selectedIds.size === clients.length
-  const selectedClients = clients.filter(c => selectedIds.has(c.id))
+  const allSelected = selectedIds.size === eligibleClients.length
+  const selectedClients = eligibleClients.filter(c => selectedIds.has(c.id))
   const singleClient = locked ? clients.find(c => c.id === preselectedClientId) : null
 
   function toggleClient(id: string) {
@@ -54,7 +66,7 @@ export function NpsSendModal({ clients, onClose, preselectedClientId }: NpsSendM
 
   function toggleAll() {
     if (locked) return
-    setSelectedIds(allSelected ? new Set() : new Set(clients.map(c => c.id)))
+    setSelectedIds(allSelected ? new Set() : new Set(eligibleClients.map(c => c.id)))
   }
 
   function toggleChannel(ch: Channel) {
@@ -147,8 +159,30 @@ export function NpsSendModal({ clients, onClose, preselectedClientId }: NpsSendM
             </div>
           )}
 
+          {/* ── Bloqueado (cliente em observação) ─────────────── */}
+          {step === 'config' && lockedClientInObs && (
+            <div className="flex flex-col items-center justify-center py-14 px-6 text-center gap-4">
+              <div className="w-14 h-14 rounded-full bg-zinc-800 flex items-center justify-center">
+                <Clock className="w-7 h-7 text-zinc-500" />
+              </div>
+              <div>
+                <p className="text-zinc-300 font-semibold">Cliente em período de observação</p>
+                <p className="text-zinc-500 text-sm mt-1">
+                  {singleClient?.nomeResumido ?? singleClient?.name} foi cadastrado há menos de {obsDays} dias.
+                  O formulário NPS só pode ser enviado após o período de observação.
+                </p>
+                <p className="text-zinc-600 text-xs mt-2">
+                  Configure o período em <span className="text-zinc-400">Configurações → Analisador</span>.
+                </p>
+              </div>
+              <Button variant="outline" onClick={onClose} className="border-zinc-700 text-zinc-400 hover:text-white">
+                Entendido
+              </Button>
+            </div>
+          )}
+
           {/* ── Configuração ───────────────────────────────────── */}
-          {step === 'config' && (
+          {step === 'config' && !lockedClientInObs && (
             <div className="p-5 space-y-5">
 
               {/* Seleção de clientes */}
@@ -185,9 +219,17 @@ export function NpsSendModal({ clients, onClose, preselectedClientId }: NpsSendM
                         {allSelected ? 'Desmarcar todos' : 'Selecionar todos'}
                       </button>
                     </div>
+                    {observacaoClients.length > 0 && (
+                      <div className="flex items-center gap-2 bg-zinc-800/50 rounded-lg px-3 py-2 text-xs text-zinc-500">
+                        <Clock className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
+                        <span>
+                          <span className="text-zinc-400 font-medium">{observacaoClients.length} cliente{observacaoClients.length !== 1 ? 's' : ''}</span> em observação excluído{observacaoClients.length !== 1 ? 's' : ''} automaticamente ({obsDays} dias)
+                        </span>
+                      </div>
+                    )}
                     <div className="border border-zinc-800 rounded-xl overflow-hidden">
                       <div className="max-h-44 overflow-y-auto">
-                        {clients.map(c => {
+                        {eligibleClients.map(c => {
                           const sel = selectedIds.has(c.id)
                           return (
                             <button key={c.id} onClick={() => toggleClient(c.id)}

@@ -20,6 +20,7 @@ import { RiskBadge } from '@/components/dashboard/risk-badge'
 import { getClientById, getFormsByClientId, getAlertsByClientId } from '@/lib/mock-data'
 import { ActionItem, Integration, Trend, PaymentStatus } from '@/types'
 import { useAnalysisCredits } from '@/hooks/use-analysis-credits'
+import { getNpsClassification } from '@/lib/nps-utils'
 import { cn } from '@/lib/utils'
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -493,14 +494,18 @@ function TabFormularios({ clientId }: { clientId: string }) {
                     </div>
                     {responded && (
                       <div className="flex items-center gap-3 shrink-0 text-right">
-                        {f.npsScore !== undefined && (
-                          <div>
-                            <p className="text-zinc-200 font-bold text-lg">{f.npsScore}</p>
-                            <p className="text-zinc-600 text-xs">NPS</p>
-                          </div>
-                        )}
+                        {f.npsScore !== undefined && (() => {
+                          const cls = getNpsClassification(f.npsScore!)
+                          return (
+                            <div className="text-center">
+                              <p className={cn('font-bold text-lg', cls.color)}>{f.npsScore}</p>
+                              <p className={cn('text-xs font-medium', cls.color)}>{cls.label}</p>
+                              <p className="text-zinc-600 text-xs">NPS</p>
+                            </div>
+                          )
+                        })()}
                         {f.resultScore !== undefined && (
-                          <div>
+                          <div className="text-center">
                             <p className="text-zinc-200 font-bold text-lg">{f.resultScore}</p>
                             <p className="text-zinc-600 text-xs">Resultado</p>
                           </div>
@@ -629,6 +634,16 @@ export default function ClientePerfilPage() {
                   {client.clientType.toUpperCase()}
                 </Badge>
                 <PaymentBadge status={client.paymentStatus} />
+                {/* NPS classification */}
+                {client.lastFormSubmission?.npsScore !== undefined && (() => {
+                  const nps = client.lastFormSubmission!.npsScore!
+                  const cls = getNpsClassification(nps)
+                  return (
+                    <Badge variant="outline" className={cn('text-xs', cls.color, cls.bg, cls.border)}>
+                      NPS {nps} · {cls.label}
+                    </Badge>
+                  )
+                })()}
               </div>
 
               <p className="text-zinc-400 text-sm mt-0.5">{client.razaoSocial}</p>
