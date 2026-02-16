@@ -498,6 +498,26 @@ export const mockAlerts: Alert[] = [
     isRead: false,
     createdAt: '2026-02-16',
   },
+  {
+    id: 'alrt-006',
+    clientId: 'client-004',
+    clientName: 'Sabor & Arte Gastronomia',
+    type: 'renewal_soon',
+    severity: 'medium',
+    message: 'Contrato MRR vence em 22 dias. Acione a renovação antes que o cliente questione a continuidade.',
+    isRead: true,
+    createdAt: '2026-02-10',
+  },
+  {
+    id: 'alrt-007',
+    clientId: 'client-005',
+    clientName: 'FitLife Academia',
+    type: 'form_no_response',
+    severity: 'low',
+    message: 'Nenhum formulário de NPS enviado desde o início do projeto. Cliente está em período de observação.',
+    isRead: true,
+    createdAt: '2026-02-08',
+  },
 ]
 
 // ─────────────────────────────────────────────

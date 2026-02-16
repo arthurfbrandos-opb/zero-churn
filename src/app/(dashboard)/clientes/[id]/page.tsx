@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft, TrendingDown, TrendingUp, Minus,
@@ -569,10 +570,12 @@ function TabHistorico({ clientId }: { clientId: string }) {
 // ─────────────────────────────────────────────────────────────────
 // PÁGINA PRINCIPAL
 // ─────────────────────────────────────────────────────────────────
-export default function ClientePerfilPage() {
+function ClientePerfilInner() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
-  const [activeTab, setActiveTab]     = useState('visao-geral')
+  const searchParams = useSearchParams()
+  const initialTab = searchParams.get('tab') ?? 'visao-geral'
+  const [activeTab, setActiveTab]     = useState(initialTab)
   const [showChurnModal, setShowChurnModal] = useState(false)
   const [churnRecord, setChurnRecord]      = useState<ChurnRecord | undefined>(undefined)
   const [isInactive, setIsInactive]        = useState(false)
@@ -697,7 +700,7 @@ export default function ClientePerfilPage() {
                     <UserMinus className="w-2.5 h-2.5" /> Inativo
                   </Badge>
                 )}
-                <PaymentBadge status={client.paymentStatus} />
+                {!isInactive && <PaymentBadge status={client.paymentStatus} />}
                 {/* NPS classification */}
                 {client.lastFormSubmission?.npsScore !== undefined && (() => {
                   const nps = client.lastFormSubmission!.npsScore!
@@ -776,5 +779,13 @@ export default function ClientePerfilPage() {
         {activeTab === 'historico' && <TabHistorico clientId={client.id} />}
       </div>
     </div>
+  )
+}
+
+export default function ClientePerfilPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="text-zinc-500 text-sm">Carregando...</div></div>}>
+      <ClientePerfilInner />
+    </Suspense>
   )
 }

@@ -962,7 +962,7 @@ function AnalisadorSection() {
 
   function handleSave() {
     // Persiste o período de observação
-    try { localStorage.setItem('zc_observation_days', String(observationDays)) } catch {}
+    try { persistObsDays(observationDays) } catch {}
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }

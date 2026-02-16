@@ -163,7 +163,7 @@ export default function ClientesPage() {
   function openNpsForClient(id: string) { setNpsClientId(id); setShowNpsModal(true) }
   function openNpsForAll() { setNpsClientId(undefined); setShowNpsModal(true) }
 
-  const hasActiveFilters = riskFilter !== 'all' || typeFilter !== 'all' || paymentFilter !== 'all' || search !== ''
+  const hasActiveFilters = riskFilter !== 'all' || typeFilter !== 'all' || paymentFilter !== 'all' || statusFilter !== 'active' || search !== ''
 
   const filtered = useMemo(() => {
     return allClients.filter(c => {
