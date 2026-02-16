@@ -21,18 +21,72 @@ import {
 // ─────────────────────────────────────────────
 
 export const mockServices: Service[] = [
-  { id: 'srv-01', agencyId: 'agency-001', name: 'Tráfego Pago (Meta + Google)',        type: 'mrr',  isActive: true },
-  { id: 'srv-02', agencyId: 'agency-001', name: 'Social Media Management',             type: 'mrr',  isActive: true },
-  { id: 'srv-03', agencyId: 'agency-001', name: 'Tráfego Pago + Social Media',         type: 'mrr',  isActive: true },
-  { id: 'srv-04', agencyId: 'agency-001', name: 'SEO + Blog',                          type: 'mrr',  isActive: true },
-  { id: 'srv-05', agencyId: 'agency-001', name: 'Full Service Digital',                type: 'both', isActive: true },
-  { id: 'srv-06', agencyId: 'agency-001', name: 'Tráfego Pago Local',                  type: 'mrr',  isActive: true },
-  { id: 'srv-07', agencyId: 'agency-001', name: 'Consultoria de Marketing Digital',    type: 'tcv',  isActive: true },
-  { id: 'srv-08', agencyId: 'agency-001', name: 'Implementação de Funil de Vendas',    type: 'tcv',  isActive: true },
-  { id: 'srv-09', agencyId: 'agency-001', name: 'Setup de Campanhas (Projeto)',        type: 'tcv',  isActive: true },
-  { id: 'srv-10', agencyId: 'agency-001', name: 'Criação de Site / Landing Page',      type: 'tcv',  isActive: true },
-  { id: 'srv-11', agencyId: 'agency-001', name: 'Identidade Visual',                  type: 'tcv',  isActive: true },
-  { id: 'srv-12', agencyId: 'agency-001', name: 'Gestão de E-mail Marketing',          type: 'mrr',  isActive: true },
+  {
+    id: 'srv-01', agencyId: 'agency-001', type: 'mrr', isActive: true,
+    name: 'Tríade Gestão Comercial',
+    description: 'Metodologia proprietária que combina tráfego, conteúdo e CRM para gerar crescimento recorrente.',
+    entregaveis: [
+      { id: 'e01', name: 'Gestão de Tráfego Pago (Meta + Google)' },
+      { id: 'e02', name: 'Social Media Management (feed + stories)' },
+      { id: 'e03', name: 'Relatório Mensal de Performance' },
+      { id: 'e04', name: 'Reunião Quinzenal de Alinhamento' },
+    ],
+    bonus: [
+      { id: 'b01', name: 'Consultoria de CRM (30 dias iniciais)' },
+      { id: 'b02', name: 'Design Kit Inicial (20 artes)' },
+    ],
+  },
+  {
+    id: 'srv-02', agencyId: 'agency-001', type: 'mrr', isActive: true,
+    name: 'Aceleração Digital',
+    entregaveis: [
+      { id: 'e05', name: 'Tráfego Pago (Meta Ads)' },
+      { id: 'e06', name: 'Criação de Conteúdo (12 posts/mês)' },
+      { id: 'e07', name: 'Dashboard de Resultados' },
+    ],
+    bonus: [
+      { id: 'b03', name: 'Auditoria de Perfil (onboarding)' },
+    ],
+  },
+  {
+    id: 'srv-03', agencyId: 'agency-001', type: 'mrr', isActive: true,
+    name: 'Presença Local',
+    entregaveis: [
+      { id: 'e08', name: 'Tráfego Pago Local (raio de atuação)' },
+      { id: 'e09', name: 'Google Meu Negócio (gestão e respostas)' },
+      { id: 'e10', name: 'Relatório Mensal' },
+    ],
+    bonus: [],
+  },
+  {
+    id: 'srv-04', agencyId: 'agency-001', type: 'tcv', isActive: true,
+    name: 'Implementação de Funil de Vendas',
+    description: 'Projeto de estruturação completa do funil digital, do topo à conversão.',
+    entregaveis: [
+      { id: 'e11', name: 'Mapeamento de Jornada do Cliente' },
+      { id: 'e12', name: 'Criação de Landing Pages (até 3)' },
+      { id: 'e13', name: 'Configuração de Automações de E-mail' },
+      { id: 'e14', name: 'Setup de Campanhas de Topo de Funil' },
+      { id: 'e15', name: 'Relatório de Entrega Final' },
+    ],
+    bonus: [
+      { id: 'b04', name: 'Treinamento da equipe interna (2h)' },
+      { id: 'b05', name: '30 dias de suporte pós-entrega' },
+    ],
+  },
+  {
+    id: 'srv-05', agencyId: 'agency-001', type: 'tcv', isActive: true,
+    name: 'Setup de Campanhas',
+    entregaveis: [
+      { id: 'e16', name: 'Configuração de Campanhas Meta Ads' },
+      { id: 'e17', name: 'Configuração de Campanhas Google Ads' },
+      { id: 'e18', name: 'Instalação de Pixel + Eventos de Conversão' },
+      { id: 'e19', name: 'Dashboard de Performance (Data Studio)' },
+    ],
+    bonus: [
+      { id: 'b06', name: 'Guia de Criativos de Alta Conversão' },
+    ],
+  },
 ]
 
 // ─────────────────────────────────────────────

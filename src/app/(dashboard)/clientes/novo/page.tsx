@@ -17,6 +17,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useCep } from '@/hooks/use-cep'
 import { mockServices } from '@/lib/mock-data'
+import { ServiceItem } from '@/types'
 import { cn } from '@/lib/utils'
 
 // ── Mock de clientes Asaas / Dom (MVP simulado) ──────────────────
@@ -55,6 +56,8 @@ interface FormData {
   // Step 3
   clientType: 'mrr' | 'tcv'
   serviceId: string
+  entregaveisIncluidos: string[]   // ids dos entregáveis que ficaram no contrato
+  bonusIncluidos: string[]          // ids dos bônus incluídos
   // MRR
   contractValue: string
   contractMonths: string
@@ -82,7 +85,7 @@ const INITIAL: FormData = {
   telefone: '', email: '', emailFinanceiro: '', segment: '',
   cep: '', logradouro: '', numero: '', complemento: '',
   bairro: '', cidade: '', estado: '',
-  clientType: 'mrr', serviceId: '',
+  clientType: 'mrr', serviceId: '', entregaveisIncluidos: [], bonusIncluidos: [],
   contractValue: '', contractMonths: '12',
   hasImplementationFee: false, implementationFeeValue: '', implementationFeeDate: '',
   totalProjectValue: '', projectDeadlineDays: '90',
@@ -304,10 +307,41 @@ export default function NovoClientePage() {
   }
 
   // Serviços filtrados pelo tipo de contrato
-  const servicesForType = mockServices.filter(s =>
-    s.isActive && (s.type === form.clientType || s.type === 'both')
-  )
+  const servicesForType = mockServices.filter(s => s.isActive && s.type === form.clientType)
   const selectedService = mockServices.find(s => s.id === form.serviceId)
+
+  // Ao selecionar um método: pré-marca todos entregáveis e bônus
+  function handleSelectService(id: string) {
+    const svc = mockServices.find(s => s.id === id)
+    if (svc) {
+      setForm(prev => ({
+        ...prev,
+        serviceId: id,
+        entregaveisIncluidos: svc.entregaveis.map(e => e.id),
+        bonusIncluidos: svc.bonus.map(b => b.id),
+      }))
+    } else {
+      setForm(prev => ({ ...prev, serviceId: id, entregaveisIncluidos: [], bonusIncluidos: [] }))
+    }
+  }
+
+  function toggleEntregavel(id: string) {
+    setForm(prev => ({
+      ...prev,
+      entregaveisIncluidos: prev.entregaveisIncluidos.includes(id)
+        ? prev.entregaveisIncluidos.filter(x => x !== id)
+        : [...prev.entregaveisIncluidos, id],
+    }))
+  }
+
+  function toggleBonus(id: string) {
+    setForm(prev => ({
+      ...prev,
+      bonusIncluidos: prev.bonusIncluidos.includes(id)
+        ? prev.bonusIncluidos.filter(x => x !== id)
+        : [...prev.bonusIncluidos, id],
+    }))
+  }
 
   // Totais de parcelas customizadas
   const totalParcelas = form.parcelas.reduce((s, p) => s + parseFloat(p.valor || '0'), 0)
@@ -326,8 +360,8 @@ export default function NovoClientePage() {
     !!(form.razaoSocial && form.nomeResumido && form.cnpjCpf && form.nomeDecisor && form.telefone && form.email && form.segment),
     // Step 1
     !!(form.cep && form.logradouro && form.numero && form.bairro && form.cidade && form.estado),
-    // Step 2
-    !!(form.serviceId && (
+    // Step 2 — precisa de método + dados do contrato
+    !!(form.serviceId && form.entregaveisIncluidos.length > 0 && (
       form.clientType === 'mrr'
         ? form.contractValue && form.contractMonths
         : form.totalProjectValue && form.projectDeadlineDays
@@ -541,7 +575,9 @@ export default function NovoClientePage() {
                 {/* MRR vs TCV */}
                 <div className="grid grid-cols-2 gap-3">
                   {(['mrr', 'tcv'] as const).map(t => (
-                    <button key={t} onClick={() => { set('clientType', t); set('serviceId', '') }}
+                    <button key={t} onClick={() => {
+                      setForm(prev => ({ ...prev, clientType: t, serviceId: '', entregaveisIncluidos: [], bonusIncluidos: [] }))
+                    }}
                       className={cn(
                         'p-3 rounded-xl border-2 text-left transition-all',
                         form.clientType === t
@@ -558,35 +594,84 @@ export default function NovoClientePage() {
                   ))}
                 </div>
 
-                {/* Seletor de serviço */}
-                <Field label="Serviço vendido"
-                  hint="Gerencie a lista de serviços em Configurações → Serviços">
+                {/* Seletor de método/produto */}
+                <Field label="Método / Produto vendido"
+                  hint="Gerencie os métodos em Configurações → Métodos e Produtos">
                   <div className="relative">
                     <select
                       value={form.serviceId}
-                      onChange={e => set('serviceId', e.target.value)}
+                      onChange={e => handleSelectService(e.target.value)}
                       className={cn(inputCls, 'w-full h-10 rounded-md border px-3 text-sm appearance-none pr-8 cursor-pointer')}
                     >
-                      <option value="" className="bg-zinc-800">Selecione um serviço...</option>
+                      <option value="" className="bg-zinc-800">Selecione o método vendido...</option>
                       {servicesForType.map(s => (
                         <option key={s.id} value={s.id} className="bg-zinc-800">{s.name}</option>
                       ))}
                     </select>
                     <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
                   </div>
-                  {selectedService && (
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <Badge variant="outline" className={cn('text-xs border',
-                        selectedService.type === 'mrr' ? 'text-emerald-400 border-emerald-500/30'
-                        : selectedService.type === 'tcv' ? 'text-blue-400 border-blue-500/30'
-                        : 'text-zinc-400 border-zinc-600'
-                      )}>
-                        {selectedService.type.toUpperCase()}
-                      </Badge>
-                      <span className="text-zinc-500 text-xs">{selectedService.name}</span>
-                    </div>
-                  )}
                 </Field>
+
+                {/* Checklist de entregáveis e bônus */}
+                {selectedService && (
+                  <div className="border border-zinc-800 rounded-xl overflow-hidden">
+                    <div className="bg-zinc-800/60 px-4 py-2.5 flex items-center justify-between">
+                      <p className="text-zinc-300 text-xs font-semibold">O que está incluído neste contrato?</p>
+                      <p className="text-zinc-600 text-xs">Desmarque o que não foi negociado</p>
+                    </div>
+
+                    {/* Entregáveis */}
+                    {selectedService.entregaveis.length > 0 && (
+                      <div className="p-3 space-y-2">
+                        <p className="text-zinc-400 text-xs font-semibold uppercase tracking-wider px-1">Entregáveis</p>
+                        {selectedService.entregaveis.map((item: ServiceItem) => {
+                          const checked = form.entregaveisIncluidos.includes(item.id)
+                          return (
+                            <button key={item.id} onClick={() => toggleEntregavel(item.id)}
+                              className={cn(
+                                'w-full flex items-center gap-3 px-3 py-2 rounded-lg border text-sm transition-all text-left',
+                                checked
+                                  ? 'bg-zinc-800/60 border-zinc-700 text-zinc-200'
+                                  : 'bg-zinc-900 border-zinc-800/50 text-zinc-500 line-through'
+                              )}>
+                              <div className={cn('w-4 h-4 rounded flex items-center justify-center border shrink-0',
+                                checked ? 'bg-emerald-500 border-emerald-500' : 'border-zinc-600')}>
+                                {checked && <Check className="w-2.5 h-2.5 text-white" />}
+                              </div>
+                              {item.name}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* Bônus */}
+                    {selectedService.bonus.length > 0 && (
+                      <div className="p-3 pt-0 space-y-2">
+                        <p className="text-yellow-500 text-xs font-semibold uppercase tracking-wider px-1 pt-2">Bônus</p>
+                        {selectedService.bonus.map((item: ServiceItem) => {
+                          const checked = form.bonusIncluidos.includes(item.id)
+                          return (
+                            <button key={item.id} onClick={() => toggleBonus(item.id)}
+                              className={cn(
+                                'w-full flex items-center gap-3 px-3 py-2 rounded-lg border text-sm transition-all text-left',
+                                checked
+                                  ? 'bg-yellow-500/5 border-yellow-500/20 text-zinc-200'
+                                  : 'bg-zinc-900 border-zinc-800/50 text-zinc-500 line-through'
+                              )}>
+                              <div className={cn('w-4 h-4 rounded flex items-center justify-center border shrink-0',
+                                checked ? 'bg-yellow-500 border-yellow-500' : 'border-zinc-600')}>
+                                {checked && <Check className="w-2.5 h-2.5 text-white" />}
+                              </div>
+                              <span className="text-yellow-400 shrink-0">⭐</span>
+                              {item.name}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -801,7 +886,10 @@ export default function NovoClientePage() {
             {/* Resumo do contrato */}
             <div className="bg-zinc-800/50 rounded-lg p-3 text-xs text-zinc-500 space-y-1">
               <p>• <span className="text-zinc-400">Cliente:</span> {form.nomeResumido}</p>
-              <p>• <span className="text-zinc-400">Tipo:</span> {form.clientType.toUpperCase()} · {selectedService?.name ?? form.serviceId}</p>
+              <p>• <span className="text-zinc-400">Tipo:</span> {form.clientType.toUpperCase()} · {selectedService?.name ?? '—'}</p>
+              {selectedService && form.entregaveisIncluidos.length > 0 && (
+                <p>• <span className="text-zinc-400">Entregáveis:</span> {form.entregaveisIncluidos.length}/{selectedService.entregaveis.length} incluídos</p>
+              )}
               {form.clientType === 'mrr' && <p>• <span className="text-zinc-400">MRR:</span> R$ {form.contractValue}/mês · {form.contractMonths} meses</p>}
               {form.clientType === 'tcv' && <p>• <span className="text-zinc-400">TCV:</span> R$ {form.totalProjectValue} · {form.projectDeadlineDays} dias</p>}
             </div>

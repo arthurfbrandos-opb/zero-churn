@@ -14,12 +14,19 @@ export type Trend = 'improving' | 'stable' | 'declining'
 
 // ─────────────────────────────────────────────
 
+export interface ServiceItem {
+  id: string
+  name: string
+}
+
 export interface Service {
   id: string
   agencyId: string
-  name: string
+  name: string              // nome do método/produto vendido
   description?: string
-  type: 'mrr' | 'tcv' | 'both'
+  type: 'mrr' | 'tcv'
+  entregaveis: ServiceItem[]
+  bonus: ServiceItem[]
   isActive: boolean
 }
 

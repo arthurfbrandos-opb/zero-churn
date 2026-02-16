@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { mockServices } from '@/lib/mock-data'
-import { Service } from '@/types'
+import { Service, ServiceItem } from '@/types'
 import { cn } from '@/lib/utils'
 
 // ── Nav sections ──────────────────────────────────────────────────
@@ -131,164 +131,293 @@ function AgenciaSection() {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// SEÇÃO: SERVIÇOS
+// SEÇÃO: SERVIÇOS (Métodos / Produtos)
 // ─────────────────────────────────────────────────────────────────
+
+type ItemKind = 'entregavel' | 'bonus'
+
+interface EditingService extends Service {
+  newItemName: string
+  newItemKind: ItemKind
+}
+
 function ServicosSection() {
   const [services, setServices] = useState<Service[]>(mockServices)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editName, setEditName] = useState('')
-  const [adding, setAdding] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newType, setNewType] = useState<'mrr' | 'tcv' | 'both'>('mrr')
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [editing, setEditing] = useState<EditingService | null>(null)
+  const [creatingNew, setCreatingNew] = useState(false)
+  const [draft, setDraft] = useState<EditingService>({
+    id: '', agencyId: 'agency-001', name: '', type: 'mrr',
+    entregaveis: [], bonus: [], isActive: true,
+    newItemName: '', newItemKind: 'entregavel',
+  })
+
+  const typeBadge = (t: 'mrr' | 'tcv') =>
+    t === 'mrr'
+      ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
+      : 'text-blue-400 border-blue-500/30 bg-blue-500/10'
+
+  function startEdit(s: Service) {
+    setEditing({ ...s, newItemName: '', newItemKind: 'entregavel' })
+    setExpandedId(s.id)
+    setCreatingNew(false)
+  }
 
   function toggleActive(id: string) {
     setServices(prev => prev.map(s => s.id === id ? { ...s, isActive: !s.isActive } : s))
   }
 
-  function startEdit(s: Service) {
-    setEditingId(s.id)
-    setEditName(s.name)
-  }
-
-  function saveEdit(id: string) {
-    if (!editName.trim()) return
-    setServices(prev => prev.map(s => s.id === id ? { ...s, name: editName.trim() } : s))
-    setEditingId(null)
-  }
-
   function deleteService(id: string) {
     setServices(prev => prev.filter(s => s.id !== id))
+    if (expandedId === id) setExpandedId(null)
   }
 
-  function addService() {
-    if (!newName.trim()) return
-    const novo: Service = {
-      id: `srv-${Date.now()}`,
-      agencyId: 'agency-001',
-      name: newName.trim(),
-      type: newType,
-      isActive: true,
-    }
+  // Funções de edição de items
+  function addItem(target: EditingService, kind: ItemKind, name: string): EditingService {
+    if (!name.trim()) return target
+    const item: ServiceItem = { id: `item-${Date.now()}`, name: name.trim() }
+    return kind === 'entregavel'
+      ? { ...target, entregaveis: [...target.entregaveis, item], newItemName: '' }
+      : { ...target, bonus: [...target.bonus, item], newItemName: '' }
+  }
+
+  function removeItem(target: EditingService, kind: ItemKind, id: string): EditingService {
+    return kind === 'entregavel'
+      ? { ...target, entregaveis: target.entregaveis.filter(i => i.id !== id) }
+      : { ...target, bonus: target.bonus.filter(i => i.id !== id) }
+  }
+
+  function saveEditing() {
+    if (!editing || !editing.name.trim()) return
+    const { newItemName: _, newItemKind: __, ...clean } = editing
+    setServices(prev => prev.map(s => s.id === clean.id ? clean : s))
+    setEditing(null)
+    setExpandedId(clean.id)
+  }
+
+  function saveNew() {
+    if (!draft.name.trim()) return
+    const { newItemName: _, newItemKind: __, ...clean } = draft
+    const novo: Service = { ...clean, id: `srv-${Date.now()}` }
     setServices(prev => [...prev, novo])
-    setNewName('')
-    setNewType('mrr')
-    setAdding(false)
+    setCreatingNew(false)
+    setDraft({ id: '', agencyId: 'agency-001', name: '', type: 'mrr', entregaveis: [], bonus: [], isActive: true, newItemName: '', newItemKind: 'entregavel' })
   }
 
-  const typeBadge = (t: 'mrr' | 'tcv' | 'both') => ({
-    mrr:  'text-emerald-400 border-emerald-500/30 bg-emerald-500/10',
-    tcv:  'text-blue-400 border-blue-500/30 bg-blue-500/10',
-    both: 'text-zinc-400 border-zinc-600 bg-zinc-800',
-  }[t])
+  // Componente de lista de itens inline
+  function ItemList({ target, setTarget, kind, label, color }: {
+    target: EditingService
+    setTarget: (v: EditingService) => void
+    kind: ItemKind
+    label: string
+    color: string
+  }) {
+    const items = kind === 'entregavel' ? target.entregaveis : target.bonus
+    return (
+      <div className="space-y-2">
+        <p className={cn('text-xs font-semibold uppercase tracking-wider', color)}>{label}</p>
+        {items.length === 0 && (
+          <p className="text-zinc-600 text-xs italic">Nenhum item. Adicione abaixo.</p>
+        )}
+        {items.map(item => (
+          <div key={item.id} className="flex items-center gap-2 bg-zinc-800/40 rounded-lg px-3 py-1.5">
+            <span className="flex-1 text-zinc-300 text-sm">{item.name}</span>
+            <button onClick={() => setTarget(removeItem(target, kind, item.id))}
+              className="text-zinc-600 hover:text-red-400 transition-colors shrink-0">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ))}
+        <div className="flex gap-2">
+          <Input
+            placeholder={`+ Novo ${kind === 'entregavel' ? 'entregável' : 'bônus'}...`}
+            value={target.newItemKind === kind ? target.newItemName : ''}
+            onChange={e => setTarget({ ...target, newItemName: e.target.value, newItemKind: kind })}
+            onKeyDown={e => {
+              if (e.key === 'Enter') setTarget(addItem({ ...target, newItemKind: kind }, kind, target.newItemName))
+            }}
+            className={cn(inputCls, 'h-8 text-xs flex-1')}
+          />
+          <Button size="sm" variant="outline"
+            className="border-zinc-700 text-zinc-400 hover:text-white h-8 px-2"
+            onClick={() => setTarget(addItem({ ...target, newItemKind: kind }, kind, target.newItemName))}>
+            <Plus className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      </div>
+    )
+  }
 
-  const typeLabel = (t: 'mrr' | 'tcv' | 'both') => ({ mrr: 'MRR', tcv: 'TCV', both: 'Ambos' }[t])
+  // Form de criação/edição compartilhado
+  function MetodoForm({ data, setData, onSave, onCancel }: {
+    data: EditingService
+    setData: (v: EditingService) => void
+    onSave: () => void
+    onCancel: () => void
+  }) {
+    return (
+      <div className="space-y-4 pt-3 border-t border-zinc-800">
+        {/* Nome + tipo */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="col-span-2">
+            <Field label="Nome do método / produto">
+              <Input autoFocus value={data.name} onChange={e => setData({ ...data, name: e.target.value })}
+                placeholder="Ex: Tríade Gestão Comercial" className={inputCls} />
+            </Field>
+          </div>
+          <Field label="Tipo de contrato">
+            <div className="flex gap-2 pt-0.5">
+              {(['mrr', 'tcv'] as const).map(t => (
+                <button key={t} onClick={() => setData({ ...data, type: t })}
+                  className={cn('flex-1 py-2 rounded-lg border text-xs font-bold transition-all',
+                    data.type === t
+                      ? t === 'mrr' ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400' : 'border-blue-500 bg-blue-500/10 text-blue-400'
+                      : 'border-zinc-700 bg-zinc-800 text-zinc-500 hover:border-zinc-600')}>
+                  {t.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </Field>
+        </div>
+
+        {/* Entregáveis */}
+        <ItemList target={data} setTarget={setData} kind="entregavel"
+          label="Entregáveis" color="text-zinc-300" />
+
+        {/* Bônus */}
+        <ItemList target={data} setTarget={setData} kind="bonus"
+          label="Bônus" color="text-yellow-500" />
+
+        <div className="flex gap-2 pt-1">
+          <Button size="sm" onClick={onSave} className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1">
+            <Check className="w-3.5 h-3.5" /> Salvar método
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onCancel} className="text-zinc-400">Cancelar</Button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <SectionTitle>Serviços oferecidos</SectionTitle>
+          <SectionTitle>Métodos e Produtos</SectionTitle>
         </div>
-        <Button size="sm" onClick={() => setAdding(true)}
+        <Button size="sm" onClick={() => { setCreatingNew(true); setExpandedId(null); setEditing(null) }}
           className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1 -mt-4">
-          <Plus className="w-3.5 h-3.5" /> Novo serviço
+          <Plus className="w-3.5 h-3.5" /> Novo método
         </Button>
       </div>
 
       <p className="text-zinc-500 text-sm -mt-2">
-        Esses serviços aparecem no seletor durante o cadastro de clientes. O tipo define em qual modalidade de contrato o serviço pode ser vendido.
+        Cada método é um produto vendido pela agência. No cadastro do cliente você escolhe o método e personaliza os entregáveis e bônus da negociação.
       </p>
 
-      {/* Formulário de novo serviço */}
-      {adding && (
-        <Card className="bg-zinc-800/60 border-emerald-500/30 border-dashed">
-          <CardContent className="p-4 space-y-3">
-            <p className="text-zinc-300 text-sm font-medium">Novo serviço</p>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="col-span-2">
-                <Input autoFocus value={newName} onChange={e => setNewName(e.target.value)}
-                  placeholder="Nome do serviço" className={inputCls}
-                  onKeyDown={e => { if (e.key === 'Enter') addService(); if (e.key === 'Escape') setAdding(false) }}
-                />
-              </div>
-              <select value={newType} onChange={e => setNewType(e.target.value as 'mrr' | 'tcv' | 'both')}
-                className={cn(inputCls, 'w-full h-10 rounded-md border px-3 text-sm')}>
-                <option value="mrr">MRR</option>
-                <option value="tcv">TCV</option>
-                <option value="both">Ambos</option>
-              </select>
-            </div>
-            <div className="flex gap-2">
-              <Button size="sm" onClick={addService} className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1">
-                <Check className="w-3.5 h-3.5" /> Adicionar
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setAdding(false)} className="text-zinc-400">
-                Cancelar
-              </Button>
-            </div>
+      {/* Formulário de novo método */}
+      {creatingNew && (
+        <Card className="bg-zinc-900 border-emerald-500/30 border-dashed">
+          <CardContent className="p-4">
+            <p className="text-zinc-300 font-medium text-sm mb-3">Novo método</p>
+            <MetodoForm
+              data={draft}
+              setData={setDraft}
+              onSave={saveNew}
+              onCancel={() => setCreatingNew(false)}
+            />
           </CardContent>
         </Card>
       )}
 
-      {/* Lista */}
-      <div className="space-y-2">
-        {services.map(s => (
-          <div key={s.id}
-            className={cn('flex items-center gap-3 p-3 rounded-xl border transition-all',
-              s.isActive ? 'bg-zinc-900 border-zinc-800' : 'bg-zinc-900/40 border-zinc-800/50 opacity-60'
-            )}>
-            <GripVertical className="w-4 h-4 text-zinc-700 shrink-0 cursor-grab" />
+      {/* Lista de métodos */}
+      <div className="space-y-3">
+        {services.map(s => {
+          const isExpanded = expandedId === s.id
+          const isEditing = editing?.id === s.id
 
-            {/* Nome */}
-            <div className="flex-1 min-w-0">
-              {editingId === s.id ? (
-                <Input autoFocus value={editName} onChange={e => setEditName(e.target.value)}
-                  className={cn(inputCls, 'h-7 text-sm')}
-                  onKeyDown={e => { if (e.key === 'Enter') saveEdit(s.id); if (e.key === 'Escape') setEditingId(null) }}
-                />
-              ) : (
-                <p className="text-zinc-200 text-sm truncate">{s.name}</p>
-              )}
-            </div>
+          return (
+            <Card key={s.id}
+              className={cn('bg-zinc-900 border-zinc-800 transition-all', !s.isActive && 'opacity-50')}>
+              <CardContent className="p-4">
 
-            {/* Badge tipo */}
-            <Badge variant="outline" className={cn('text-xs shrink-0', typeBadge(s.type))}>
-              {typeLabel(s.type)}
-            </Badge>
-
-            {/* Ações */}
-            <div className="flex items-center gap-1.5 shrink-0">
-              {editingId === s.id ? (
-                <>
-                  <button onClick={() => saveEdit(s.id)}
-                    className="w-7 h-7 rounded-lg flex items-center justify-center text-emerald-400 hover:bg-emerald-500/10 transition-colors">
-                    <Check className="w-3.5 h-3.5" />
+                {/* Cabeçalho do card */}
+                <div className="flex items-start gap-3">
+                  <button
+                    onClick={() => setExpandedId(isExpanded ? null : s.id)}
+                    className="flex-1 text-left min-w-0"
+                  >
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-zinc-200 text-sm font-semibold">{s.name}</p>
+                      <Badge variant="outline" className={cn('text-xs', typeBadge(s.type))}>
+                        {s.type.toUpperCase()}
+                      </Badge>
+                    </div>
+                    <p className="text-zinc-500 text-xs mt-0.5">
+                      {s.entregaveis.length} entregável{s.entregaveis.length !== 1 ? 'is' : ''}
+                      {s.bonus.length > 0 && ` · ${s.bonus.length} bônus`}
+                    </p>
                   </button>
-                  <button onClick={() => setEditingId(null)}
-                    className="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-500 hover:bg-zinc-800 transition-colors">
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </>
-              ) : (
-                <button onClick={() => startEdit(s)}
-                  className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-2">
-                  Editar
-                </button>
-              )}
 
-              {/* Toggle ativo */}
-              <button onClick={() => toggleActive(s.id)}
-                className={cn('w-9 h-5 rounded-full transition-all relative shrink-0', s.isActive ? 'bg-emerald-500' : 'bg-zinc-700')}>
-                <span className={cn('absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all', s.isActive ? 'left-4' : 'left-0.5')} />
-              </button>
+                  {/* Ações */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button onClick={() => isEditing ? (setEditing(null)) : startEdit(s)}
+                      className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-2">
+                      {isEditing ? 'Cancelar' : 'Editar'}
+                    </button>
+                    <button onClick={() => toggleActive(s.id)}
+                      className={cn('w-9 h-5 rounded-full transition-all relative', s.isActive ? 'bg-emerald-500' : 'bg-zinc-700')}>
+                      <span className={cn('absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all', s.isActive ? 'left-4' : 'left-0.5')} />
+                    </button>
+                    <button onClick={() => deleteService(s.id)}
+                      className="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-colors">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
 
-              <button onClick={() => deleteService(s.id)}
-                className="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-colors">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        ))}
+                {/* Modo edição */}
+                {isEditing && editing && (
+                  <MetodoForm
+                    data={editing}
+                    setData={setEditing}
+                    onSave={saveEditing}
+                    onCancel={() => setEditing(null)}
+                  />
+                )}
+
+                {/* Modo visualização expandida */}
+                {isExpanded && !isEditing && (
+                  <div className="mt-3 pt-3 border-t border-zinc-800 grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-zinc-400 text-xs font-semibold uppercase tracking-wider mb-2">Entregáveis</p>
+                      <div className="space-y-1.5">
+                        {s.entregaveis.map(e => (
+                          <div key={e.id} className="flex items-center gap-2 text-xs text-zinc-400">
+                            <Check className="w-3 h-3 text-emerald-400 shrink-0" />
+                            {e.name}
+                          </div>
+                        ))}
+                        {s.entregaveis.length === 0 && <p className="text-zinc-600 text-xs italic">Nenhum entregável</p>}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-yellow-500 text-xs font-semibold uppercase tracking-wider mb-2">Bônus</p>
+                      <div className="space-y-1.5">
+                        {s.bonus.map(b => (
+                          <div key={b.id} className="flex items-center gap-2 text-xs text-zinc-400">
+                            <span className="text-yellow-400 shrink-0">⭐</span>
+                            {b.name}
+                          </div>
+                        ))}
+                        {s.bonus.length === 0 && <p className="text-zinc-600 text-xs italic">Sem bônus</p>}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
     </div>
   )
