@@ -38,6 +38,22 @@ export function setObservationDays(days: number) {
   localStorage.setItem(OBS_DAYS_KEY, String(days))
 }
 
+// ── Toggle: enviar NPS pra clientes em observação ────────────────
+
+const NPS_ALLOW_OBS_KEY = 'zc_nps_allow_observation'
+
+export function getNpsAllowObservation(): boolean {
+  if (typeof window === 'undefined') return false
+  return localStorage.getItem(NPS_ALLOW_OBS_KEY) === 'true'
+}
+
+export function setNpsAllowObservation(v: boolean) {
+  if (typeof window === 'undefined') return
+  localStorage.setItem(NPS_ALLOW_OBS_KEY, v ? 'true' : 'false')
+}
+
+// ─────────────────────────────────────────────────────────────────
+
 export function isInObservation(createdAt: string, observationDays?: number): boolean {
   const days = observationDays ?? getObservationDays()
   const created = new Date(createdAt)

@@ -742,3 +742,48 @@ export function getClientsSortedByRisk(): ClientWithScore[] {
     return (a.healthScore?.scoreTotal ?? 0) - (b.healthScore?.scoreTotal ?? 0)
   })
 }
+
+// ── NPS Distribution ──────────────────────────────────────────────
+export function getNpsDistribution() {
+  const withScore = mockClients.filter(c => c.lastFormSubmission?.npsScore !== undefined)
+  const promotores = withScore.filter(c => c.lastFormSubmission!.npsScore! >= 9)
+  const neutros    = withScore.filter(c => c.lastFormSubmission!.npsScore! >= 7 && c.lastFormSubmission!.npsScore! < 9)
+  const detratores = withScore.filter(c => c.lastFormSubmission!.npsScore! < 7)
+  const semResposta = mockClients.filter(c => !c.lastFormSubmission?.npsScore)
+
+  // NPS = (% Promotores - % Detratores) * 100
+  const npsScore = withScore.length > 0
+    ? Math.round(((promotores.length - detratores.length) / withScore.length) * 100)
+    : null
+
+  const avgScore = withScore.length > 0
+    ? +(withScore.reduce((s, c) => s + c.lastFormSubmission!.npsScore!, 0) / withScore.length).toFixed(1)
+    : null
+
+  return {
+    promotores: promotores.length,
+    neutros: neutros.length,
+    detratores: detratores.length,
+    semResposta: semResposta.length,
+    total: withScore.length,
+    npsScore,    // -100 a +100 (escala NPS real)
+    avgScore,    // média simples 0-10
+  }
+}
+
+// ── Payment Status Summary ────────────────────────────────────────
+export function getPaymentStatusSummary() {
+  const emDia       = mockClients.filter(c => !c.paymentStatus || c.paymentStatus === 'em_dia')
+  const vencendo    = mockClients.filter(c => c.paymentStatus === 'vencendo')
+  const inadimplente = mockClients.filter(c => c.paymentStatus === 'inadimplente')
+
+  const mrrValue = (list: typeof mockClients) =>
+    list.filter(c => c.clientType === 'mrr').reduce((s, c) => s + c.contractValue, 0)
+
+  return {
+    emDia:        { count: emDia.length,        value: mrrValue(emDia)        },
+    vencendo:     { count: vencendo.length,      value: mrrValue(vencendo)     },
+    inadimplente: { count: inadimplente.length,  value: mrrValue(inadimplente) },
+    totalAtRisk:  mrrValue(vencendo) + mrrValue(inadimplente),
+  }
+}

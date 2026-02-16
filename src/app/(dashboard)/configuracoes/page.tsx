@@ -16,6 +16,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { mockServices } from '@/lib/mock-data'
 import { Service, ServiceItem, FormQuestion, FormQuestionType } from '@/types'
+import { setObservationDays as persistObsDays, getNpsAllowObservation, setNpsAllowObservation } from '@/lib/nps-utils'
 import { cn } from '@/lib/utils'
 
 // ── Nav sections ──────────────────────────────────────────────────
@@ -458,6 +459,7 @@ function FormularioSection() {
   const [editText, setEditText] = useState('')
   const [introText, setIntroText] = useState('Olá, [Nome do Decisor]! Gostaríamos de entender sua experiência com a [Agência]. Sua opinião é fundamental para continuarmos evoluindo. Leva menos de 2 minutos. 🙏')
   const [thankText, setThankText] = useState('Muito obrigado pelo seu feedback! Ele é muito importante para toda a nossa equipe. Em breve entraremos em contato.')
+  const [allowObservation, setAllowObservation] = useState(false)
   const [saved, setSaved] = useState(false)
 
   function addQuestion() {
@@ -481,6 +483,7 @@ function FormularioSection() {
   }
 
   function handleSave() {
+    try { setNpsAllowObservation(allowObservation) } catch {}
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -651,6 +654,38 @@ function FormularioSection() {
           />
         </Field>
       </div>
+
+      {/* Toggle — clientes em observação */}
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardContent className="p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <p className="text-zinc-200 text-sm font-medium">Enviar NPS para clientes em observação</p>
+              <p className="text-zinc-500 text-xs mt-1">
+                Por padrão, clientes cadastrados recentemente ficam em <span className="text-zinc-300">período de observação</span> e não recebem o formulário NPS.
+                Ative esta opção para enviar mesmo assim.
+              </p>
+              <div className={cn('mt-3 flex items-center gap-2 text-xs font-medium',
+                allowObservation ? 'text-yellow-400' : 'text-zinc-500')}>
+                <div className={cn('w-1.5 h-1.5 rounded-full',
+                  allowObservation ? 'bg-yellow-400' : 'bg-zinc-600')} />
+                {allowObservation
+                  ? 'Ativo — NPS será enviado a todos os clientes, incluindo os em observação'
+                  : 'Inativo — clientes em observação são excluídos automaticamente do envio de NPS'}
+              </div>
+            </div>
+            {/* Toggle visual */}
+            <button
+              onClick={() => setAllowObservation(v => !v)}
+              className={cn('relative w-11 h-6 rounded-full transition-all shrink-0 mt-0.5',
+                allowObservation ? 'bg-yellow-500' : 'bg-zinc-700')}
+            >
+              <span className={cn('absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all',
+                allowObservation ? 'left-6' : 'left-1')} />
+            </button>
+          </div>
+        </CardContent>
+      </Card>
 
       <Button size="sm" onClick={handleSave} className="bg-emerald-500 hover:bg-emerald-600 text-white gap-2">
         {saved ? <><Check className="w-3.5 h-3.5" /> Salvo!</> : 'Salvar configurações'}

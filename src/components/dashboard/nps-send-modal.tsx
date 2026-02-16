@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { ClientWithScore } from '@/types'
-import { isInObservation, getObservationDays } from '@/lib/nps-utils'
+import { isInObservation, getObservationDays, getNpsAllowObservation } from '@/lib/nps-utils'
 import { cn } from '@/lib/utils'
 
 interface NpsSendModalProps {
@@ -31,13 +31,18 @@ type Step = 'config' | 'sending' | 'done'
 export function NpsSendModal({ clients, onClose, preselectedClientId }: NpsSendModalProps) {
   const locked = !!preselectedClientId
   const obsDays = getObservationDays()
+  const allowObs = getNpsAllowObservation()
 
-  // Separa clientes elegíveis (fora do período de observação)
-  const eligibleClients = clients.filter(c => !isInObservation(c.createdAt, obsDays))
-  const observacaoClients = clients.filter(c => isInObservation(c.createdAt, obsDays))
+  // Separa clientes elegíveis (fora do período de observação, a menos que o toggle permita)
+  const eligibleClients = allowObs
+    ? clients
+    : clients.filter(c => !isInObservation(c.createdAt, obsDays))
+  const observacaoClients = allowObs
+    ? []
+    : clients.filter(c => isInObservation(c.createdAt, obsDays))
 
-  // Se modo locked e o cliente está em observação, bloqueia tudo
-  const lockedClientInObs = locked && preselectedClientId
+  // Se modo locked e o cliente está em observação (e toggle não permite), bloqueia tudo
+  const lockedClientInObs = !allowObs && locked && preselectedClientId
     ? isInObservation(clients.find(c => c.id === preselectedClientId)?.createdAt ?? '', obsDays)
     : false
 
