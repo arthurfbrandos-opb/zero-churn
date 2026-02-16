@@ -149,6 +149,10 @@ export default function ClientesPage() {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all')
   const [showNpsModal, setShowNpsModal] = useState(false)
+  const [npsClientId, setNpsClientId] = useState<string | undefined>(undefined)
+
+  function openNpsForClient(id: string) { setNpsClientId(id); setShowNpsModal(true) }
+  function openNpsForAll() { setNpsClientId(undefined); setShowNpsModal(true) }
 
   const hasActiveFilters = riskFilter !== 'all' || typeFilter !== 'all' || paymentFilter !== 'all' || search !== ''
 
@@ -178,7 +182,11 @@ export default function ClientesPage() {
   return (
     <div className="min-h-screen">
       {showNpsModal && (
-        <NpsSendModal clients={allClients} onClose={() => setShowNpsModal(false)} />
+        <NpsSendModal
+          clients={allClients}
+          preselectedClientId={npsClientId}
+          onClose={() => { setShowNpsModal(false); setNpsClientId(undefined) }}
+        />
       )}
 
       <Header
@@ -187,7 +195,7 @@ export default function ClientesPage() {
         action={
           <div className="flex items-center gap-2">
             <Button size="sm" variant="outline"
-              onClick={() => setShowNpsModal(true)}
+              onClick={openNpsForAll}
               className="border-zinc-700 text-zinc-400 hover:text-white gap-1.5">
               <Send className="w-3.5 h-3.5" /> Enviar NPS
             </Button>
@@ -413,12 +421,22 @@ export default function ClientesPage() {
                             </>
                           )}
                         </div>
-                        <Link href={`/clientes/${client.id}`}>
-                          <Button size="sm" variant="outline"
-                            className="border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800 text-xs gap-1">
-                            Ver perfil <ChevronRight className="w-3 h-3" />
+                        <div className="flex items-center gap-1.5">
+                          <Button
+                            size="sm" variant="outline"
+                            onClick={() => openNpsForClient(client.id)}
+                            className="border-zinc-700 text-zinc-500 hover:text-emerald-400 hover:border-emerald-500/40 hover:bg-emerald-500/5 text-xs gap-1"
+                            title="Enviar formulário NPS"
+                          >
+                            <Send className="w-3 h-3" /> NPS
                           </Button>
-                        </Link>
+                          <Link href={`/clientes/${client.id}`}>
+                            <Button size="sm" variant="outline"
+                              className="border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800 text-xs gap-1">
+                              Ver perfil <ChevronRight className="w-3 h-3" />
+                            </Button>
+                          </Link>
+                        </div>
                       </div>
                     </div>
                   </CardContent>

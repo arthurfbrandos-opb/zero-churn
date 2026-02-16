@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 interface NpsSendModalProps {
   clients: ClientWithScore[]
   onClose: () => void
+  preselectedClientId?: string   // se informado, bloqueia seleção neste cliente
 }
 
 type Channel = 'whatsapp_group' | 'whatsapp_private' | 'email'
@@ -26,8 +27,11 @@ const CHANNEL_CONFIG: Record<Channel, { label: string; sub: string; icon: React.
 
 type Step = 'config' | 'sending' | 'done'
 
-export function NpsSendModal({ clients, onClose }: NpsSendModalProps) {
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(clients.map(c => c.id)))
+export function NpsSendModal({ clients, onClose, preselectedClientId }: NpsSendModalProps) {
+  const locked = !!preselectedClientId
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(
+    locked ? new Set([preselectedClientId!]) : new Set(clients.map(c => c.id))
+  )
   const [channels, setChannels] = useState<Set<Channel>>(new Set(['whatsapp_group', 'whatsapp_private', 'email']))
   const [followup1, setFollowup1] = useState('3')
   const [followup2, setFollowup2] = useState('7')
@@ -37,8 +41,10 @@ export function NpsSendModal({ clients, onClose }: NpsSendModalProps) {
 
   const allSelected = selectedIds.size === clients.length
   const selectedClients = clients.filter(c => selectedIds.has(c.id))
+  const singleClient = locked ? clients.find(c => c.id === preselectedClientId) : null
 
   function toggleClient(id: string) {
+    if (locked) return
     setSelectedIds(prev => {
       const next = new Set(prev)
       next.has(id) ? next.delete(id) : next.add(id)
@@ -47,6 +53,7 @@ export function NpsSendModal({ clients, onClose }: NpsSendModalProps) {
   }
 
   function toggleAll() {
+    if (locked) return
     setSelectedIds(allSelected ? new Set() : new Set(clients.map(c => c.id)))
   }
 
@@ -146,50 +153,69 @@ export function NpsSendModal({ clients, onClose }: NpsSendModalProps) {
 
               {/* Seleção de clientes */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-zinc-300 text-sm font-medium flex items-center gap-1.5">
-                    <Users className="w-4 h-4 text-zinc-500" /> Clientes
-                    <Badge variant="outline" className="text-zinc-400 border-zinc-600 text-xs ml-1">
-                      {selectedIds.size}/{clients.length}
+                {locked && singleClient ? (
+                  /* Modo cliente único — mostra apenas o card do cliente */
+                  <div className="flex items-center gap-3 bg-zinc-800/60 border border-emerald-500/20 rounded-xl px-4 py-3">
+                    <div className="w-9 h-9 rounded-lg bg-emerald-500/15 flex items-center justify-center text-emerald-400 font-bold shrink-0">
+                      {(singleClient.nomeResumido ?? singleClient.name).charAt(0)}
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-zinc-200 text-sm font-medium">{singleClient.nomeResumido ?? singleClient.name}</p>
+                      <p className="text-zinc-500 text-xs">{singleClient.segment} · {singleClient.nomeDecisor}</p>
+                    </div>
+                    <Badge variant="outline" className={cn('text-xs shrink-0',
+                      singleClient.clientType === 'mrr'
+                        ? 'text-emerald-400 border-emerald-500/30'
+                        : 'text-blue-400 border-blue-500/30')}>
+                      {singleClient.clientType.toUpperCase()}
                     </Badge>
-                  </p>
-                  <button onClick={toggleAll}
-                    className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors">
-                    {allSelected ? 'Desmarcar todos' : 'Selecionar todos'}
-                  </button>
-                </div>
-
-                {/* Preview compacto + expandir */}
-                <div className="border border-zinc-800 rounded-xl overflow-hidden">
-                  <div className="max-h-48 overflow-y-auto">
-                    {clients.map(c => {
-                      const sel = selectedIds.has(c.id)
-                      return (
-                        <button key={c.id} onClick={() => toggleClient(c.id)}
-                          className={cn(
-                            'w-full flex items-center gap-3 px-3 py-2.5 border-b border-zinc-800/50 last:border-0 text-left transition-all',
-                            sel ? 'bg-zinc-800/60' : 'hover:bg-zinc-800/30'
-                          )}>
-                          <div className={cn('w-4 h-4 rounded border-2 flex items-center justify-center shrink-0',
-                            sel ? 'bg-emerald-500 border-emerald-500' : 'border-zinc-600')}>
-                            {sel && <Check className="w-2.5 h-2.5 text-white" />}
-                          </div>
-                          <span className="flex-1 text-sm text-zinc-300">{c.nomeResumido ?? c.name}</span>
-                          <Badge variant="outline" className={cn('text-xs shrink-0',
-                            c.clientType === 'mrr'
-                              ? 'text-emerald-400 border-emerald-500/30'
-                              : 'text-blue-400 border-blue-500/30')}>
-                            {c.clientType.toUpperCase()}
-                          </Badge>
-                          {/* NPS mais recente */}
-                          {c.lastFormSubmission?.npsScore !== undefined && (
-                            <span className="text-zinc-500 text-xs">NPS: {c.lastFormSubmission.npsScore}</span>
-                          )}
-                        </button>
-                      )
-                    })}
                   </div>
-                </div>
+                ) : (
+                  /* Modo múltiplos clientes */
+                  <>
+                    <div className="flex items-center justify-between">
+                      <p className="text-zinc-300 text-sm font-medium flex items-center gap-1.5">
+                        <Users className="w-4 h-4 text-zinc-500" /> Clientes
+                        <Badge variant="outline" className="text-zinc-400 border-zinc-600 text-xs ml-1">
+                          {selectedIds.size}/{clients.length}
+                        </Badge>
+                      </p>
+                      <button onClick={toggleAll}
+                        className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors">
+                        {allSelected ? 'Desmarcar todos' : 'Selecionar todos'}
+                      </button>
+                    </div>
+                    <div className="border border-zinc-800 rounded-xl overflow-hidden">
+                      <div className="max-h-44 overflow-y-auto">
+                        {clients.map(c => {
+                          const sel = selectedIds.has(c.id)
+                          return (
+                            <button key={c.id} onClick={() => toggleClient(c.id)}
+                              className={cn(
+                                'w-full flex items-center gap-3 px-3 py-2.5 border-b border-zinc-800/50 last:border-0 text-left transition-all',
+                                sel ? 'bg-zinc-800/60' : 'hover:bg-zinc-800/30'
+                              )}>
+                              <div className={cn('w-4 h-4 rounded border-2 flex items-center justify-center shrink-0',
+                                sel ? 'bg-emerald-500 border-emerald-500' : 'border-zinc-600')}>
+                                {sel && <Check className="w-2.5 h-2.5 text-white" />}
+                              </div>
+                              <span className="flex-1 text-sm text-zinc-300">{c.nomeResumido ?? c.name}</span>
+                              <Badge variant="outline" className={cn('text-xs shrink-0',
+                                c.clientType === 'mrr'
+                                  ? 'text-emerald-400 border-emerald-500/30'
+                                  : 'text-blue-400 border-blue-500/30')}>
+                                {c.clientType.toUpperCase()}
+                              </Badge>
+                              {c.lastFormSubmission?.npsScore !== undefined && (
+                                <span className="text-zinc-500 text-xs">NPS: {c.lastFormSubmission.npsScore}</span>
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Canais */}

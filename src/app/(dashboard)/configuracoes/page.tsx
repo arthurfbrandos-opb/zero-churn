@@ -6,7 +6,7 @@ import {
   Plus, Trash2, Check, X, Eye, EyeOff, Loader2,
   ChevronRight, Shield, AlertTriangle, RefreshCw,
   MessageCircle, CreditCard, BarChart2, Zap,
-  GripVertical,
+  GripVertical, FileText, Lock, AlignLeft, ListChecks, Hash,
 } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
@@ -15,17 +15,18 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { mockServices } from '@/lib/mock-data'
-import { Service, ServiceItem } from '@/types'
+import { Service, ServiceItem, FormQuestion, FormQuestionType } from '@/types'
 import { cn } from '@/lib/utils'
 
 // ── Nav sections ──────────────────────────────────────────────────
 const NAV = [
-  { id: 'agencia',       label: 'Agência',       icon: Building2 },
-  { id: 'servicos',      label: 'Serviços',       icon: Briefcase },
-  { id: 'integracoes',   label: 'Integrações',    icon: Plug      },
-  { id: 'usuarios',      label: 'Usuários',       icon: Users     },
-  { id: 'analisador',    label: 'Analisador',     icon: Bot       },
-  { id: 'notificacoes',  label: 'Notificações',   icon: Bell      },
+  { id: 'agencia',       label: 'Agência',        icon: Building2 },
+  { id: 'servicos',      label: 'Serviços',        icon: Briefcase },
+  { id: 'formulario',    label: 'Formulário NPS',  icon: FileText  },
+  { id: 'integracoes',   label: 'Integrações',     icon: Plug      },
+  { id: 'usuarios',      label: 'Usuários',        icon: Users     },
+  { id: 'analisador',    label: 'Analisador',      icon: Bot       },
+  { id: 'notificacoes',  label: 'Notificações',    icon: Bell      },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -419,6 +420,241 @@ function ServicosSection() {
           )
         })}
       </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────
+// SEÇÃO: FORMULÁRIO NPS
+// ─────────────────────────────────────────────────────────────────
+
+const MANDATORY_QUESTIONS: FormQuestion[] = [
+  {
+    id: 'q-nps', type: 'scale', locked: true, required: true,
+    text: 'Em uma escala de 0 a 10, o quanto você indicaria [Agência] para um amigo ou colega de negócios?',
+    placeholder: 'Esta é a pergunta de NPS padrão — não pode ser removida.',
+  },
+  {
+    id: 'q-result', type: 'scale', locked: true, required: true,
+    text: 'Em uma escala de 0 a 10, qual o impacto que os serviços da [Agência] estão tendo nos resultados da sua empresa?',
+    placeholder: 'Esta é a pergunta de resultado padrão — não pode ser removida.',
+  },
+]
+
+const QUESTION_TYPE_CONFIG: Record<FormQuestionType, { label: string; icon: React.ElementType; hint: string }> = {
+  scale:           { label: 'Escala 0-10',      icon: Hash,       hint: 'O cliente responde com um número de 0 a 10' },
+  text:            { label: 'Texto livre',        icon: AlignLeft,  hint: 'Campo aberto para o cliente escrever' },
+  multiple_choice: { label: 'Múltipla escolha',  icon: ListChecks, hint: 'O cliente escolhe uma ou mais opções' },
+}
+
+function FormularioSection() {
+  const [customQuestions, setCustomQuestions] = useState<FormQuestion[]>([
+    { id: 'q-c1', type: 'text', locked: false, required: false, text: 'O que podemos fazer para melhorar nossos serviços?', placeholder: '' },
+  ])
+  const [addingType, setAddingType] = useState<FormQuestionType | null>(null)
+  const [newText, setNewText] = useState('')
+  const [newOptions, setNewOptions] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editText, setEditText] = useState('')
+  const [introText, setIntroText] = useState('Olá, [Nome do Decisor]! Gostaríamos de entender sua experiência com a [Agência]. Sua opinião é fundamental para continuarmos evoluindo. Leva menos de 2 minutos. 🙏')
+  const [thankText, setThankText] = useState('Muito obrigado pelo seu feedback! Ele é muito importante para toda a nossa equipe. Em breve entraremos em contato.')
+  const [saved, setSaved] = useState(false)
+
+  function addQuestion() {
+    if (!newText.trim() || !addingType) return
+    const novo: FormQuestion = {
+      id: `q-c${Date.now()}`, type: addingType, locked: false, required: false,
+      text: newText.trim(),
+      options: addingType === 'multiple_choice' ? newOptions.split('\n').filter(Boolean) : undefined,
+    }
+    setCustomQuestions(prev => [...prev, novo])
+    setNewText(''); setNewOptions(''); setAddingType(null)
+  }
+
+  function removeQuestion(id: string) {
+    setCustomQuestions(prev => prev.filter(q => q.id !== id))
+  }
+
+  function saveEdit(id: string) {
+    setCustomQuestions(prev => prev.map(q => q.id === id ? { ...q, text: editText } : q))
+    setEditingId(null)
+  }
+
+  function handleSave() {
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  return (
+    <div className="space-y-6">
+      <SectionTitle>Formulário NPS</SectionTitle>
+      <p className="text-zinc-500 text-sm -mt-2">
+        Configure as perguntas do formulário enviado aos clientes. As duas perguntas obrigatórias não podem ser removidas.
+      </p>
+
+      {/* Perguntas obrigatórias */}
+      <div className="space-y-3">
+        <p className="text-zinc-400 text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5">
+          <Lock className="w-3.5 h-3.5" /> Perguntas obrigatórias
+        </p>
+        {MANDATORY_QUESTIONS.map((q, i) => (
+          <Card key={q.id} className="bg-zinc-900 border-zinc-800">
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center text-zinc-400 text-xs font-bold shrink-0 mt-0.5">
+                  {i + 1}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <Badge variant="outline" className="text-violet-400 border-violet-500/30 bg-violet-500/10 text-xs">
+                      Escala 0-10
+                    </Badge>
+                    <Badge variant="outline" className="text-zinc-500 border-zinc-700 text-xs flex items-center gap-1">
+                      <Lock className="w-2.5 h-2.5" /> Obrigatória
+                    </Badge>
+                  </div>
+                  <p className="text-zinc-200 text-sm leading-relaxed">{q.text}</p>
+                  <p className="text-zinc-600 text-xs mt-1 italic">{q.placeholder}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Perguntas customizadas */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-zinc-400 text-xs font-semibold uppercase tracking-wider">
+            Perguntas adicionais ({customQuestions.length})
+          </p>
+        </div>
+
+        {customQuestions.length === 0 && !addingType && (
+          <p className="text-zinc-600 text-xs italic">Nenhuma pergunta adicional. Adicione abaixo.</p>
+        )}
+
+        {customQuestions.map((q, i) => (
+          <Card key={q.id} className="bg-zinc-900 border-zinc-800">
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <div className="w-6 h-6 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-500 text-xs font-bold shrink-0 mt-0.5">
+                  {MANDATORY_QUESTIONS.length + i + 1}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <Badge variant="outline" className="text-zinc-400 border-zinc-700 text-xs mb-1.5">
+                    {QUESTION_TYPE_CONFIG[q.type].label}
+                  </Badge>
+                  {editingId === q.id ? (
+                    <div className="space-y-2">
+                      <Input autoFocus value={editText} onChange={e => setEditText(e.target.value)}
+                        className={cn(inputCls, 'text-sm')}
+                        onKeyDown={e => { if (e.key === 'Enter') saveEdit(q.id); if (e.key === 'Escape') setEditingId(null) }}
+                      />
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={() => saveEdit(q.id)} className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1 text-xs">
+                          <Check className="w-3 h-3" /> Salvar
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditingId(null)} className="text-zinc-400 text-xs">Cancelar</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-zinc-200 text-sm leading-relaxed">{q.text}</p>
+                  )}
+                  {q.options && q.options.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {q.options.map((opt, j) => (
+                        <span key={j} className="text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded">{opt}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  {editingId !== q.id && (
+                    <button onClick={() => { setEditingId(q.id); setEditText(q.text) }}
+                      className="text-xs text-zinc-500 hover:text-zinc-300 px-2 transition-colors">
+                      Editar
+                    </button>
+                  )}
+                  <button onClick={() => removeQuestion(q.id)}
+                    className="w-7 h-7 flex items-center justify-center text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+
+        {/* Formulário de nova pergunta */}
+        {addingType ? (
+          <Card className="bg-zinc-900 border-emerald-500/30 border-dashed">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                {(() => { const Icon = QUESTION_TYPE_CONFIG[addingType].icon; return <Icon className="w-4 h-4 text-zinc-400" /> })()}
+                <p className="text-zinc-300 text-sm font-medium">{QUESTION_TYPE_CONFIG[addingType].label}</p>
+                <p className="text-zinc-600 text-xs">— {QUESTION_TYPE_CONFIG[addingType].hint}</p>
+              </div>
+              <Input autoFocus value={newText} onChange={e => setNewText(e.target.value)}
+                placeholder="Digite a pergunta..." className={cn(inputCls, 'text-sm')}
+                onKeyDown={e => { if (e.key === 'Escape') setAddingType(null) }}
+              />
+              {addingType === 'multiple_choice' && (
+                <div>
+                  <Label className="text-zinc-400 text-xs mb-1 block">Opções (uma por linha)</Label>
+                  <textarea value={newOptions} onChange={e => setNewOptions(e.target.value)}
+                    placeholder={"Sim, estou satisfeito\nNão, preciso de melhorias\nParcialmente"}
+                    className={cn(inputCls, 'w-full rounded-md border px-3 py-2 text-sm min-h-20 resize-none')}
+                  />
+                </div>
+              )}
+              <div className="flex gap-2">
+                <Button size="sm" onClick={addQuestion} disabled={!newText.trim()}
+                  className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1 text-xs">
+                  <Plus className="w-3 h-3" /> Adicionar
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => { setAddingType(null); setNewText(''); setNewOptions('') }}
+                  className="text-zinc-400 text-xs">Cancelar</Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-zinc-500 text-xs mr-1">+ Adicionar:</p>
+            {(Object.keys(QUESTION_TYPE_CONFIG) as FormQuestionType[]).map(type => {
+              const { label, icon: Icon } = QUESTION_TYPE_CONFIG[type]
+              return (
+                <button key={type} onClick={() => setAddingType(type)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 text-xs transition-all">
+                  <Icon className="w-3.5 h-3.5" /> {label}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Textos do formulário */}
+      <div className="space-y-4 border-t border-zinc-800 pt-5">
+        <p className="text-zinc-400 text-xs font-semibold uppercase tracking-wider">Mensagens do formulário</p>
+        <p className="text-zinc-600 text-xs">Use [Agência] e [Nome do Decisor] como variáveis — serão substituídas automaticamente.</p>
+
+        <Field label="Mensagem de abertura">
+          <textarea value={introText} onChange={e => setIntroText(e.target.value)}
+            className={cn(inputCls, 'w-full rounded-md border px-3 py-2 text-sm min-h-20 resize-none')}
+          />
+        </Field>
+
+        <Field label="Mensagem de agradecimento">
+          <textarea value={thankText} onChange={e => setThankText(e.target.value)}
+            className={cn(inputCls, 'w-full rounded-md border px-3 py-2 text-sm min-h-16 resize-none')}
+          />
+        </Field>
+      </div>
+
+      <Button size="sm" onClick={handleSave} className="bg-emerald-500 hover:bg-emerald-600 text-white gap-2">
+        {saved ? <><Check className="w-3.5 h-3.5" /> Salvo!</> : 'Salvar configurações'}
+      </Button>
     </div>
   )
 }
@@ -839,6 +1075,7 @@ export default function ConfiguracoesPage() {
   const SECTIONS: Record<string, React.ReactNode> = {
     agencia:      <AgenciaSection />,
     servicos:     <ServicosSection />,
+    formulario:   <FormularioSection />,
     integracoes:  <IntegracoesSection />,
     usuarios:     <UsuariosSection />,
     analisador:   <AnalisadorSection />,

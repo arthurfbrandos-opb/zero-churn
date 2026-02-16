@@ -15,6 +15,20 @@ export type Trend = 'improving' | 'stable' | 'declining'
 
 // ─────────────────────────────────────────────
 
+export type FormQuestionType = 'scale' | 'text' | 'multiple_choice'
+
+export interface FormQuestion {
+  id: string
+  type: FormQuestionType
+  text: string
+  required: boolean
+  locked: boolean           // perguntas obrigatórias não podem ser removidas
+  options?: string[]        // para múltipla escolha
+  placeholder?: string
+}
+
+// ─────────────────────────────────────────────
+
 export interface ServiceItem {
   id: string
   name: string
