@@ -9,6 +9,7 @@ import {
   Settings,
   Activity,
   Zap,
+  Kanban,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -20,6 +21,7 @@ const navItems = [
   { href: '/alertas',        label: 'Alertas',      icon: Bell            },
   { href: '/operacional',    label: 'Operacional',  icon: Activity        },
   { href: '/configuracoes',  label: 'Configurações',icon: Settings        },
+  { href: '/planejamento',   label: 'Planejamento', icon: Kanban          },
 ]
 
 export function Sidebar() {
