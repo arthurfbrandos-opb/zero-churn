@@ -200,12 +200,13 @@ const mockFormSubmissions: Record<string, FormSubmission[]> = {
 
 export const mockClients: ClientWithScore[] = [
   {
-    // PERFIL 1: Risco Alto
+    // PERFIL 1: Risco Alto — MRR
     id: 'client-001',
     agencyId: 'agency-001',
     name: 'Clínica Estética Bella Forma',
     segment: 'Saúde e Estética',
     serviceSold: 'Tráfego Pago + Social Media',
+    clientType: 'mrr',
     contractValue: 4500,
     contractStartDate: '2025-06-01',
     contractEndDate: '2026-03-01',
@@ -216,12 +217,13 @@ export const mockClients: ClientWithScore[] = [
     lastFormSubmission: mockFormSubmissions['client-001'][0],
   },
   {
-    // PERFIL 2: Risco Médio (afastamento)
+    // PERFIL 2: Risco Médio (afastamento) — MRR
     id: 'client-002',
     agencyId: 'agency-001',
     name: 'Imobiliária Casa Certa',
     segment: 'Imobiliário',
     serviceSold: 'Gestão de Tráfego Pago',
+    clientType: 'mrr',
     contractValue: 3200,
     contractStartDate: '2025-08-15',
     contractEndDate: '2026-08-15',
@@ -232,28 +234,33 @@ export const mockClients: ClientWithScore[] = [
     lastFormSubmission: mockFormSubmissions['client-002'][0],
   },
   {
-    // PERFIL 3: Risco Médio (resultado)
+    // PERFIL 3: Risco Médio (resultado) — TCV
     id: 'client-003',
     agencyId: 'agency-001',
     name: 'TechStart Consultoria',
     segment: 'Tecnologia / B2B',
-    serviceSold: 'Tráfego Pago + SEO + Social Media',
-    contractValue: 5800,
-    contractStartDate: '2025-04-01',
-    contractEndDate: '2026-04-01',
-    notes: 'Ticket alto, cliente de longo prazo. Expectativa de resultado é muito alta — vendem software enterprise.',
-    createdAt: '2025-04-01',
+    serviceSold: 'Implementação de Funil de Vendas',
+    clientType: 'tcv',
+    contractValue: 0,
+    totalProjectValue: 18000,
+    projectDeadlineDays: 90,
+    projectStartDate: '2025-12-01',
+    contractStartDate: '2025-12-01',
+    contractEndDate: '2026-03-01',
+    notes: 'Projeto de implementação de funil fechado em R$18k. Prazo de 90 dias. Pagamento antecipado realizado.',
+    createdAt: '2025-12-01',
     healthScore: healthScoreMedioRisco2,
     integrations: integracoesParciais,
     lastFormSubmission: mockFormSubmissions['client-003'][0],
   },
   {
-    // PERFIL 4: Risco Baixo
+    // PERFIL 4: Risco Baixo — MRR
     id: 'client-004',
     agencyId: 'agency-001',
     name: 'Restaurante Sabor & Arte',
     segment: 'Alimentação / Delivery',
     serviceSold: 'Social Media + Tráfego Local',
+    clientType: 'mrr',
     contractValue: 2200,
     contractStartDate: '2025-01-10',
     contractEndDate: '2026-07-10',
@@ -264,21 +271,25 @@ export const mockClients: ClientWithScore[] = [
     lastFormSubmission: mockFormSubmissions['client-004'][0],
   },
   {
-    // PERFIL 5: Em Observação (< 60 dias)
+    // PERFIL 5: Em Observação — TCV
     id: 'client-005',
     agencyId: 'agency-001',
     name: 'Academia FitLife',
     segment: 'Fitness / Bem-estar',
-    serviceSold: 'Tráfego Pago + Social Media',
-    contractValue: 3000,
+    serviceSold: 'Setup e Gestão de Campanhas (Projeto)',
+    clientType: 'tcv',
+    contractValue: 0,
+    totalProjectValue: 8500,
+    projectDeadlineDays: 60,
+    projectStartDate: '2026-01-15',
     contractStartDate: '2026-01-15',
-    contractEndDate: '2027-01-15',
-    notes: 'Cliente novo. Ainda na fase de onboarding das campanhas.',
+    contractEndDate: '2026-03-16',
+    notes: 'Cliente novo. Projeto de setup de campanhas fechado em R$8.500. Ainda na fase de onboarding.',
     createdAt: '2026-01-15',
     healthScore: undefined,
     integrations: [
-      { id: 'int-13', clientId: 'client-005', type: 'whatsapp',      status: 'connected',    lastSyncAt: '2026-02-05' },
-      { id: 'int-14', clientId: 'client-005', type: 'asaas',         status: 'disconnected' },
+      { id: 'int-13', clientId: 'client-005', type: 'whatsapp',       status: 'connected',    lastSyncAt: '2026-02-05' },
+      { id: 'int-14', clientId: 'client-005', type: 'asaas',          status: 'disconnected' },
       { id: 'int-15', clientId: 'client-005', type: 'dom_pagamentos', status: 'disconnected' },
     ],
     lastFormSubmission: undefined,
@@ -373,6 +384,38 @@ export function getAverageHealthScore(): number {
   if (clientsWithScore.length === 0) return 0
   const total = clientsWithScore.reduce((sum, c) => sum + (c.healthScore?.scoreTotal ?? 0), 0)
   return Math.round(total / clientsWithScore.length)
+}
+
+export function getMRRClients() {
+  return mockClients.filter((c) => c.clientType === 'mrr')
+}
+
+export function getTCVClients() {
+  return mockClients.filter((c) => c.clientType === 'tcv')
+}
+
+export function getTotalMRR(): number {
+  return getMRRClients().reduce((sum, c) => sum + c.contractValue, 0)
+}
+
+export function getTotalTCVInExecution(): number {
+  return getTCVClients().reduce((sum, c) => sum + (c.totalProjectValue ?? 0), 0)
+}
+
+export function getTCVDaysRemaining(client: { projectStartDate?: string; projectDeadlineDays?: number }): number {
+  if (!client.projectStartDate || !client.projectDeadlineDays) return 0
+  const start = new Date(client.projectStartDate)
+  const end = new Date(start.getTime() + client.projectDeadlineDays * 24 * 60 * 60 * 1000)
+  const now = new Date()
+  return Math.max(0, Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+}
+
+export function getTCVProgressPercent(client: { projectStartDate?: string; projectDeadlineDays?: number }): number {
+  if (!client.projectStartDate || !client.projectDeadlineDays) return 0
+  const start = new Date(client.projectStartDate)
+  const now = new Date()
+  const elapsed = Math.ceil((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+  return Math.min(100, Math.round((elapsed / client.projectDeadlineDays) * 100))
 }
 
 export function getActiveClientsCount(): number {

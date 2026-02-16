@@ -4,6 +4,8 @@
 
 export type ChurnRisk = 'low' | 'medium' | 'high' | 'observacao'
 
+export type ClientType = 'mrr' | 'tcv'
+
 export type IntegrationStatus = 'connected' | 'error' | 'expired' | 'disconnected'
 
 export type IntegrationType = 'whatsapp' | 'asaas' | 'dom_pagamentos'
@@ -40,9 +42,18 @@ export interface Client {
   name: string
   segment: string
   serviceSold: string
-  contractValue: number
+  clientType: ClientType
+
+  // MRR
+  contractValue: number        // valor mensal recorrente
   contractStartDate: string
   contractEndDate: string
+
+  // TCV (preenchido apenas se clientType === 'tcv')
+  totalProjectValue?: number   // valor total do projeto pago antecipado
+  projectDeadlineDays?: number // duração total em dias (ex: 90)
+  projectStartDate?: string    // início da execução
+
   notes?: string
   createdAt: string
 }

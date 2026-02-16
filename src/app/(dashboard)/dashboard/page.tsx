@@ -1,8 +1,9 @@
 import Link from 'next/link'
-import { ChevronRight, AlertTriangle, Clock, TrendingDown, TrendingUp, Users, Minus } from 'lucide-react'
+import { ChevronRight, AlertTriangle, Clock, TrendingDown, TrendingUp, Minus, RefreshCw, Layers } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { RiskBadge } from '@/components/dashboard/risk-badge'
 import { ScoreGauge } from '@/components/dashboard/score-gauge'
 import { IntegrationStatusIcon } from '@/components/integracoes/integration-status-icon'
@@ -12,9 +13,12 @@ import {
   getAverageHealthScore,
   getRevenueByRisk,
   getRiskCounts,
-  getActiveClientsCount,
   getLastMonthAvgChurn,
   getLast3MonthsAvgChurn,
+  getMRRClients,
+  getTCVClients,
+  getTotalMRR,
+  getTotalTCVInExecution,
   mockAlerts,
 } from '@/lib/mock-data'
 import { ChurnRisk } from '@/types'
@@ -49,10 +53,13 @@ export default function DashboardPage() {
   const unreadAlerts = mockAlerts.filter((a) => !a.isRead).length
   const totalClients = clients.length
   const totalWithScore = clients.filter((c) => c.healthScore).length
-  const activeClients = getActiveClientsCount()
   const churnLastMonth = getLastMonthAvgChurn()
   const churnLast3Months = getLast3MonthsAvgChurn()
   const churnDelta = churnLastMonth - churnLast3Months
+  const mrrClients = getMRRClients()
+  const tcvClients = getTCVClients()
+  const totalMRR = getTotalMRR()
+  const totalTCV = getTotalTCVInExecution()
 
   const riskDistribution = [
     { label: 'Alto',        count: riskCounts.high,       color: 'bg-red-500',     textColor: 'text-red-400',     revenue: revenueByRisk.high   },
@@ -96,17 +103,52 @@ export default function DashboardPage() {
         )}
 
         {/* ─── Métricas rápidas ───────────────────────────────────── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
 
-          {/* Clientes ativos */}
-          <Card className="bg-zinc-900 border-zinc-800">
-            <CardContent className="px-4 py-3 flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-                <Users className="w-4 h-4 text-emerald-400" />
+          {/* MRR */}
+          <Card className="bg-zinc-900 border-zinc-800 col-span-1">
+            <CardContent className="px-4 py-3">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+                  <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
+                </div>
+                <p className="text-zinc-500 text-xs">Clientes MRR</p>
               </div>
-              <div>
-                <p className="text-zinc-500 text-xs">Clientes ativos</p>
-                <p className="text-white text-xl font-bold leading-tight">{activeClients}</p>
+              <div className="flex items-end justify-between gap-1">
+                <div>
+                  <p className="text-white text-2xl font-bold leading-tight">{mrrClients.length}</p>
+                  <p className="text-zinc-500 text-xs">clientes</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-emerald-400 text-sm font-bold leading-tight">
+                    {formatCurrency(totalMRR)}
+                  </p>
+                  <p className="text-zinc-500 text-xs">previsto/mês</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* TCV */}
+          <Card className="bg-zinc-900 border-zinc-800 col-span-1">
+            <CardContent className="px-4 py-3">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-7 h-7 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+                  <Layers className="w-3.5 h-3.5 text-blue-400" />
+                </div>
+                <p className="text-zinc-500 text-xs">Clientes TCV</p>
+              </div>
+              <div className="flex items-end justify-between gap-1">
+                <div>
+                  <p className="text-white text-2xl font-bold leading-tight">{tcvClients.length}</p>
+                  <p className="text-zinc-500 text-xs">projetos</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-blue-400 text-sm font-bold leading-tight">
+                    {formatCurrency(totalTCV)}
+                  </p>
+                  <p className="text-zinc-500 text-xs">em execução</p>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -114,11 +156,11 @@ export default function DashboardPage() {
           {/* Churn médio — último mês */}
           <Card className="bg-zinc-900 border-zinc-800">
             <CardContent className="px-4 py-3 flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
-                <TrendingDown className="w-4 h-4 text-red-400" />
+              <div className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
+                <TrendingDown className="w-3.5 h-3.5 text-red-400" />
               </div>
               <div>
-                <p className="text-zinc-500 text-xs">Churn — último mês</p>
+                <p className="text-zinc-500 text-xs">Churn último mês</p>
                 <p className="text-red-400 text-xl font-bold leading-tight">{churnLastMonth}%</p>
               </div>
             </CardContent>
@@ -127,11 +169,11 @@ export default function DashboardPage() {
           {/* Churn médio — últimos 3 meses */}
           <Card className="bg-zinc-900 border-zinc-800">
             <CardContent className="px-4 py-3 flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0">
-                <TrendingDown className="w-4 h-4 text-zinc-400" />
+              <div className="w-7 h-7 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0">
+                <TrendingDown className="w-3.5 h-3.5 text-zinc-400" />
               </div>
               <div>
-                <p className="text-zinc-500 text-xs">Churn — média 3 meses</p>
+                <p className="text-zinc-500 text-xs">Churn média 3 meses</p>
                 <p className="text-zinc-300 text-xl font-bold leading-tight">{churnLast3Months}%</p>
               </div>
             </CardContent>
@@ -140,21 +182,16 @@ export default function DashboardPage() {
           {/* Variação */}
           <Card className={`border ${churnDelta > 0 ? 'bg-red-500/5 border-red-500/20' : churnDelta < 0 ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-zinc-900 border-zinc-800'}`}>
             <CardContent className="px-4 py-3 flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                churnDelta > 0 ? 'bg-red-500/10' : churnDelta < 0 ? 'bg-emerald-500/10' : 'bg-zinc-800'
-              }`}>
+              <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${churnDelta > 0 ? 'bg-red-500/10' : churnDelta < 0 ? 'bg-emerald-500/10' : 'bg-zinc-800'}`}>
                 {churnDelta > 0
-                  ? <TrendingUp className="w-4 h-4 text-red-400" />
+                  ? <TrendingUp className="w-3.5 h-3.5 text-red-400" />
                   : churnDelta < 0
-                  ? <TrendingDown className="w-4 h-4 text-emerald-400" />
-                  : <Minus className="w-4 h-4 text-zinc-400" />
-                }
+                  ? <TrendingDown className="w-3.5 h-3.5 text-emerald-400" />
+                  : <Minus className="w-3.5 h-3.5 text-zinc-400" />}
               </div>
               <div>
-                <p className="text-zinc-500 text-xs">Variação do churn</p>
-                <p className={`text-xl font-bold leading-tight ${
-                  churnDelta > 0 ? 'text-red-400' : churnDelta < 0 ? 'text-emerald-400' : 'text-zinc-400'
-                }`}>
+                <p className="text-zinc-500 text-xs">Variação churn</p>
+                <p className={`text-xl font-bold leading-tight ${churnDelta > 0 ? 'text-red-400' : churnDelta < 0 ? 'text-emerald-400' : 'text-zinc-400'}`}>
                   {churnDelta > 0 ? '+' : ''}{churnDelta}pp
                 </p>
                 <p className="text-zinc-600 text-xs leading-tight">
@@ -317,12 +354,23 @@ export default function DashboardPage() {
                           <div className="flex items-center gap-2 mb-1 flex-wrap">
                             <p className="text-white font-medium text-sm truncate">{client.name}</p>
                             <RiskBadge risk={risk} size="sm" />
+                            <Badge variant="outline" className={`text-xs px-1.5 py-0 border font-medium ${client.clientType === 'mrr' ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' : 'text-blue-400 border-blue-500/30 bg-blue-500/10'}`}>
+                              {client.clientType.toUpperCase()}
+                            </Badge>
                           </div>
                           <div className="flex items-center gap-3 text-zinc-500 text-xs flex-wrap">
                             <span>{client.serviceSold}</span>
                             <span>•</span>
                             <span>{getTimeAsClient(client.contractStartDate)}</span>
-                            {daysToRenew <= 60 && daysToRenew > 0 && (
+                            {client.clientType === 'tcv' && client.projectDeadlineDays && client.projectStartDate && (
+                              <>
+                                <span>•</span>
+                                <span className={daysToRenew <= 15 ? 'text-red-400 font-medium' : 'text-blue-400'}>
+                                  {daysToRenew}d restantes no projeto
+                                </span>
+                              </>
+                            )}
+                            {client.clientType === 'mrr' && daysToRenew <= 60 && daysToRenew > 0 && (
                               <>
                                 <span>•</span>
                                 <span className={daysToRenew <= 20 ? 'text-red-400 font-medium' : 'text-yellow-400'}>
@@ -335,10 +383,17 @@ export default function DashboardPage() {
 
                         {/* Valor + integrações */}
                         <div className="flex flex-col items-end gap-2 shrink-0">
-                          <p className="text-zinc-300 text-sm font-semibold">
-                            {formatCurrency(client.contractValue)}
-                            <span className="text-zinc-500 font-normal">/mês</span>
-                          </p>
+                          {client.clientType === 'mrr' ? (
+                            <p className="text-zinc-300 text-sm font-semibold">
+                              {formatCurrency(client.contractValue)}
+                              <span className="text-zinc-500 font-normal">/mês</span>
+                            </p>
+                          ) : (
+                            <p className="text-blue-400 text-sm font-semibold">
+                              {formatCurrency(client.totalProjectValue ?? 0)}
+                              <span className="text-zinc-500 font-normal"> total</span>
+                            </p>
+                          )}
                           <div className="flex items-center gap-1.5">
                             {client.integrations.map((int) => (
                               <IntegrationStatusIcon key={int.id} type={int.type} status={int.status} />
