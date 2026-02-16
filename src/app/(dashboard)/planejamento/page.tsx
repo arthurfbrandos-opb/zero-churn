@@ -51,11 +51,11 @@ const TASKS: KanbanTask[] = [
   { id: 'S0-KN', sprint: 's0', status: 'done', type: 'independente',title: 'Tela Planejamento — Kanban de sprints e tasks', extra: true },
 
   // ── SPRINT 0 — A FAZER ────────────────────────────────────────
-  { id: 'S0-07', sprint: 's0', status: 'todo', type: 'paralelo',    title: 'Formulário público — /f/[token] (link único, sem login, LGPD)', note: 'Layout separado sem sidebar' },
-  { id: 'S0-10', sprint: 's0', status: 'todo', type: 'paralelo',    title: 'Central de Alertas — /alertas (filtros por severidade, marcar como tratado)' },
-  { id: 'S0-11', sprint: 's0', status: 'todo', type: 'paralelo',    title: 'Painel Operacional — /operacional (saúde das integrações + custo de IA + job mensal)' },
-  { id: 'S0-ED', sprint: 's0', status: 'todo', type: 'paralelo',    title: 'Edição de cliente — /clientes/[id]/editar (reutiliza wizard de cadastro)', note: 'Botão já existe no perfil' },
-  { id: 'S0-13', sprint: 's0', status: 'todo', type: 'sequencial',  title: 'Estados vazios em todas as telas (sem clientes, sem alertas, sem formulários)' },
+  { id: 'S0-07', sprint: 's0', status: 'done', type: 'paralelo',    title: 'Formulário público — /f/[token] (link único, sem login, LGPD)', note: 'Layout separado sem sidebar' },
+  { id: 'S0-10', sprint: 's0', status: 'done', type: 'paralelo',    title: 'Central de Alertas — /alertas (filtros por severidade, marcar como tratado)' },
+  { id: 'S0-11', sprint: 's0', status: 'done', type: 'paralelo',    title: 'Painel Operacional — /operacional (saúde das integrações + custo de IA + job mensal)' },
+  { id: 'S0-ED', sprint: 's0', status: 'done', type: 'paralelo',    title: 'Edição de cliente — /clientes/[id]/editar (reutiliza wizard de cadastro)', note: 'Botão já existe no perfil' },
+  { id: 'S0-13', sprint: 's0', status: 'done', type: 'sequencial',  title: 'Estados vazios em todas as telas (sem clientes, sem alertas, sem formulários)' },
   { id: 'S0-15', sprint: 's0', status: 'todo', type: 'sequencial',  title: 'Revisão geral — consistência visual + responsividade mobile' },
   { id: 'S0-16', sprint: 's0', status: 'todo', type: 'sequencial',  title: 'Deploy na Vercel + validação do link compartilhável', note: 'DoD do Sprint 0' },
 
