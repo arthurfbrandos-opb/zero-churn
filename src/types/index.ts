@@ -4,6 +4,7 @@
 
 export type ChurnRisk = 'low' | 'medium' | 'high' | 'observacao'
 export type ClientType = 'mrr' | 'tcv'
+export type PaymentStatus = 'em_dia' | 'vencendo' | 'inadimplente'
 export type IntegrationStatus = 'connected' | 'error' | 'expired' | 'disconnected'
 export type IntegrationType = 'whatsapp' | 'asaas' | 'dom_pagamentos' | 'meta_ads' | 'google_ads'
 export type AlertSeverity = 'high' | 'medium' | 'low'
@@ -112,6 +113,7 @@ export interface Client {
   expectativasCliente?: string    // o que o cliente disse que espera
   principaisDores?: string        // problemas que motivaram a contratação
   notes?: string                  // observações adicionais da equipe
+  paymentStatus?: PaymentStatus   // status do pagamento mais recente
 
   createdAt: string
 }
