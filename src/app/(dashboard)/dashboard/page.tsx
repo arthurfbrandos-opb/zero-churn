@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ChevronRight, AlertTriangle, Clock, TrendingDown } from 'lucide-react'
+import { ChevronRight, AlertTriangle, Clock, TrendingDown, TrendingUp, Users, Minus } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -12,6 +12,9 @@ import {
   getAverageHealthScore,
   getRevenueByRisk,
   getRiskCounts,
+  getActiveClientsCount,
+  getLastMonthAvgChurn,
+  getLast3MonthsAvgChurn,
   mockAlerts,
 } from '@/lib/mock-data'
 import { ChurnRisk } from '@/types'
@@ -46,6 +49,10 @@ export default function DashboardPage() {
   const unreadAlerts = mockAlerts.filter((a) => !a.isRead).length
   const totalClients = clients.length
   const totalWithScore = clients.filter((c) => c.healthScore).length
+  const activeClients = getActiveClientsCount()
+  const churnLastMonth = getLastMonthAvgChurn()
+  const churnLast3Months = getLast3MonthsAvgChurn()
+  const churnDelta = churnLastMonth - churnLast3Months
 
   const riskDistribution = [
     { label: 'Alto',        count: riskCounts.high,       color: 'bg-red-500',     textColor: 'text-red-400',     revenue: revenueByRisk.high   },
@@ -87,6 +94,76 @@ export default function DashboardPage() {
             </p>
           </div>
         )}
+
+        {/* ─── Métricas rápidas ───────────────────────────────────── */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+
+          {/* Clientes ativos */}
+          <Card className="bg-zinc-900 border-zinc-800">
+            <CardContent className="px-4 py-3 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+                <Users className="w-4 h-4 text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-zinc-500 text-xs">Clientes ativos</p>
+                <p className="text-white text-xl font-bold leading-tight">{activeClients}</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Churn médio — último mês */}
+          <Card className="bg-zinc-900 border-zinc-800">
+            <CardContent className="px-4 py-3 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
+                <TrendingDown className="w-4 h-4 text-red-400" />
+              </div>
+              <div>
+                <p className="text-zinc-500 text-xs">Churn — último mês</p>
+                <p className="text-red-400 text-xl font-bold leading-tight">{churnLastMonth}%</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Churn médio — últimos 3 meses */}
+          <Card className="bg-zinc-900 border-zinc-800">
+            <CardContent className="px-4 py-3 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0">
+                <TrendingDown className="w-4 h-4 text-zinc-400" />
+              </div>
+              <div>
+                <p className="text-zinc-500 text-xs">Churn — média 3 meses</p>
+                <p className="text-zinc-300 text-xl font-bold leading-tight">{churnLast3Months}%</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Variação */}
+          <Card className={`border ${churnDelta > 0 ? 'bg-red-500/5 border-red-500/20' : churnDelta < 0 ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-zinc-900 border-zinc-800'}`}>
+            <CardContent className="px-4 py-3 flex items-center gap-3">
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                churnDelta > 0 ? 'bg-red-500/10' : churnDelta < 0 ? 'bg-emerald-500/10' : 'bg-zinc-800'
+              }`}>
+                {churnDelta > 0
+                  ? <TrendingUp className="w-4 h-4 text-red-400" />
+                  : churnDelta < 0
+                  ? <TrendingDown className="w-4 h-4 text-emerald-400" />
+                  : <Minus className="w-4 h-4 text-zinc-400" />
+                }
+              </div>
+              <div>
+                <p className="text-zinc-500 text-xs">Variação do churn</p>
+                <p className={`text-xl font-bold leading-tight ${
+                  churnDelta > 0 ? 'text-red-400' : churnDelta < 0 ? 'text-emerald-400' : 'text-zinc-400'
+                }`}>
+                  {churnDelta > 0 ? '+' : ''}{churnDelta}pp
+                </p>
+                <p className="text-zinc-600 text-xs leading-tight">
+                  {churnDelta > 0 ? 'piorando' : churnDelta < 0 ? 'melhorando' : 'estável'}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
         {/* ─── Resumo visual ──────────────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

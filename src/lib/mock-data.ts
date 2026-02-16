@@ -16,6 +16,17 @@ import {
 } from '@/types'
 
 // ─────────────────────────────────────────────
+// HISTÓRICO MENSAL DE CHURN
+// ─────────────────────────────────────────────
+
+export const mockChurnHistory = [
+  { month: 'Nov/25', avgChurnProbability: 24 },
+  { month: 'Dez/25', avgChurnProbability: 28 },
+  { month: 'Jan/26', avgChurnProbability: 35 },
+  { month: 'Fev/26', avgChurnProbability: 42 }, // mês atual
+]
+
+// ─────────────────────────────────────────────
 // AGÊNCIA
 // ─────────────────────────────────────────────
 
@@ -362,6 +373,20 @@ export function getAverageHealthScore(): number {
   if (clientsWithScore.length === 0) return 0
   const total = clientsWithScore.reduce((sum, c) => sum + (c.healthScore?.scoreTotal ?? 0), 0)
   return Math.round(total / clientsWithScore.length)
+}
+
+export function getActiveClientsCount(): number {
+  const now = new Date()
+  return mockClients.filter((c) => new Date(c.contractEndDate) > now).length
+}
+
+export function getLastMonthAvgChurn(): number {
+  return mockChurnHistory[mockChurnHistory.length - 1].avgChurnProbability
+}
+
+export function getLast3MonthsAvgChurn(): number {
+  const last3 = mockChurnHistory.slice(-3)
+  return Math.round(last3.reduce((sum, m) => sum + m.avgChurnProbability, 0) / last3.length)
 }
 
 export function getRiskCounts() {
