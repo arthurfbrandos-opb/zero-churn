@@ -2,6 +2,7 @@ import Link from 'next/link'
 import {
   MessageCircle, CreditCard, Building2, BarChart2,
   ChevronRight, Clock, Plus, Search, Filter,
+  Users, Sparkles, RefreshCw, TrendingUp,
 } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
@@ -10,7 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { RiskBadge } from '@/components/dashboard/risk-badge'
 import { ScoreGauge } from '@/components/dashboard/score-gauge'
-import { getClientsSortedByRisk } from '@/lib/mock-data'
+import { getClientsSortedByRisk, getClientSummary } from '@/lib/mock-data'
 import { Integration } from '@/types'
 
 function formatCurrency(v: number) {
@@ -81,15 +82,42 @@ function IntegrationBtn({ integration, type, clientId }: IntegrationBtnProps) {
   )
 }
 
+// ── Card de resumo ────────────────────────────────────────────────
+interface SummaryCardProps {
+  label: string
+  value: number
+  icon: React.ElementType
+  color: string
+  sub?: string
+}
+
+function SummaryCard({ label, value, icon: Icon, color, sub }: SummaryCardProps) {
+  return (
+    <Card className="bg-zinc-900 border-zinc-800">
+      <CardContent className="p-4 flex items-center gap-3">
+        <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${color}`}>
+          <Icon className="w-4 h-4" />
+        </div>
+        <div>
+          <p className="text-white text-xl font-bold leading-none">{value}</p>
+          <p className="text-zinc-500 text-xs mt-0.5">{label}</p>
+          {sub && <p className="text-zinc-600 text-xs">{sub}</p>}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 // ── Página ───────────────────────────────────────────────────────
 export default function ClientesPage() {
   const clients = getClientsSortedByRisk()
+  const summary = getClientSummary()
 
   return (
     <div className="min-h-screen">
       <Header
         title="Clientes"
-        description={`${clients.length} clientes na carteira`}
+        description={`${summary.ativos} clientes ativos na carteira`}
         action={
           <Link href="/clientes/novo">
             <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white">
@@ -100,6 +128,56 @@ export default function ClientesPage() {
       />
 
       <div className="p-6 space-y-4">
+
+        {/* Resumo executivo */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <SummaryCard
+            label="Clientes ativos"
+            value={summary.ativos}
+            icon={Users}
+            color="bg-zinc-700 text-zinc-300"
+          />
+          <SummaryCard
+            label="Novos (30 dias)"
+            value={summary.novos}
+            icon={Sparkles}
+            color="bg-emerald-500/15 text-emerald-400"
+            sub="recém integrados"
+          />
+          <SummaryCard
+            label="Contratos MRR"
+            value={summary.mrr}
+            icon={TrendingUp}
+            color="bg-emerald-500/10 text-emerald-400"
+            sub="recorrência mensal"
+          />
+          <SummaryCard
+            label="Projetos TCV"
+            value={summary.tcv}
+            icon={BarChart2}
+            color="bg-blue-500/10 text-blue-400"
+            sub="valor fechado"
+          />
+          <SummaryCard
+            label="Em renovação"
+            value={summary.renovacao}
+            icon={RefreshCw}
+            color={summary.renovacao > 0 ? "bg-yellow-500/10 text-yellow-400" : "bg-zinc-700 text-zinc-500"}
+            sub="vencem em 45 dias"
+          />
+        </div>
+
+        {/* Alerta de renovação */}
+        {summary.renovacao > 0 && (
+          <div className="flex items-center gap-2.5 bg-yellow-500/5 border border-yellow-500/20 rounded-xl px-4 py-2.5">
+            <RefreshCw className="w-4 h-4 text-yellow-400 shrink-0" />
+            <p className="text-yellow-300 text-sm">
+              <span className="font-semibold">{summary.renovacao} {summary.renovacao === 1 ? 'cliente' : 'clientes'}</span>
+              {' '}com contrato vencendo nos próximos 45 dias — acione a renovação antes que o cliente saia.
+            </p>
+          </div>
+        )}
+
         {/* Barra de busca + filtro */}
         <div className="flex items-center gap-3">
           <div className="relative flex-1 max-w-sm">

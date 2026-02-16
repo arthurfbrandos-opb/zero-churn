@@ -638,6 +638,25 @@ export function getRevenueByRisk() {
   return revenue
 }
 
+// ── Resumo executivo da base de clientes ─────────────────────────
+
+export function getClientSummary() {
+  const now = new Date()
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+  const in45Days = new Date(now.getTime() + 45 * 24 * 60 * 60 * 1000)
+
+  const ativos = mockClients.filter(c => new Date(c.contractEndDate) > now).length
+  const novos = mockClients.filter(c => new Date(c.createdAt) >= thirtyDaysAgo).length
+  const mrr = mockClients.filter(c => c.clientType === 'mrr').length
+  const tcv = mockClients.filter(c => c.clientType === 'tcv').length
+  const renovacao = mockClients.filter(c => {
+    const end = new Date(c.contractEndDate)
+    return end > now && end <= in45Days
+  }).length
+
+  return { ativos, novos, mrr, tcv, renovacao }
+}
+
 export function getClientsSortedByRisk(): ClientWithScore[] {
   const riskOrder: Record<string, number> = { high: 0, medium: 1, low: 2, observacao: 3 }
   return [...mockClients].sort((a, b) => {
