@@ -13,7 +13,27 @@ import {
   FormSubmission,
   Integration,
   ActionItem,
+  Service,
 } from '@/types'
+
+// ─────────────────────────────────────────────
+// SERVIÇOS CADASTRADOS
+// ─────────────────────────────────────────────
+
+export const mockServices: Service[] = [
+  { id: 'srv-01', agencyId: 'agency-001', name: 'Tráfego Pago (Meta + Google)',        type: 'mrr',  isActive: true },
+  { id: 'srv-02', agencyId: 'agency-001', name: 'Social Media Management',             type: 'mrr',  isActive: true },
+  { id: 'srv-03', agencyId: 'agency-001', name: 'Tráfego Pago + Social Media',         type: 'mrr',  isActive: true },
+  { id: 'srv-04', agencyId: 'agency-001', name: 'SEO + Blog',                          type: 'mrr',  isActive: true },
+  { id: 'srv-05', agencyId: 'agency-001', name: 'Full Service Digital',                type: 'both', isActive: true },
+  { id: 'srv-06', agencyId: 'agency-001', name: 'Tráfego Pago Local',                  type: 'mrr',  isActive: true },
+  { id: 'srv-07', agencyId: 'agency-001', name: 'Consultoria de Marketing Digital',    type: 'tcv',  isActive: true },
+  { id: 'srv-08', agencyId: 'agency-001', name: 'Implementação de Funil de Vendas',    type: 'tcv',  isActive: true },
+  { id: 'srv-09', agencyId: 'agency-001', name: 'Setup de Campanhas (Projeto)',        type: 'tcv',  isActive: true },
+  { id: 'srv-10', agencyId: 'agency-001', name: 'Criação de Site / Landing Page',      type: 'tcv',  isActive: true },
+  { id: 'srv-11', agencyId: 'agency-001', name: 'Identidade Visual',                  type: 'tcv',  isActive: true },
+  { id: 'srv-12', agencyId: 'agency-001', name: 'Gestão de E-mail Marketing',          type: 'mrr',  isActive: true },
+]
 
 // ─────────────────────────────────────────────
 // HISTÓRICO MENSAL DE CHURN

@@ -6,6 +6,7 @@ import Link from 'next/link'
 import {
   ArrowLeft, ArrowRight, Check, Loader2, Plus, Trash2,
   Building2, MapPin, FileText, ClipboardList,
+  Download, CreditCard, X, Search, ChevronDown,
 } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
@@ -15,7 +16,20 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useCep } from '@/hooks/use-cep'
+import { mockServices } from '@/lib/mock-data'
 import { cn } from '@/lib/utils'
+
+// ── Mock de clientes Asaas / Dom (MVP simulado) ──────────────────
+const MOCK_ASAAS_CLIENTS = [
+  { id: 'a1', razaoSocial: 'Clínica Estética Bella Forma Ltda.', nomeResumido: 'Bella Forma', cnpjCpf: '12.345.678/0001-90', email: 'ana@bellaforma.com.br', telefone: '(11) 99001-2345' },
+  { id: 'a2', razaoSocial: 'Pizzaria Don Giovanni Ltda.', nomeResumido: 'Don Giovanni', cnpjCpf: '22.111.333/0001-44', email: 'contato@dongiovanni.com.br', telefone: '(11) 98888-7766' },
+  { id: 'a3', razaoSocial: 'Advocacia Barros & Associados', nomeResumido: 'Barros Adv.', cnpjCpf: '09.876.543/0001-11', email: 'adm@barrosadv.com.br', telefone: '(11) 97777-5544' },
+]
+
+const MOCK_DOM_CLIENTS = [
+  { id: 'd1', razaoSocial: 'Consultório Dra. Carla Mendes', nomeResumido: 'Dra. Carla', cnpjCpf: '123.456.789-09', email: 'carla@dracarlamendes.com.br', telefone: '(11) 96666-3322' },
+  { id: 'd2', razaoSocial: 'Distribuidora Pinheiro ME', nomeResumido: 'Pinheiro Dist.', cnpjCpf: '33.444.555/0001-77', email: 'pinheiro@distribuidora.com.br', telefone: '(11) 95555-1100' },
+]
 
 // ── Tipos internos do formulário ─────────────────────────────────
 interface Parcela { id: string; vencimento: string; valor: string }
@@ -40,7 +54,7 @@ interface FormData {
   estado: string
   // Step 3
   clientType: 'mrr' | 'tcv'
-  serviceSold: string
+  serviceId: string
   // MRR
   contractValue: string
   contractMonths: string
@@ -56,6 +70,10 @@ interface FormData {
   firstInstallmentDate: string
   parcelas: Parcela[]
   // Step 4
+  nichoEspecifico: string
+  resumoReuniao: string
+  expectativasCliente: string
+  principaisDores: string
   notes: string
 }
 
@@ -64,14 +82,15 @@ const INITIAL: FormData = {
   telefone: '', email: '', emailFinanceiro: '', segment: '',
   cep: '', logradouro: '', numero: '', complemento: '',
   bairro: '', cidade: '', estado: '',
-  clientType: 'mrr', serviceSold: '',
+  clientType: 'mrr', serviceId: '',
   contractValue: '', contractMonths: '12',
   hasImplementationFee: false, implementationFeeValue: '', implementationFeeDate: '',
   totalProjectValue: '', projectDeadlineDays: '90',
   hasInstallments: false, installmentsType: 'equal',
   installmentsCount: '3', firstInstallmentDate: '',
   parcelas: [],
-  notes: '',
+  nichoEspecifico: '', resumoReuniao: '', expectativasCliente: '',
+  principaisDores: '', notes: '',
 }
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -92,7 +111,7 @@ function maskCep(v: string) {
   return v.replace(/\D/g, '').slice(0, 8).replace(/(\d{5})(\d{3})/, '$1-$2')
 }
 
-function calcEndDate(startDays: string, months: string) {
+function calcEndDate(_: string, months: string) {
   if (!months) return ''
   const d = new Date()
   d.setMonth(d.getMonth() + parseInt(months))
@@ -125,24 +144,113 @@ function gerarParcelas(total: string, count: string, firstDate: string): Parcela
 // ── Steps config ──────────────────────────────────────────────────
 const STEPS = [
   { label: 'Identificação', icon: Building2 },
-  { label: 'Endereço', icon: MapPin },
-  { label: 'Contrato', icon: FileText },
-  { label: 'Observações', icon: ClipboardList },
+  { label: 'Endereço',      icon: MapPin     },
+  { label: 'Contrato',      icon: FileText   },
+  { label: 'Contexto',      icon: ClipboardList },
 ]
 
-// ── Componente de campo ───────────────────────────────────────────
-function Field({ label, optional, children }: { label: string; optional?: boolean; children: React.ReactNode }) {
+// ── Campo base ────────────────────────────────────────────────────
+function Field({ label, optional, hint, children }: {
+  label: string; optional?: boolean; hint?: string; children: React.ReactNode
+}) {
   return (
     <div className="space-y-1.5">
       <Label className="text-zinc-300 text-sm">
         {label} {optional && <span className="text-zinc-500 text-xs">(opcional)</span>}
       </Label>
       {children}
+      {hint && <p className="text-zinc-600 text-xs">{hint}</p>}
     </div>
   )
 }
 
 const inputCls = "bg-zinc-800 border-zinc-700 text-zinc-200 placeholder:text-zinc-500 focus-visible:ring-emerald-500"
+const textareaCls = "bg-zinc-800 border-zinc-700 text-zinc-200 placeholder:text-zinc-500 focus-visible:ring-emerald-500 min-h-24 resize-none"
+
+// ── Modal de importação ───────────────────────────────────────────
+type ImportSource = 'asaas' | 'dom'
+
+interface ImportModalProps {
+  source: ImportSource
+  onSelect: (client: typeof MOCK_ASAAS_CLIENTS[0]) => void
+  onClose: () => void
+}
+
+function ImportModal({ source, onSelect, onClose }: ImportModalProps) {
+  const [search, setSearch] = useState('')
+  const clients = source === 'asaas' ? MOCK_ASAAS_CLIENTS : MOCK_DOM_CLIENTS
+  const filtered = clients.filter(c =>
+    c.razaoSocial.toLowerCase().includes(search.toLowerCase()) ||
+    c.nomeResumido.toLowerCase().includes(search.toLowerCase()) ||
+    c.cnpjCpf.includes(search)
+  )
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-md shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-zinc-800">
+          <div className="flex items-center gap-2">
+            <CreditCard className="w-4 h-4 text-blue-400" />
+            <p className="text-white font-semibold text-sm">
+              Importar do {source === 'asaas' ? 'Asaas' : 'Dom Pagamentos'}
+            </p>
+          </div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-white transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Busca */}
+        <div className="p-4 border-b border-zinc-800">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+            <Input
+              autoFocus
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar por nome ou CNPJ..."
+              className={cn(inputCls, 'pl-9')}
+            />
+          </div>
+        </div>
+
+        {/* Lista */}
+        <div className="max-h-72 overflow-y-auto p-3 space-y-2">
+          {filtered.length === 0 ? (
+            <p className="text-zinc-500 text-sm text-center py-6">Nenhum cliente encontrado</p>
+          ) : filtered.map(c => (
+            <button
+              key={c.id}
+              onClick={() => { onSelect(c); onClose() }}
+              className="w-full text-left p-3 rounded-lg bg-zinc-800/50 hover:bg-zinc-700/60 border border-zinc-700/50 hover:border-zinc-600 transition-all"
+            >
+              <p className="text-zinc-200 text-sm font-medium">{c.nomeResumido}</p>
+              <p className="text-zinc-500 text-xs mt-0.5">{c.razaoSocial}</p>
+              <p className="text-zinc-600 text-xs">{c.cnpjCpf} · {c.email}</p>
+            </button>
+          ))}
+        </div>
+
+        <div className="p-4 border-t border-zinc-800">
+          <p className="text-zinc-600 text-xs text-center">
+            Os dados do cliente serão pré-preenchidos. Revise antes de salvar.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Toggle simples ────────────────────────────────────────────────
+function Toggle({ checked, onToggle }: { checked: boolean; onToggle: () => void }) {
+  return (
+    <button onClick={onToggle}
+      className={cn('w-10 h-6 rounded-full transition-all relative shrink-0', checked ? 'bg-emerald-500' : 'bg-zinc-700')}>
+      <span className={cn('absolute top-1 w-4 h-4 rounded-full bg-white transition-all', checked ? 'left-5' : 'left-1')} />
+    </button>
+  )
+}
 
 // ── Página principal ──────────────────────────────────────────────
 export default function NovoClientePage() {
@@ -150,11 +258,24 @@ export default function NovoClientePage() {
   const [step, setStep] = useState(0)
   const [form, setForm] = useState<FormData>(INITIAL)
   const [saving, setSaving] = useState(false)
+  const [importModal, setImportModal] = useState<ImportSource | null>(null)
   const { fetchCep, loading: loadingCep, error: cepError } = useCep()
 
   const set = useCallback((field: keyof FormData, value: unknown) => {
     setForm(prev => ({ ...prev, [field]: value }))
   }, [])
+
+  // Importar cliente de Asaas/Dom
+  function handleImport(client: typeof MOCK_ASAAS_CLIENTS[0]) {
+    setForm(prev => ({
+      ...prev,
+      razaoSocial: client.razaoSocial,
+      nomeResumido: client.nomeResumido,
+      cnpjCpf: client.cnpjCpf,
+      email: client.email,
+      telefone: client.telefone,
+    }))
+  }
 
   // Busca CEP
   async function handleCep(raw: string) {
@@ -182,7 +303,13 @@ export default function NovoClientePage() {
     set('parcelas', form.parcelas.map(p => p.id === id ? { ...p, [field]: value } : p))
   }
 
-  // Total de parcelas customizadas
+  // Serviços filtrados pelo tipo de contrato
+  const servicesForType = mockServices.filter(s =>
+    s.isActive && (s.type === form.clientType || s.type === 'both')
+  )
+  const selectedService = mockServices.find(s => s.id === form.serviceId)
+
+  // Totais de parcelas customizadas
   const totalParcelas = form.parcelas.reduce((s, p) => s + parseFloat(p.valor || '0'), 0)
   const totalProjeto = parseFloat(form.totalProjectValue.replace(',', '.') || '0')
   const diffParcelas = totalProjeto - totalParcelas
@@ -196,21 +323,29 @@ export default function NovoClientePage() {
 
   const canNext = [
     // Step 0
-    form.razaoSocial && form.nomeResumido && form.cnpjCpf && form.nomeDecisor && form.telefone && form.email && form.segment,
+    !!(form.razaoSocial && form.nomeResumido && form.cnpjCpf && form.nomeDecisor && form.telefone && form.email && form.segment),
     // Step 1
-    form.cep && form.logradouro && form.numero && form.bairro && form.cidade && form.estado,
+    !!(form.cep && form.logradouro && form.numero && form.bairro && form.cidade && form.estado),
     // Step 2
-    form.serviceSold && (
+    !!(form.serviceId && (
       form.clientType === 'mrr'
-        ? !!form.contractValue && !!form.contractMonths
-        : !!form.totalProjectValue && !!form.projectDeadlineDays
-    ),
+        ? form.contractValue && form.contractMonths
+        : form.totalProjectValue && form.projectDeadlineDays
+    )),
     // Step 3
     true,
   ]
 
   return (
     <div className="min-h-screen">
+      {importModal && (
+        <ImportModal
+          source={importModal}
+          onSelect={handleImport}
+          onClose={() => setImportModal(null)}
+        />
+      )}
+
       <Header
         title="Novo Cliente"
         description="Cadastre as informações completas do cliente"
@@ -236,9 +371,9 @@ export default function NovoClientePage() {
                 <div className="flex flex-col items-center gap-1">
                   <div className={cn(
                     'w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all',
-                    done ? 'bg-emerald-500 border-emerald-500 text-white'
-                      : active ? 'border-emerald-500 text-emerald-400 bg-zinc-900'
-                      : 'border-zinc-700 text-zinc-600 bg-zinc-900'
+                    done  ? 'bg-emerald-500 border-emerald-500 text-white'
+                    : active ? 'border-emerald-500 text-emerald-400 bg-zinc-900'
+                    : 'border-zinc-700 text-zinc-600 bg-zinc-900'
                   )}>
                     {done ? <Check className="w-4 h-4" /> : <Icon className="w-3.5 h-3.5" />}
                   </div>
@@ -256,60 +391,90 @@ export default function NovoClientePage() {
 
         {/* ── STEP 0 — Identificação ───────────────────────────── */}
         {step === 0 && (
-          <Card className="bg-zinc-900 border-zinc-800">
-            <CardContent className="p-5 space-y-4">
-              <h2 className="text-white font-semibold">Dados da empresa</h2>
+          <div className="space-y-4">
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <Field label="Razão Social">
-                    <Input value={form.razaoSocial} onChange={e => set('razaoSocial', e.target.value)}
-                      placeholder="Empresa Ltda." className={inputCls} />
-                  </Field>
+            {/* Importação opcional */}
+            <Card className="bg-zinc-800/30 border-zinc-700/50 border-dashed">
+              <CardContent className="p-4">
+                <div className="flex items-start gap-3">
+                  <Download className="w-4 h-4 text-zinc-400 mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-zinc-300 text-sm font-medium">Importar de uma plataforma de pagamento</p>
+                    <p className="text-zinc-500 text-xs mt-0.5 mb-3">Pré-preencha os dados com um cliente já cadastrado no Asaas ou Dom Pagamentos.</p>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" variant="outline"
+                        className="border-blue-500/40 text-blue-400 hover:bg-blue-500/10 hover:text-blue-300 gap-1.5 text-xs"
+                        onClick={() => setImportModal('asaas')}>
+                        <CreditCard className="w-3.5 h-3.5" /> Importar do Asaas
+                      </Button>
+                      <Button size="sm" variant="outline"
+                        className="border-violet-500/40 text-violet-400 hover:bg-violet-500/10 hover:text-violet-300 gap-1.5 text-xs"
+                        onClick={() => setImportModal('dom')}>
+                        <CreditCard className="w-3.5 h-3.5" /> Importar do Dom
+                      </Button>
+                    </div>
+                  </div>
                 </div>
+              </CardContent>
+            </Card>
 
-                <Field label="Nome Resumido">
-                  <Input value={form.nomeResumido} onChange={e => set('nomeResumido', e.target.value)}
-                    placeholder="Nome exibido no sistema" className={inputCls} />
-                </Field>
+            {/* Formulário */}
+            <Card className="bg-zinc-900 border-zinc-800">
+              <CardContent className="p-5 space-y-4">
+                <h2 className="text-white font-semibold">Dados da empresa</h2>
 
-                <Field label="CNPJ / CPF">
-                  <Input value={form.cnpjCpf}
-                    onChange={e => set('cnpjCpf', maskCpfCnpj(e.target.value))}
-                    placeholder="00.000.000/0001-00" className={inputCls} />
-                </Field>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <Field label="Razão Social">
+                      <Input value={form.razaoSocial} onChange={e => set('razaoSocial', e.target.value)}
+                        placeholder="Empresa Ltda." className={inputCls} />
+                    </Field>
+                  </div>
 
-                <Field label="Nome do Decisor">
-                  <Input value={form.nomeDecisor} onChange={e => set('nomeDecisor', e.target.value)}
-                    placeholder="João Silva" className={inputCls} />
-                </Field>
-
-                <Field label="Segmento">
-                  <Input value={form.segment} onChange={e => set('segment', e.target.value)}
-                    placeholder="Ex: E-commerce, Saúde" className={inputCls} />
-                </Field>
-
-                <Field label="Telefone">
-                  <Input value={form.telefone}
-                    onChange={e => set('telefone', maskPhone(e.target.value))}
-                    placeholder="(11) 99999-9999" className={inputCls} />
-                </Field>
-
-                <Field label="E-mail">
-                  <Input type="email" value={form.email} onChange={e => set('email', e.target.value)}
-                    placeholder="contato@empresa.com" className={inputCls} />
-                </Field>
-
-                <div className="col-span-2">
-                  <Field label="E-mail Financeiro" optional>
-                    <Input type="email" value={form.emailFinanceiro}
-                      onChange={e => set('emailFinanceiro', e.target.value)}
-                      placeholder="financeiro@empresa.com" className={inputCls} />
+                  <Field label="Nome Resumido"
+                    hint="É o nome que aparece em todo o sistema">
+                    <Input value={form.nomeResumido} onChange={e => set('nomeResumido', e.target.value)}
+                      placeholder="Ex: Bella Forma" className={inputCls} />
                   </Field>
+
+                  <Field label="CNPJ / CPF">
+                    <Input value={form.cnpjCpf}
+                      onChange={e => set('cnpjCpf', maskCpfCnpj(e.target.value))}
+                      placeholder="00.000.000/0001-00" className={inputCls} />
+                  </Field>
+
+                  <Field label="Nome do Decisor">
+                    <Input value={form.nomeDecisor} onChange={e => set('nomeDecisor', e.target.value)}
+                      placeholder="João Silva" className={inputCls} />
+                  </Field>
+
+                  <Field label="Segmento">
+                    <Input value={form.segment} onChange={e => set('segment', e.target.value)}
+                      placeholder="Ex: E-commerce, Saúde" className={inputCls} />
+                  </Field>
+
+                  <Field label="Telefone">
+                    <Input value={form.telefone}
+                      onChange={e => set('telefone', maskPhone(e.target.value))}
+                      placeholder="(11) 99999-9999" className={inputCls} />
+                  </Field>
+
+                  <Field label="E-mail">
+                    <Input type="email" value={form.email} onChange={e => set('email', e.target.value)}
+                      placeholder="contato@empresa.com" className={inputCls} />
+                  </Field>
+
+                  <div className="col-span-2">
+                    <Field label="E-mail Financeiro" optional>
+                      <Input type="email" value={form.emailFinanceiro}
+                        onChange={e => set('emailFinanceiro', e.target.value)}
+                        placeholder="financeiro@empresa.com" className={inputCls} />
+                    </Field>
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {/* ── STEP 1 — Endereço ────────────────────────────────── */}
@@ -376,7 +541,7 @@ export default function NovoClientePage() {
                 {/* MRR vs TCV */}
                 <div className="grid grid-cols-2 gap-3">
                   {(['mrr', 'tcv'] as const).map(t => (
-                    <button key={t} onClick={() => set('clientType', t)}
+                    <button key={t} onClick={() => { set('clientType', t); set('serviceId', '') }}
                       className={cn(
                         'p-3 rounded-xl border-2 text-left transition-all',
                         form.clientType === t
@@ -393,9 +558,34 @@ export default function NovoClientePage() {
                   ))}
                 </div>
 
-                <Field label="Serviço vendido">
-                  <Input value={form.serviceSold} onChange={e => set('serviceSold', e.target.value)}
-                    placeholder="Ex: Tráfego Pago + Social Media" className={inputCls} />
+                {/* Seletor de serviço */}
+                <Field label="Serviço vendido"
+                  hint="Gerencie a lista de serviços em Configurações → Serviços">
+                  <div className="relative">
+                    <select
+                      value={form.serviceId}
+                      onChange={e => set('serviceId', e.target.value)}
+                      className={cn(inputCls, 'w-full h-10 rounded-md border px-3 text-sm appearance-none pr-8 cursor-pointer')}
+                    >
+                      <option value="" className="bg-zinc-800">Selecione um serviço...</option>
+                      {servicesForType.map(s => (
+                        <option key={s.id} value={s.id} className="bg-zinc-800">{s.name}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
+                  </div>
+                  {selectedService && (
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <Badge variant="outline" className={cn('text-xs border',
+                        selectedService.type === 'mrr' ? 'text-emerald-400 border-emerald-500/30'
+                        : selectedService.type === 'tcv' ? 'text-blue-400 border-blue-500/30'
+                        : 'text-zinc-400 border-zinc-600'
+                      )}>
+                        {selectedService.type.toUpperCase()}
+                      </Badge>
+                      <span className="text-zinc-500 text-xs">{selectedService.name}</span>
+                    </div>
+                  )}
                 </Field>
               </CardContent>
             </Card>
@@ -421,18 +611,16 @@ export default function NovoClientePage() {
 
                   {form.contractMonths && (
                     <p className="text-zinc-500 text-xs">
-                      Vigência até: <span className="text-zinc-300">{calcEndDate('', form.contractMonths)}</span>
+                      Vigência até:{' '}
+                      <span className="text-zinc-300">{calcEndDate('', form.contractMonths)}</span>
                     </p>
                   )}
 
                   {/* Implementação */}
                   <div className="pt-2 border-t border-zinc-800">
                     <div className="flex items-center justify-between mb-3">
-                      <Label className="text-zinc-300">Houve cobrança de implementação?</Label>
-                      <button onClick={() => set('hasImplementationFee', !form.hasImplementationFee)}
-                        className={cn('w-10 h-6 rounded-full transition-all relative', form.hasImplementationFee ? 'bg-emerald-500' : 'bg-zinc-700')}>
-                        <span className={cn('absolute top-1 w-4 h-4 rounded-full bg-white transition-all', form.hasImplementationFee ? 'left-5' : 'left-1')} />
-                      </button>
+                      <Label className="text-zinc-300 text-sm">Houve cobrança de implementação?</Label>
+                      <Toggle checked={form.hasImplementationFee} onToggle={() => set('hasImplementationFee', !form.hasImplementationFee)} />
                     </div>
                     {form.hasImplementationFee && (
                       <div className="grid grid-cols-2 gap-4">
@@ -475,11 +663,8 @@ export default function NovoClientePage() {
                   {/* Parcelamento */}
                   <div className="pt-2 border-t border-zinc-800 space-y-3">
                     <div className="flex items-center justify-between">
-                      <Label className="text-zinc-300">Houve parcelamento?</Label>
-                      <button onClick={() => set('hasInstallments', !form.hasInstallments)}
-                        className={cn('w-10 h-6 rounded-full transition-all relative', form.hasInstallments ? 'bg-emerald-500' : 'bg-zinc-700')}>
-                        <span className={cn('absolute top-1 w-4 h-4 rounded-full bg-white transition-all', form.hasInstallments ? 'left-5' : 'left-1')} />
-                      </button>
+                      <Label className="text-zinc-300 text-sm">Houve parcelamento?</Label>
+                      <Toggle checked={form.hasInstallments} onToggle={() => set('hasInstallments', !form.hasInstallments)} />
                     </div>
 
                     {form.hasInstallments && (
@@ -521,13 +706,13 @@ export default function NovoClientePage() {
                               </div>
                             )}
                             {form.totalProjectValue && form.installmentsCount && form.firstInstallmentDate && (
-                              <div className="space-y-1">
-                                <p className="text-zinc-500 text-xs font-medium mb-2">Parcelas geradas:</p>
+                              <div className="space-y-1.5">
+                                <p className="text-zinc-500 text-xs font-medium">Parcelas geradas:</p>
                                 {gerarParcelas(form.totalProjectValue, form.installmentsCount, form.firstInstallmentDate).map((p, i) => (
                                   <div key={i} className="flex items-center justify-between bg-zinc-800/50 rounded px-3 py-1.5 text-xs">
                                     <span className="text-zinc-400">{i + 1}ª parcela</span>
                                     <span className="text-zinc-500">{new Date(p.vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
-                                    <Badge variant="outline" className="text-zinc-400 border-zinc-600 text-xs">A vencer</Badge>
+                                    <Badge variant="outline" className="text-zinc-500 border-zinc-600 text-xs">A vencer</Badge>
                                     <span className="text-zinc-300 font-medium">R$ {parseFloat(p.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                                   </div>
                                 ))}
@@ -541,14 +726,14 @@ export default function NovoClientePage() {
                           <div className="space-y-3">
                             <div className="flex items-center justify-between">
                               <p className="text-zinc-400 text-xs">
-                                Total inserido:{' '}
+                                Total:{' '}
                                 <span className={cn('font-bold', Math.abs(diffParcelas) < 0.01 ? 'text-emerald-400' : diffParcelas < 0 ? 'text-red-400' : 'text-zinc-300')}>
                                   R$ {totalParcelas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                 </span>
-                                {' / '}
-                                <span className="text-zinc-300">R$ {totalProjeto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                {' / R$ '}
+                                {totalProjeto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                 {Math.abs(diffParcelas) >= 0.01 && (
-                                  <span className={cn('ml-2', diffParcelas > 0 ? 'text-zinc-500' : 'text-red-400')}>
+                                  <span className={cn('ml-2 font-medium', diffParcelas > 0 ? 'text-zinc-500' : 'text-red-400')}>
                                     ({diffParcelas > 0 ? `faltam R$ ${diffParcelas.toFixed(2)}` : `excede R$ ${Math.abs(diffParcelas).toFixed(2)}`})
                                   </span>
                                 )}
@@ -556,30 +741,30 @@ export default function NovoClientePage() {
                               <Button size="sm" variant="outline"
                                 className="border-zinc-700 text-zinc-400 hover:text-white text-xs gap-1"
                                 onClick={addParcela}>
-                                <Plus className="w-3 h-3" /> Adicionar parcela
+                                <Plus className="w-3 h-3" /> Parcela
                               </Button>
                             </div>
 
                             {form.parcelas.length === 0 && (
-                              <p className="text-zinc-600 text-xs text-center py-3">
-                                Clique em "Adicionar parcela" para inserir cada vencimento
+                              <p className="text-zinc-600 text-xs text-center py-4 border border-dashed border-zinc-700 rounded-lg">
+                                Clique em &quot;Parcela&quot; para inserir cada vencimento
                               </p>
                             )}
 
                             {form.parcelas.map((p, i) => (
                               <div key={p.id} className="flex items-center gap-3 bg-zinc-800/50 rounded-lg p-3">
-                                <span className="text-zinc-500 text-xs w-6 shrink-0">{i + 1}ª</span>
+                                <span className="text-zinc-500 text-xs w-5 shrink-0">{i + 1}ª</span>
                                 <div className="flex-1">
                                   <Input type="date" value={p.vencimento}
                                     onChange={e => updateParcela(p.id, 'vencimento', e.target.value)}
                                     className={cn(inputCls, 'h-8 text-xs')} />
                                 </div>
                                 <div className="flex-1">
-                                  <Input placeholder="Valor (R$)" value={p.valor}
+                                  <Input placeholder="R$ valor" value={p.valor}
                                     onChange={e => updateParcela(p.id, 'valor', e.target.value)}
                                     className={cn(inputCls, 'h-8 text-xs')} />
                                 </div>
-                                <Badge variant="outline" className="text-zinc-400 border-zinc-600 text-xs shrink-0">A vencer</Badge>
+                                <Badge variant="outline" className="text-zinc-500 border-zinc-600 text-xs shrink-0">A vencer</Badge>
                                 <button onClick={() => removeParcela(p.id)}
                                   className="text-zinc-600 hover:text-red-400 transition-colors shrink-0">
                                   <Trash2 className="w-3.5 h-3.5" />
@@ -597,24 +782,89 @@ export default function NovoClientePage() {
           </div>
         )}
 
-        {/* ── STEP 3 — Observações ─────────────────────────────── */}
+        {/* ── STEP 3 — Contexto & Briefing ────────────────────── */}
         {step === 3 && (
-          <Card className="bg-zinc-900 border-zinc-800">
-            <CardContent className="p-5 space-y-4">
-              <h2 className="text-white font-semibold">Observações</h2>
-              <div className="bg-zinc-800/50 rounded-lg p-3 text-xs text-zinc-500 space-y-1">
-                <p>• <span className="text-zinc-400">Cliente:</span> {form.nomeResumido}</p>
-                <p>• <span className="text-zinc-400">Tipo:</span> {form.clientType.toUpperCase()} · {form.serviceSold}</p>
-                {form.clientType === 'mrr' && <p>• <span className="text-zinc-400">MRR:</span> R$ {form.contractValue}/mês · {form.contractMonths} meses</p>}
-                {form.clientType === 'tcv' && <p>• <span className="text-zinc-400">TCV:</span> R$ {form.totalProjectValue} · {form.projectDeadlineDays} dias</p>}
+          <div className="space-y-4">
+
+            {/* Info do contexto */}
+            <div className="flex items-start gap-3 bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4">
+              <ClipboardList className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-emerald-300 text-sm font-medium">Por que esse passo importa?</p>
+                <p className="text-zinc-400 text-xs mt-1 leading-relaxed">
+                  Esse contexto é lido pela equipe de operação e também pela IA do Zero Churn para
+                  gerar diagnósticos e planos de ação personalizados desde o primeiro mês do cliente.
+                </p>
               </div>
-              <Field label="Observações" optional>
-                <Textarea value={form.notes} onChange={e => set('notes', e.target.value)}
-                  placeholder="Informações relevantes sobre o cliente, expectativas, contexto do fechamento..."
-                  className={cn(inputCls, 'min-h-32 resize-none')} />
-              </Field>
-            </CardContent>
-          </Card>
+            </div>
+
+            {/* Resumo do contrato */}
+            <div className="bg-zinc-800/50 rounded-lg p-3 text-xs text-zinc-500 space-y-1">
+              <p>• <span className="text-zinc-400">Cliente:</span> {form.nomeResumido}</p>
+              <p>• <span className="text-zinc-400">Tipo:</span> {form.clientType.toUpperCase()} · {selectedService?.name ?? form.serviceId}</p>
+              {form.clientType === 'mrr' && <p>• <span className="text-zinc-400">MRR:</span> R$ {form.contractValue}/mês · {form.contractMonths} meses</p>}
+              {form.clientType === 'tcv' && <p>• <span className="text-zinc-400">TCV:</span> R$ {form.totalProjectValue} · {form.projectDeadlineDays} dias</p>}
+            </div>
+
+            <Card className="bg-zinc-900 border-zinc-800">
+              <CardContent className="p-5 space-y-5">
+
+                <Field
+                  label="Nicho específico do cliente"
+                  hint="Descreva com mais detalhe o negócio, público-alvo, região de atuação, etc.">
+                  <Input
+                    value={form.nichoEspecifico}
+                    onChange={e => set('nichoEspecifico', e.target.value)}
+                    placeholder="Ex: Clínica de estética focada em micropigmentação, atende mulheres 30-50 anos em Campinas"
+                    className={inputCls}
+                  />
+                </Field>
+
+                <Field
+                  label="O que foi discutido na reunião de fechamento"
+                  hint="Principais pontos da conversa, objeções superadas, o que foi prometido">
+                  <Textarea
+                    value={form.resumoReuniao}
+                    onChange={e => set('resumoReuniao', e.target.value)}
+                    placeholder="Ex: Cliente vinha de experiência ruim com outra agência. Demonstrou interesse por resultado rápido em leads qualificados. Acordamos relatório mensal e reunião quinzenal..."
+                    className={textareaCls}
+                  />
+                </Field>
+
+                <Field
+                  label="Expectativas declaradas pelo cliente"
+                  hint="O que ele disse que espera alcançar com a contratação">
+                  <Textarea
+                    value={form.expectativasCliente}
+                    onChange={e => set('expectativasCliente', e.target.value)}
+                    placeholder="Ex: Quer dobrar o número de novos clientes em 3 meses. Espera reduzir custo por lead de R$80 para R$40. Quer aparecer mais no Instagram..."
+                    className={textareaCls}
+                  />
+                </Field>
+
+                <Field
+                  label="Principais dores e motivações"
+                  hint="Por que o cliente decidiu contratar? Quais problemas ele estava enfrentando?">
+                  <Textarea
+                    value={form.principaisDores}
+                    onChange={e => set('principaisDores', e.target.value)}
+                    placeholder="Ex: Agenda vazia nos meses de baixa temporada. Dependia 100% de indicações. Tentou rodar anúncios sozinho sem resultado..."
+                    className={textareaCls}
+                  />
+                </Field>
+
+                <Field label="Observações adicionais da equipe" optional>
+                  <Textarea
+                    value={form.notes}
+                    onChange={e => set('notes', e.target.value)}
+                    placeholder="Qualquer outro contexto relevante: perfil do decisor, sensibilidades, parceiros, etc."
+                    className={textareaCls}
+                  />
+                </Field>
+
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {/* Navegação */}
@@ -636,10 +886,13 @@ export default function NovoClientePage() {
             </Button>
           ) : (
             <Button size="sm"
-              className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1 min-w-32"
+              className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1 min-w-36"
               onClick={handleSubmit}
               disabled={saving}>
-              {saving ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Salvando...</> : <><Check className="w-3.5 h-3.5" /> Cadastrar cliente</>}
+              {saving
+                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Salvando...</>
+                : <><Check className="w-3.5 h-3.5" /> Cadastrar cliente</>
+              }
             </Button>
           )}
         </div>

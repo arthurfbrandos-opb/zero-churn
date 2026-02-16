@@ -12,6 +12,19 @@ export type Trend = 'improving' | 'stable' | 'declining'
 
 // ─────────────────────────────────────────────
 
+// ─────────────────────────────────────────────
+
+export interface Service {
+  id: string
+  agencyId: string
+  name: string
+  description?: string
+  type: 'mrr' | 'tcv' | 'both'
+  isActive: boolean
+}
+
+// ─────────────────────────────────────────────
+
 export interface Agency {
   id: string
   name: string
@@ -86,7 +99,13 @@ export interface Client {
   installmentsType?: 'equal' | 'custom'
   installments?: Installment[]
 
-  notes?: string
+  // Contexto & Briefing (alimenta IA + equipe operacional)
+  nichoEspecifico?: string        // descrição mais detalhada do nicho
+  resumoReuniao?: string          // o que foi discutido no fechamento
+  expectativasCliente?: string    // o que o cliente disse que espera
+  principaisDores?: string        // problemas que motivaram a contratação
+  notes?: string                  // observações adicionais da equipe
+
   createdAt: string
 }
 
