@@ -24,6 +24,8 @@ import {
   getTotalMRR,
   getTotalTCVInExecution,
   getMRRAtRisk,
+  getNewTCVClients,
+  getMonthlyBillingForecast,
   getClientsRenewingSoon,
   getTCVExpiringSoon,
   getClientsWithIntegrationErrors,
@@ -66,6 +68,8 @@ export default function DashboardPage() {
   const totalMRR         = getTotalMRR()
   const totalTCV         = getTotalTCVInExecution()
   const mrrAtRisk        = getMRRAtRisk()
+  const newTCVClients    = getNewTCVClients(30)
+  const billing          = getMonthlyBillingForecast()
   const totalWithScore   = clients.filter((c) => c.healthScore).length
   const unreadAlerts     = mockAlerts.filter((a) => !a.isRead).length
 
@@ -174,6 +178,86 @@ export default function DashboardPage() {
       />
 
       <div className="p-6 space-y-5">
+
+        {/* ── 0. VISÃO GERAL DA CARTEIRA ──────────────────────────── */}
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="px-5 py-3">
+            <div className="flex flex-wrap items-center gap-0 divide-x divide-zinc-800">
+
+              {/* Clientes ativos */}
+              <div className="flex items-center gap-3 pr-5">
+                <div>
+                  <p className="text-zinc-500 text-xs">Clientes ativos</p>
+                  <p className="text-white text-xl font-bold leading-tight">{clients.length}</p>
+                </div>
+              </div>
+
+              {/* MRR */}
+              <div className="flex items-center gap-3 px-5">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                <div>
+                  <p className="text-zinc-500 text-xs">Clientes MRR</p>
+                  <p className="text-white text-xl font-bold leading-tight">
+                    {mrrClients.length}
+                    <span className="text-zinc-500 text-xs font-normal ml-1">clientes</span>
+                  </p>
+                </div>
+              </div>
+
+              {/* TCV */}
+              <div className="flex items-center gap-3 px-5">
+                <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                <div>
+                  <p className="text-zinc-500 text-xs">Clientes TCV</p>
+                  <p className="text-white text-xl font-bold leading-tight">
+                    {tcvClients.length}
+                    <span className="text-zinc-500 text-xs font-normal ml-1">projetos</span>
+                  </p>
+                </div>
+              </div>
+
+              {/* TCV Novos */}
+              <div className="flex items-center gap-3 px-5">
+                <div className="w-2 h-2 rounded-full bg-violet-500 shrink-0" />
+                <div>
+                  <p className="text-zinc-500 text-xs">TCV novos (30d)</p>
+                  <p className="text-white text-xl font-bold leading-tight">
+                    {newTCVClients.length}
+                    <span className="text-zinc-500 text-xs font-normal ml-1">
+                      {newTCVClients.length === 1 ? 'novo projeto' : 'novos projetos'}
+                    </span>
+                  </p>
+                </div>
+              </div>
+
+              {/* Divisor visual */}
+              <div className="flex-1" />
+
+              {/* Faturamento previsto */}
+              <div className="pl-5">
+                <p className="text-zinc-500 text-xs capitalize">
+                  Faturamento previsto — {billing.currentMonthLabel}
+                </p>
+                <div className="flex items-baseline gap-3 mt-0.5">
+                  <p className="text-emerald-400 text-xl font-bold leading-tight">
+                    {formatCurrency(billing.total)}
+                  </p>
+                  <div className="flex items-center gap-3 text-xs text-zinc-500">
+                    <span>
+                      MRR <span className="text-zinc-300 font-semibold">{formatCurrency(billing.mrrForecast)}</span>
+                    </span>
+                    {billing.tcvForecast > 0 && (
+                      <span>
+                        + TCV novo <span className="text-blue-400 font-semibold">{formatCurrency(billing.tcvForecast)}</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </CardContent>
+        </Card>
 
         {/* ── 1. PULSO FINANCEIRO ──────────────────────────────────── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

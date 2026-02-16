@@ -271,7 +271,7 @@ export const mockClients: ClientWithScore[] = [
     lastFormSubmission: mockFormSubmissions['client-004'][0],
   },
   {
-    // PERFIL 5: Em Observação — TCV
+    // PERFIL 5: Em Observação — TCV (início em janeiro)
     id: 'client-005',
     agencyId: 'agency-001',
     name: 'Academia FitLife',
@@ -291,6 +291,30 @@ export const mockClients: ClientWithScore[] = [
       { id: 'int-13', clientId: 'client-005', type: 'whatsapp',       status: 'connected',    lastSyncAt: '2026-02-05' },
       { id: 'int-14', clientId: 'client-005', type: 'asaas',          status: 'disconnected' },
       { id: 'int-15', clientId: 'client-005', type: 'dom_pagamentos', status: 'disconnected' },
+    ],
+    lastFormSubmission: undefined,
+  },
+  {
+    // PERFIL 6: Em Observação — TCV NOVO (início em fevereiro)
+    id: 'client-006',
+    agencyId: 'agency-001',
+    name: 'Studio Pilates Equilíbrio',
+    segment: 'Fitness / Bem-estar',
+    serviceSold: 'Implementação de Estratégia Digital (Projeto)',
+    clientType: 'tcv',
+    contractValue: 0,
+    totalProjectValue: 12000,
+    projectDeadlineDays: 90,
+    projectStartDate: '2026-02-10',
+    contractStartDate: '2026-02-10',
+    contractEndDate: '2026-05-11',
+    notes: 'Novo cliente fechado em fevereiro. Projeto de 90 dias de implementação digital. Pagamento à vista recebido.',
+    createdAt: '2026-02-10',
+    healthScore: undefined,
+    integrations: [
+      { id: 'int-16', clientId: 'client-006', type: 'whatsapp',       status: 'disconnected' },
+      { id: 'int-17', clientId: 'client-006', type: 'asaas',          status: 'disconnected' },
+      { id: 'int-18', clientId: 'client-006', type: 'dom_pagamentos', status: 'disconnected' },
     ],
     lastFormSubmission: undefined,
   },
@@ -384,6 +408,41 @@ export function getAverageHealthScore(): number {
   if (clientsWithScore.length === 0) return 0
   const total = clientsWithScore.reduce((sum, c) => sum + (c.healthScore?.scoreTotal ?? 0), 0)
   return Math.round(total / clientsWithScore.length)
+}
+
+export function getNewTCVClients(days = 30) {
+  const now = new Date()
+  return mockClients.filter((c) => {
+    if (c.clientType !== 'tcv') return false
+    const start = new Date(c.projectStartDate ?? c.contractStartDate)
+    const diff = Math.ceil((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+    return diff <= days
+  })
+}
+
+export function getMonthlyBillingForecast() {
+  const now = new Date()
+  const currentMonth = now.getMonth()
+  const currentYear = now.getFullYear()
+
+  // MRR: soma de todos os clientes recorrentes
+  const mrrForecast = getTotalMRR()
+
+  // TCV novo: projetos que assinaram neste mês (faturamento antecipado recebido)
+  const newTCVThisMonth = mockClients.filter((c) => {
+    if (c.clientType !== 'tcv') return false
+    const start = new Date(c.projectStartDate ?? c.contractStartDate)
+    return start.getMonth() === currentMonth && start.getFullYear() === currentYear
+  })
+  const tcvForecast = newTCVThisMonth.reduce((sum, c) => sum + (c.totalProjectValue ?? 0), 0)
+
+  return {
+    mrrForecast,
+    tcvForecast,
+    total: mrrForecast + tcvForecast,
+    newTCVClients: newTCVThisMonth,
+    currentMonthLabel: now.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
+  }
 }
 
 export function getMRRSafe(): number {
