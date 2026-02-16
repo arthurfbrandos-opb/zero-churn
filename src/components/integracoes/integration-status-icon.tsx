@@ -1,7 +1,7 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { IntegrationStatus, IntegrationType } from '@/types'
 import { cn } from '@/lib/utils'
-import { MessageCircle, CreditCard, Building2 } from 'lucide-react'
+import { MessageCircle, CreditCard, Building2, BarChart2 } from 'lucide-react'
 
 interface IntegrationStatusIconProps {
   type: IntegrationType
@@ -12,6 +12,8 @@ const typeConfig: Record<IntegrationType, { label: string; icon: React.ElementTy
   whatsapp:       { label: 'WhatsApp',        icon: MessageCircle },
   asaas:          { label: 'Asaas',           icon: CreditCard    },
   dom_pagamentos: { label: 'Dom Pagamentos',  icon: Building2     },
+  meta_ads:       { label: 'Meta Ads',        icon: BarChart2     },
+  google_ads:     { label: 'Google Ads',      icon: BarChart2     },
 }
 
 const statusColor: Record<IntegrationStatus, string> = {

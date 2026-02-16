@@ -3,17 +3,11 @@
 // ─────────────────────────────────────────────
 
 export type ChurnRisk = 'low' | 'medium' | 'high' | 'observacao'
-
 export type ClientType = 'mrr' | 'tcv'
-
 export type IntegrationStatus = 'connected' | 'error' | 'expired' | 'disconnected'
-
-export type IntegrationType = 'whatsapp' | 'asaas' | 'dom_pagamentos'
-
+export type IntegrationType = 'whatsapp' | 'asaas' | 'dom_pagamentos' | 'meta_ads' | 'google_ads'
 export type AlertSeverity = 'high' | 'medium' | 'low'
-
 export type TriggeredBy = 'scheduled' | 'manual'
-
 export type Trend = 'improving' | 'stable' | 'declining'
 
 // ─────────────────────────────────────────────
@@ -22,7 +16,7 @@ export interface Agency {
   id: string
   name: string
   logo?: string
-  schedulerDay: number // 1–28
+  schedulerDay: number
   plan: 'starter' | 'growth' | 'agency' | 'enterprise'
   createdAt: string
 }
@@ -36,23 +30,61 @@ export interface User {
   createdAt: string
 }
 
+export interface Address {
+  cep: string
+  logradouro: string
+  numero: string
+  complemento?: string
+  bairro: string
+  cidade: string
+  estado: string
+}
+
+export interface Installment {
+  id: string
+  number: number
+  dueDate: string
+  value: number
+  status: 'pending' | 'overdue'
+}
+
 export interface Client {
   id: string
   agencyId: string
-  name: string
+
+  // Identificação
+  razaoSocial: string
+  nomeResumido: string        // usado em todo o sistema
+  name: string                // alias de nomeResumido (compatibilidade)
+  cnpjCpf: string
+  nomeDecisor: string
+  telefone: string
+  email: string
+  emailFinanceiro?: string
   segment: string
-  serviceSold: string
+
+  // Endereço de cobrança
+  address?: Address
+
+  // Tipo de contrato
   clientType: ClientType
+  serviceSold: string
 
   // MRR
-  contractValue: number        // valor mensal recorrente
+  contractValue: number
   contractStartDate: string
   contractEndDate: string
+  hasImplementationFee?: boolean
+  implementationFeeValue?: number
+  implementationFeeDate?: string
 
-  // TCV (preenchido apenas se clientType === 'tcv')
-  totalProjectValue?: number   // valor total do projeto pago antecipado
-  projectDeadlineDays?: number // duração total em dias (ex: 90)
-  projectStartDate?: string    // início da execução
+  // TCV
+  totalProjectValue?: number
+  projectDeadlineDays?: number
+  projectStartDate?: string
+  hasInstallments?: boolean
+  installmentsType?: 'equal' | 'custom'
+  installments?: Installment[]
 
   notes?: string
   createdAt: string
@@ -64,6 +96,7 @@ export interface Integration {
   type: IntegrationType
   status: IntegrationStatus
   lastSyncAt?: string
+  metadata?: Record<string, string>  // groupId, customerId, accountId, etc.
 }
 
 export interface FormSubmission {
@@ -72,8 +105,8 @@ export interface FormSubmission {
   formLinkToken: string
   sentAt: string
   respondedAt?: string
-  resultScore?: number   // 0–10
-  npsScore?: number      // 0–10
+  resultScore?: number
+  npsScore?: number
   comment?: string
   daysToRespond?: number
 }
