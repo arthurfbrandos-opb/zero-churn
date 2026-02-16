@@ -2,7 +2,7 @@ import Link from 'next/link'
 import {
   MessageCircle, CreditCard, Building2, BarChart2,
   ChevronRight, Clock, Plus, Search, Filter,
-  Users, Sparkles, RefreshCw, TrendingUp,
+  Users, Sparkles, RefreshCw, TrendingUp, AlertTriangle, Timer,
 } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
@@ -130,53 +130,89 @@ export default function ClientesPage() {
       <div className="p-6 space-y-4">
 
         {/* Resumo executivo */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
           <SummaryCard
-            label="Clientes ativos"
+            label="Ativos"
             value={summary.ativos}
             icon={Users}
             color="bg-zinc-700 text-zinc-300"
           />
           <SummaryCard
-            label="Novos (30 dias)"
+            label="Novos (30d)"
             value={summary.novos}
             icon={Sparkles}
             color="bg-emerald-500/15 text-emerald-400"
             sub="recém integrados"
           />
           <SummaryCard
-            label="Contratos MRR"
+            label="MRR"
             value={summary.mrr}
             icon={TrendingUp}
             color="bg-emerald-500/10 text-emerald-400"
-            sub="recorrência mensal"
+            sub="recorrentes"
           />
           <SummaryCard
-            label="Projetos TCV"
+            label="TCV"
             value={summary.tcv}
             icon={BarChart2}
             color="bg-blue-500/10 text-blue-400"
-            sub="valor fechado"
+            sub="projetos"
           />
           <SummaryCard
             label="Em renovação"
             value={summary.renovacao}
             icon={RefreshCw}
             color={summary.renovacao > 0 ? "bg-yellow-500/10 text-yellow-400" : "bg-zinc-700 text-zinc-500"}
-            sub="vencem em 45 dias"
+            sub="vencem em 45d"
+          />
+          <SummaryCard
+            label="TCV encerrando"
+            value={summary.tcvEncerrando}
+            icon={Timer}
+            color={summary.tcvEncerrando > 0 ? "bg-orange-500/10 text-orange-400" : "bg-zinc-700 text-zinc-500"}
+            sub="próximos 30d"
+          />
+          <SummaryCard
+            label="Em risco"
+            value={summary.emRisco}
+            icon={AlertTriangle}
+            color={summary.emRisco > 0 ? "bg-red-500/10 text-red-400" : "bg-zinc-700 text-zinc-500"}
+            sub="score crítico"
           />
         </div>
 
-        {/* Alerta de renovação */}
-        {summary.renovacao > 0 && (
-          <div className="flex items-center gap-2.5 bg-yellow-500/5 border border-yellow-500/20 rounded-xl px-4 py-2.5">
-            <RefreshCw className="w-4 h-4 text-yellow-400 shrink-0" />
-            <p className="text-yellow-300 text-sm">
-              <span className="font-semibold">{summary.renovacao} {summary.renovacao === 1 ? 'cliente' : 'clientes'}</span>
-              {' '}com contrato vencendo nos próximos 45 dias — acione a renovação antes que o cliente saia.
-            </p>
-          </div>
-        )}
+        {/* Banners de atenção */}
+        <div className="space-y-2">
+          {summary.emRisco > 0 && (
+            <div className="flex items-center gap-2.5 bg-red-500/5 border border-red-500/20 rounded-xl px-4 py-2.5">
+              <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+              <p className="text-red-300 text-sm">
+                <span className="font-semibold">{summary.emRisco} {summary.emRisco === 1 ? 'cliente' : 'clientes'}</span>
+                {' '}em alto risco de churn — intervenção imediata recomendada.
+              </p>
+            </div>
+          )}
+
+          {summary.tcvEncerrando > 0 && (
+            <div className="flex items-center gap-2.5 bg-orange-500/5 border border-orange-500/20 rounded-xl px-4 py-2.5">
+              <Timer className="w-4 h-4 text-orange-400 shrink-0" />
+              <p className="text-orange-300 text-sm">
+                <span className="font-semibold">{summary.tcvEncerrando} projeto{summary.tcvEncerrando !== 1 ? 's' : ''} TCV</span>
+                {' '}encerrando nos próximos 30 dias — prepare a entrega final e avalie proposta de continuidade.
+              </p>
+            </div>
+          )}
+
+          {summary.renovacao > 0 && (
+            <div className="flex items-center gap-2.5 bg-yellow-500/5 border border-yellow-500/20 rounded-xl px-4 py-2.5">
+              <RefreshCw className="w-4 h-4 text-yellow-400 shrink-0" />
+              <p className="text-yellow-300 text-sm">
+                <span className="font-semibold">{summary.renovacao} {summary.renovacao === 1 ? 'contrato MRR' : 'contratos MRR'}</span>
+                {' '}vencendo nos próximos 45 dias — acione a renovação antes que o cliente saia.
+              </p>
+            </div>
+          )}
+        </div>
 
         {/* Barra de busca + filtro */}
         <div className="flex items-center gap-3">

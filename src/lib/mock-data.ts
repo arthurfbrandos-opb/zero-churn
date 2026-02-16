@@ -698,17 +698,33 @@ export function getClientSummary() {
   const now = new Date()
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
   const in45Days = new Date(now.getTime() + 45 * 24 * 60 * 60 * 1000)
+  const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
 
   const ativos = mockClients.filter(c => new Date(c.contractEndDate) > now).length
   const novos = mockClients.filter(c => new Date(c.createdAt) >= thirtyDaysAgo).length
   const mrr = mockClients.filter(c => c.clientType === 'mrr').length
   const tcv = mockClients.filter(c => c.clientType === 'tcv').length
+
+  // MRR renovando nos próximos 45 dias
   const renovacao = mockClients.filter(c => {
+    if (c.clientType !== 'mrr') return false
     const end = new Date(c.contractEndDate)
     return end > now && end <= in45Days
   }).length
 
-  return { ativos, novos, mrr, tcv, renovacao }
+  // TCV encerrando nos próximos 30 dias
+  const tcvEncerrando = mockClients.filter(c => {
+    if (c.clientType !== 'tcv') return false
+    const end = new Date(c.contractEndDate)
+    return end > now && end <= in30Days
+  }).length
+
+  // Clientes em alto risco
+  const emRisco = mockClients.filter(c =>
+    c.healthScore?.churnRisk === 'high'
+  ).length
+
+  return { ativos, novos, mrr, tcv, renovacao, tcvEncerrando, emRisco }
 }
 
 export function getClientsSortedByRisk(): ClientWithScore[] {
