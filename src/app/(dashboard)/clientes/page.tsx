@@ -6,7 +6,7 @@ import {
   MessageCircle, CreditCard, Building2, BarChart2,
   ChevronRight, Clock, Plus, Search, Filter,
   Users, Sparkles, RefreshCw, TrendingUp, AlertTriangle, Timer,
-  CheckCircle2, AlertCircle, XCircle, X,
+  CheckCircle2, AlertCircle, XCircle, X, Send,
 } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { RiskBadge } from '@/components/dashboard/risk-badge'
 import { ScoreGauge } from '@/components/dashboard/score-gauge'
+import { NpsSendModal } from '@/components/dashboard/nps-send-modal'
 import { getClientsSortedByRisk, getClientSummary } from '@/lib/mock-data'
 import { Integration, ChurnRisk, ClientType, PaymentStatus } from '@/types'
 import { cn } from '@/lib/utils'
@@ -147,6 +148,7 @@ export default function ClientesPage() {
   const [riskFilter, setRiskFilter] = useState<RiskFilter>('all')
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all')
+  const [showNpsModal, setShowNpsModal] = useState(false)
 
   const hasActiveFilters = riskFilter !== 'all' || typeFilter !== 'all' || paymentFilter !== 'all' || search !== ''
 
@@ -175,15 +177,26 @@ export default function ClientesPage() {
 
   return (
     <div className="min-h-screen">
+      {showNpsModal && (
+        <NpsSendModal clients={allClients} onClose={() => setShowNpsModal(false)} />
+      )}
+
       <Header
         title="Clientes"
         description={`${summary.ativos} clientes ativos na carteira`}
         action={
-          <Link href="/clientes/novo">
-            <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white">
-              <Plus className="w-4 h-4 mr-1" /> Novo cliente
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline"
+              onClick={() => setShowNpsModal(true)}
+              className="border-zinc-700 text-zinc-400 hover:text-white gap-1.5">
+              <Send className="w-3.5 h-3.5" /> Enviar NPS
             </Button>
-          </Link>
+            <Link href="/clientes/novo">
+              <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white">
+                <Plus className="w-4 h-4 mr-1" /> Novo cliente
+              </Button>
+            </Link>
+          </div>
         }
       />
 
@@ -343,6 +356,17 @@ export default function ClientesPage() {
                             {client.clientType.toUpperCase()}
                           </Badge>
                           <PaymentBadge status={client.paymentStatus} />
+                          {/* Badge NPS se respondido recentemente */}
+                          {client.lastFormSubmission?.npsScore !== undefined && (
+                            <span className={cn(
+                              'text-xs px-1.5 py-0.5 rounded border font-medium',
+                              client.lastFormSubmission.npsScore >= 9 ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
+                              : client.lastFormSubmission.npsScore >= 7 ? 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10'
+                              : 'text-red-400 border-red-500/30 bg-red-500/10'
+                            )}>
+                              NPS {client.lastFormSubmission.npsScore}
+                            </span>
+                          )}
                         </div>
 
                         {/* Linha 2: detalhes */}

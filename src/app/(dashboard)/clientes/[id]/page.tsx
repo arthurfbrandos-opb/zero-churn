@@ -19,6 +19,7 @@ import { ScoreGauge } from '@/components/dashboard/score-gauge'
 import { RiskBadge } from '@/components/dashboard/risk-badge'
 import { getClientById, getFormsByClientId, getAlertsByClientId } from '@/lib/mock-data'
 import { ActionItem, Integration, Trend, PaymentStatus } from '@/types'
+import { useAnalysisCredits } from '@/hooks/use-analysis-credits'
 import { cn } from '@/lib/utils'
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -67,8 +68,14 @@ function TabVisaoGeral({ client }: { client: NonNullable<ReturnType<typeof getCl
   const [actions, setActions] = useState<ActionItem[]>(hs?.actionPlan ?? [])
   const [runningAnalysis, setRunningAnalysis] = useState(false)
   const [analysisMsg, setAnalysisMsg] = useState('')
+  const [blockedMsg, setBlockedMsg] = useState(false)
+  const credits = useAnalysisCredits('starter') // plano mockado
 
   async function handleRunAnalysis() {
+    if (!credits.canAnalyze) { setBlockedMsg(true); return }
+    const ok = credits.consume()
+    if (!ok) { setBlockedMsg(true); return }
+    setBlockedMsg(false)
     setRunningAnalysis(true)
     setAnalysisMsg('Coletando dados do cliente...')
     await new Promise(r => setTimeout(r, 1000))
@@ -112,10 +119,18 @@ function TabVisaoGeral({ client }: { client: NonNullable<ReturnType<typeof getCl
         <p className="text-zinc-500 text-sm max-w-sm">
           O cliente foi cadastrado há menos de 60 dias. A primeira análise de health score será gerada em breve.
         </p>
-        <Button size="sm" onClick={handleRunAnalysis} disabled={runningAnalysis}
-          className="bg-emerald-500 hover:bg-emerald-600 text-white gap-2 mt-2">
-          {runningAnalysis ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />{analysisMsg}</> : <><Zap className="w-3.5 h-3.5" />Rodar análise agora</>}
-        </Button>
+        <div className="space-y-2 mt-2">
+          {!credits.unlimited && (
+            <p className={cn('text-xs text-center', credits.remaining > 0 ? 'text-zinc-500' : 'text-red-400')}>
+              ⚡ {credits.remaining}/{credits.total} análises disponíveis hoje
+            </p>
+          )}
+          <Button size="sm" onClick={handleRunAnalysis}
+            disabled={runningAnalysis || !credits.canAnalyze}
+            className="bg-emerald-500 hover:bg-emerald-600 text-white gap-2 disabled:opacity-50">
+            {runningAnalysis ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />{analysisMsg}</> : <><Zap className="w-3.5 h-3.5" />Rodar análise agora</>}
+          </Button>
+        </div>
       </div>
     )
   }
@@ -125,18 +140,46 @@ function TabVisaoGeral({ client }: { client: NonNullable<ReturnType<typeof getCl
   return (
     <div className="space-y-5">
 
-      {/* Rodar análise */}
-      <div className="flex items-center justify-between">
-        <p className="text-zinc-500 text-xs">
-          Última análise: <span className="text-zinc-300">{fmtDate(hs.calculatedAt)}</span>
-          {' · '}<span className="text-zinc-400">{hs.triggeredBy === 'manual' ? 'Manual' : 'Automática'}</span>
-        </p>
-        <Button size="sm" variant="outline" onClick={handleRunAnalysis} disabled={runningAnalysis}
-          className="border-zinc-700 text-zinc-400 hover:text-white gap-1.5 text-xs">
-          {runningAnalysis
-            ? <><RefreshCw className="w-3 h-3 animate-spin" />{analysisMsg}</>
-            : <><RefreshCw className="w-3 h-3" />Rodar análise</>}
-        </Button>
+      {/* Rodar análise + créditos */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="text-zinc-500 text-xs">
+            Última análise: <span className="text-zinc-300">{fmtDate(hs.calculatedAt)}</span>
+            {' · '}<span className="text-zinc-400">{hs.triggeredBy === 'manual' ? 'Manual' : 'Automática'}</span>
+          </p>
+          <div className="flex items-center gap-2">
+            {/* Indicador de créditos */}
+            {!credits.unlimited && (
+              <span className={cn('text-xs flex items-center gap-1 px-2 py-1 rounded-lg border',
+                credits.remaining > 0
+                  ? 'text-zinc-400 border-zinc-700 bg-zinc-800'
+                  : 'text-red-400 border-red-500/30 bg-red-500/10'
+              )}>
+                ⚡ {credits.remaining}/{credits.total} análises hoje
+              </span>
+            )}
+            <Button size="sm" variant="outline" onClick={handleRunAnalysis}
+              disabled={runningAnalysis || !credits.canAnalyze}
+              className={cn('gap-1.5 text-xs', credits.canAnalyze
+                ? 'border-zinc-700 text-zinc-400 hover:text-white'
+                : 'border-red-500/30 text-red-400 cursor-not-allowed opacity-60')}>
+              {runningAnalysis
+                ? <><RefreshCw className="w-3 h-3 animate-spin" />{analysisMsg}</>
+                : <><RefreshCw className="w-3 h-3" />Rodar análise</>}
+            </Button>
+          </div>
+        </div>
+        {/* Aviso de créditos esgotados */}
+        {blockedMsg && (
+          <div className="flex items-center gap-2 bg-red-500/5 border border-red-500/20 rounded-lg px-3 py-2">
+            <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+            <p className="text-red-300 text-xs">
+              Você usou todos os {credits.total} créditos de análise do dia.
+              Os créditos renovam à meia-noite ou você pode{' '}
+              <Link href="/configuracoes" className="text-emerald-400 underline hover:no-underline">fazer upgrade do plano</Link>.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Score + flags críticas */}
