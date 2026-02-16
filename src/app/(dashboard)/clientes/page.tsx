@@ -6,7 +6,7 @@ import {
   MessageCircle, CreditCard, Building2, BarChart2,
   ChevronRight, Clock, Plus, Search, Filter,
   Users, Sparkles, RefreshCw, TrendingUp, AlertTriangle, Timer,
-  CheckCircle2, AlertCircle, XCircle, X, Send,
+  CheckCircle2, AlertCircle, XCircle, X, Send, UserMinus,
 } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
@@ -16,9 +16,11 @@ import { Input } from '@/components/ui/input'
 import { RiskBadge } from '@/components/dashboard/risk-badge'
 import { ScoreGauge } from '@/components/dashboard/score-gauge'
 import { NpsSendModal } from '@/components/dashboard/nps-send-modal'
+import { ChurnModal } from '@/components/dashboard/churn-modal'
 import { getClientsSortedByRisk, getClientSummary } from '@/lib/mock-data'
 import { getNpsClassification, isInObservation } from '@/lib/nps-utils'
-import { Integration, ChurnRisk, ClientType, PaymentStatus } from '@/types'
+import { CHURN_CATEGORIES } from '@/components/dashboard/churn-modal'
+import { Integration, ChurnRisk, ClientType, PaymentStatus, ChurnRecord } from '@/types'
 import { cn } from '@/lib/utils'
 
 function formatCurrency(v: number) {
@@ -118,9 +120,10 @@ function SummaryCard({ label, value, icon: Icon, color, sub }: {
 }
 
 // ── Filtros ───────────────────────────────────────────────────────
-type RiskFilter = ChurnRisk | 'all'
-type TypeFilter = ClientType | 'all'
+type RiskFilter    = ChurnRisk | 'all'
+type TypeFilter    = ClientType | 'all'
 type PaymentFilter = PaymentStatus | 'all'
+type StatusFilter  = 'active' | 'inactive' | 'all'
 
 function FilterPill({ active, onClick, children, color }: {
   active: boolean; onClick: () => void; children: React.ReactNode; color?: string
@@ -149,8 +152,13 @@ export default function ClientesPage() {
   const [riskFilter, setRiskFilter] = useState<RiskFilter>('all')
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all')
-  const [showNpsModal, setShowNpsModal] = useState(false)
-  const [npsClientId, setNpsClientId] = useState<string | undefined>(undefined)
+  const [showNpsModal, setShowNpsModal]   = useState(false)
+  const [npsClientId, setNpsClientId]     = useState<string | undefined>(undefined)
+  const [statusFilter, setStatusFilter]   = useState<StatusFilter>('active')
+  const [inactiveMap, setInactiveMap]     = useState<Record<string, ChurnRecord>>({})
+  const [churnTargetId, setChurnTargetId] = useState<string | null>(null)
+
+  const churnTargetClient = churnTargetId ? allClients.find(c => c.id === churnTargetId) : null
 
   function openNpsForClient(id: string) { setNpsClientId(id); setShowNpsModal(true) }
   function openNpsForAll() { setNpsClientId(undefined); setShowNpsModal(true) }
@@ -159,9 +167,14 @@ export default function ClientesPage() {
 
   const filtered = useMemo(() => {
     return allClients.filter(c => {
+      const inactive = !!inactiveMap[c.id]
+      // Filtro de status
+      if (statusFilter === 'active'   &&  inactive) return false
+      if (statusFilter === 'inactive' && !inactive) return false
+
       const risk = c.healthScore?.churnRisk ?? 'observacao'
-      if (riskFilter !== 'all' && risk !== riskFilter) return false
-      if (typeFilter !== 'all' && c.clientType !== typeFilter) return false
+      if (riskFilter    !== 'all' && risk !== riskFilter)           return false
+      if (typeFilter    !== 'all' && c.clientType !== typeFilter)    return false
       if (paymentFilter !== 'all' && c.paymentStatus !== paymentFilter) return false
       if (search) {
         const q = search.toLowerCase()
@@ -174,10 +187,12 @@ export default function ClientesPage() {
       }
       return true
     })
-  }, [allClients, riskFilter, typeFilter, paymentFilter, search])
+  }, [allClients, riskFilter, typeFilter, paymentFilter, statusFilter, search, inactiveMap])
+
+  const inactiveCount = allClients.filter(c => !!inactiveMap[c.id]).length
 
   function clearFilters() {
-    setSearch(''); setRiskFilter('all'); setTypeFilter('all'); setPaymentFilter('all')
+    setSearch(''); setRiskFilter('all'); setTypeFilter('all'); setPaymentFilter('all'); setStatusFilter('active')
   }
 
   return (
@@ -187,6 +202,18 @@ export default function ClientesPage() {
           clients={allClients}
           preselectedClientId={npsClientId}
           onClose={() => { setShowNpsModal(false); setNpsClientId(undefined) }}
+        />
+      )}
+
+      {churnTargetClient && (
+        <ChurnModal
+          clientName={churnTargetClient.nomeResumido ?? churnTargetClient.name}
+          clientType={churnTargetClient.clientType}
+          onConfirm={record => {
+            setInactiveMap(prev => ({ ...prev, [churnTargetId!]: record }))
+            setChurnTargetId(null)
+          }}
+          onClose={() => setChurnTargetId(null)}
         />
       )}
 
@@ -300,6 +327,17 @@ export default function ClientesPage() {
             <FilterPill active={paymentFilter === 'em_dia'}        onClick={() => setPaymentFilter('em_dia')}        color="border-emerald-500/40 bg-emerald-500/10 text-emerald-400">✅ Em dia</FilterPill>
             <FilterPill active={paymentFilter === 'vencendo'}      onClick={() => setPaymentFilter('vencendo')}      color="border-yellow-500/40 bg-yellow-500/10 text-yellow-400">⚠️ Vencendo</FilterPill>
             <FilterPill active={paymentFilter === 'inadimplente'}  onClick={() => setPaymentFilter('inadimplente')}  color="border-red-500/40 bg-red-500/10 text-red-400">🔴 Inadimplente</FilterPill>
+
+            {/* Status: ativo/inativo */}
+            <span className="text-zinc-700 text-xs shrink-0 ml-1">Status:</span>
+            <FilterPill active={statusFilter === 'active'}   onClick={() => setStatusFilter('active')}>Ativos</FilterPill>
+            <FilterPill active={statusFilter === 'all'}      onClick={() => setStatusFilter('all')}>Todos</FilterPill>
+            {inactiveCount > 0 && (
+              <FilterPill active={statusFilter === 'inactive'} onClick={() => setStatusFilter('inactive')}
+                color="border-red-500/40 bg-red-500/10 text-red-400">
+                🔴 Inativos ({inactiveCount})
+              </FilterPill>
+            )}
           </div>
 
           {/* Resultado do filtro */}
@@ -332,9 +370,12 @@ export default function ClientesPage() {
               const dom          = client.integrations.find(i => i.type === 'dom_pagamentos')
               const ads          = client.integrations.find(i => i.type === 'meta_ads' || i.type === 'google_ads')
               const inObservacao = isInObservation(client.createdAt)
+              const isInactive   = !!inactiveMap[client.id]
+              const churnRec     = inactiveMap[client.id]
+              const churnCat     = churnRec ? CHURN_CATEGORIES.find(c => c.id === churnRec.category) : null
 
               return (
-                <Card key={client.id} className="bg-zinc-900 border-zinc-800 hover:border-zinc-700 transition-colors">
+                <Card key={client.id} className={cn('border-zinc-800 hover:border-zinc-700 transition-colors', isInactive ? 'bg-zinc-900/50 opacity-70' : 'bg-zinc-900')}>
                   <CardContent className="p-4">
                     <div className="flex items-start gap-4">
 
@@ -365,7 +406,14 @@ export default function ClientesPage() {
                           )}>
                             {client.clientType.toUpperCase()}
                           </Badge>
-                          <PaymentBadge status={client.paymentStatus} />
+                          {/* Badge Inativo */}
+                          {isInactive && (
+                            <span className="text-xs px-1.5 py-0.5 rounded border font-medium text-red-400 bg-red-500/10 border-red-500/30 flex items-center gap-1">
+                              <UserMinus className="w-2.5 h-2.5" />
+                              {churnCat ? churnCat.label : 'Inativo'}
+                            </span>
+                          )}
+                          {!isInactive && <PaymentBadge status={client.paymentStatus} />}
                           {/* Badge NPS + classificação */}
                           {client.lastFormSubmission?.npsScore !== undefined && (() => {
                             const nps = client.lastFormSubmission!.npsScore!
@@ -423,20 +471,36 @@ export default function ClientesPage() {
                           )}
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <Button
-                            size="sm" variant="outline"
-                            onClick={() => !inObservacao && openNpsForClient(client.id)}
-                            disabled={inObservacao}
-                            className={cn(
-                              'text-xs gap-1',
-                              inObservacao
-                                ? 'border-zinc-800 text-zinc-700 cursor-not-allowed opacity-50'
-                                : 'border-zinc-700 text-zinc-500 hover:text-emerald-400 hover:border-emerald-500/40 hover:bg-emerald-500/5'
-                            )}
-                            title={inObservacao ? 'Cliente em período de observação' : 'Enviar formulário NPS'}
-                          >
-                            <Send className="w-3 h-3" /> NPS
-                          </Button>
+                          {isInactive ? (
+                            /* Reativar */
+                            <Button size="sm" variant="outline"
+                              onClick={() => setInactiveMap(prev => { const n = { ...prev }; delete n[client.id]; return n })}
+                              className="border-emerald-700/40 text-emerald-500 hover:text-emerald-300 hover:bg-emerald-500/5 text-xs gap-1">
+                              Reativar
+                            </Button>
+                          ) : (
+                            <>
+                              <Button
+                                size="sm" variant="outline"
+                                onClick={() => !inObservacao && openNpsForClient(client.id)}
+                                disabled={inObservacao}
+                                className={cn('text-xs gap-1',
+                                  inObservacao
+                                    ? 'border-zinc-800 text-zinc-700 cursor-not-allowed opacity-50'
+                                    : 'border-zinc-700 text-zinc-500 hover:text-emerald-400 hover:border-emerald-500/40 hover:bg-emerald-500/5'
+                                )}
+                                title={inObservacao ? 'Cliente em período de observação' : 'Enviar formulário NPS'}
+                              >
+                                <Send className="w-3 h-3" /> NPS
+                              </Button>
+                              <Button size="sm" variant="outline"
+                                onClick={() => setChurnTargetId(client.id)}
+                                className="border-zinc-800 text-zinc-600 hover:text-red-400 hover:border-red-500/30 hover:bg-red-500/5 text-xs gap-1"
+                                title="Inativar cliente">
+                                <UserMinus className="w-3 h-3" />
+                              </Button>
+                            </>
+                          )}
                           <Link href={`/clientes/${client.id}`}>
                             <Button size="sm" variant="outline"
                               className="border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800 text-xs gap-1">

@@ -10,7 +10,7 @@ import {
   RefreshCw, Send, Clock, User, Calendar,
   Phone, Mail, MapPin, FileText, History,
   Plug, Zap, ExternalLink, ChevronRight,
-  Shield, Activity, Heart, Star,
+  Shield, Activity, Heart, Star, UserMinus, UserCheck,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -18,9 +18,10 @@ import { Button } from '@/components/ui/button'
 import { ScoreGauge } from '@/components/dashboard/score-gauge'
 import { RiskBadge } from '@/components/dashboard/risk-badge'
 import { getClientById, getFormsByClientId, getAlertsByClientId } from '@/lib/mock-data'
-import { ActionItem, Integration, Trend, PaymentStatus } from '@/types'
+import { ActionItem, Integration, Trend, PaymentStatus, ChurnRecord } from '@/types'
 import { useAnalysisCredits } from '@/hooks/use-analysis-credits'
 import { getNpsClassification } from '@/lib/nps-utils'
+import { ChurnModal, CHURN_CATEGORIES } from '@/components/dashboard/churn-modal'
 import { cn } from '@/lib/utils'
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -571,7 +572,10 @@ function TabHistorico({ clientId }: { clientId: string }) {
 export default function ClientePerfilPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState('visao-geral')
+  const [activeTab, setActiveTab]     = useState('visao-geral')
+  const [showChurnModal, setShowChurnModal] = useState(false)
+  const [churnRecord, setChurnRecord]      = useState<ChurnRecord | undefined>(undefined)
+  const [isInactive, setIsInactive]        = useState(false)
 
   const client = getClientById(id)
 
@@ -589,8 +593,28 @@ export default function ClientePerfilPage() {
   const daysToEnd = daysTo(client.contractEndDate)
   const risk = client.healthScore?.churnRisk ?? 'observacao'
 
+  function handleInactivate(record: ChurnRecord) {
+    setChurnRecord(record)
+    setIsInactive(true)
+    setShowChurnModal(false)
+  }
+
+  const churnCatInfo = churnRecord
+    ? CHURN_CATEGORIES.find(c => c.id === churnRecord.category)
+    : null
+
   return (
     <div className="min-h-screen">
+      {/* Modal de inativação */}
+      {showChurnModal && (
+        <ChurnModal
+          clientName={client.nomeResumido ?? client.name}
+          clientType={client.clientType}
+          onConfirm={handleInactivate}
+          onClose={() => setShowChurnModal(false)}
+        />
+      )}
+
       {/* Header do perfil */}
       <div className="border-b border-zinc-800 bg-zinc-950 sticky top-0 z-10">
         <div className="px-6 pt-4 pb-0">
@@ -608,6 +632,19 @@ export default function ClientePerfilPage() {
               <span className="text-zinc-300 text-sm">{client.nomeResumido ?? client.name}</span>
             </div>
             <div className="flex items-center gap-2">
+              {isInactive ? (
+                <Button size="sm" variant="outline"
+                  onClick={() => { setIsInactive(false); setChurnRecord(undefined) }}
+                  className="border-emerald-700/40 text-emerald-400 hover:bg-emerald-500/10 text-xs gap-1.5">
+                  <UserCheck className="w-3.5 h-3.5" /> Reativar cliente
+                </Button>
+              ) : (
+                <Button size="sm" variant="outline"
+                  onClick={() => setShowChurnModal(true)}
+                  className="border-red-800/40 text-red-400 hover:bg-red-500/10 text-xs gap-1.5">
+                  <UserMinus className="w-3.5 h-3.5" /> Inativar cliente
+                </Button>
+              )}
               <Link href={`/clientes/${id}/editar`}>
                 <Button size="sm" variant="outline" className="border-zinc-700 text-zinc-400 hover:text-white text-xs">
                   Editar cadastro
@@ -616,8 +653,30 @@ export default function ClientePerfilPage() {
             </div>
           </div>
 
+          {/* Banner de inativo */}
+          {isInactive && churnRecord && churnCatInfo && (
+            <div className="flex items-start gap-3 bg-red-500/5 border border-red-500/20 rounded-xl px-4 py-3 mb-4">
+              {(() => { const Icon = churnCatInfo.icon; return <Icon className="w-4 h-4 text-red-400 shrink-0 mt-0.5" /> })()}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-red-300 text-sm font-semibold">Cliente inativo</p>
+                  <span className="text-xs text-red-500 border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 rounded">
+                    {churnCatInfo.label}
+                  </span>
+                  <span className="text-zinc-600 text-xs">
+                    Inativado em {new Date(churnRecord.inactivatedAt).toLocaleDateString('pt-BR')}
+                    {churnRecord.inactivatedBy ? ` por ${churnRecord.inactivatedBy}` : ''}
+                  </span>
+                </div>
+                {churnRecord.detail && (
+                  <p className="text-red-400/70 text-xs mt-1 leading-relaxed">{churnRecord.detail}</p>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Identidade do cliente */}
-          <div className="flex items-start gap-4 mb-4">
+          <div className={cn('flex items-start gap-4 mb-4', isInactive && 'opacity-60')}>
             {/* Avatar */}
             <div className="w-12 h-12 rounded-xl bg-zinc-800 flex items-center justify-center shrink-0 text-zinc-400 font-bold text-lg">
               {(client.nomeResumido ?? client.name).charAt(0)}
@@ -633,6 +692,11 @@ export default function ClientePerfilPage() {
                 )}>
                   {client.clientType.toUpperCase()}
                 </Badge>
+                {isInactive && (
+                  <Badge variant="outline" className="text-xs text-red-400 border-red-500/30 bg-red-500/10 gap-1">
+                    <UserMinus className="w-2.5 h-2.5" /> Inativo
+                  </Badge>
+                )}
                 <PaymentBadge status={client.paymentStatus} />
                 {/* NPS classification */}
                 {client.lastFormSubmission?.npsScore !== undefined && (() => {

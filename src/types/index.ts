@@ -5,6 +5,24 @@
 export type ChurnRisk = 'low' | 'medium' | 'high' | 'observacao'
 export type ClientType = 'mrr' | 'tcv'
 export type PaymentStatus = 'em_dia' | 'vencendo' | 'inadimplente'
+export type ClientStatus = 'active' | 'inactive'
+
+export type ChurnCategory =
+  | 'price'         // Preço / custo-benefício não percebido
+  | 'results'       // Resultados abaixo do esperado
+  | 'communication' // Falta de comunicação / atendimento
+  | 'closed'        // Empresa encerrou ou pausou operações
+  | 'competitor'    // Migrou para concorrente
+  | 'internal'      // Mudança interna (troca de equipe, gestão)
+  | 'project_end'   // Projeto TCV concluído sem renovação
+  | 'other'         // Outro motivo
+
+export interface ChurnRecord {
+  category: ChurnCategory
+  detail: string
+  inactivatedAt: string     // ISO date
+  inactivatedBy?: string    // nome do usuário
+}
 export type IntegrationStatus = 'connected' | 'error' | 'expired' | 'disconnected'
 export type IntegrationType = 'whatsapp' | 'asaas' | 'dom_pagamentos' | 'meta_ads' | 'google_ads'
 export type AlertSeverity = 'high' | 'medium' | 'low'
@@ -128,6 +146,10 @@ export interface Client {
   principaisDores?: string        // problemas que motivaram a contratação
   notes?: string                  // observações adicionais da equipe
   paymentStatus?: PaymentStatus   // status do pagamento mais recente
+
+  // Status do cliente
+  status?: ClientStatus           // active (default) | inactive
+  churnRecord?: ChurnRecord       // preenchido ao inativar
 
   createdAt: string
 }
