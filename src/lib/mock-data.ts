@@ -386,6 +386,70 @@ export function getAverageHealthScore(): number {
   return Math.round(total / clientsWithScore.length)
 }
 
+export function getMRRSafe(): number {
+  return mockClients
+    .filter((c) => c.clientType === 'mrr' && c.healthScore?.churnRisk === 'low')
+    .reduce((sum, c) => sum + c.contractValue, 0)
+}
+
+export function getMRRAtRisk(): number {
+  return mockClients
+    .filter((c) => c.clientType === 'mrr' && (c.healthScore?.churnRisk === 'high' || c.healthScore?.churnRisk === 'medium'))
+    .reduce((sum, c) => sum + c.contractValue, 0)
+}
+
+export function getClientsRenewingSoon(days = 30) {
+  const now = new Date()
+  return mockClients.filter((c) => {
+    if (c.clientType !== 'mrr') return false
+    const end = new Date(c.contractEndDate)
+    const diff = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+    return diff > 0 && diff <= days
+  })
+}
+
+export function getTCVExpiringSoon(days = 15) {
+  const now = new Date()
+  return mockClients.filter((c) => {
+    if (c.clientType !== 'tcv') return false
+    const end = new Date(c.contractEndDate)
+    const diff = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+    return diff > 0 && diff <= days
+  })
+}
+
+export function getClientsWithIntegrationErrors() {
+  return mockClients.filter((c) =>
+    c.integrations.some((i) => i.status === 'error' || i.status === 'expired')
+  )
+}
+
+export function getClientsWithPendingForms() {
+  const cutoff = 7
+  return mockClients.filter((c) => {
+    const forms = mockFormSubmissions[c.id] ?? []
+    const lastSent = forms[0]
+    if (!lastSent) return false
+    if (lastSent.respondedAt) return false
+    const sentAt = new Date(lastSent.sentAt)
+    const now = new Date()
+    const days = Math.ceil((now.getTime() - sentAt.getTime()) / (1000 * 60 * 60 * 24))
+    return days >= cutoff
+  })
+}
+
+export function getClientsWithoutRecentNPS() {
+  return mockClients.filter((c) => {
+    const forms = mockFormSubmissions[c.id] ?? []
+    const lastResponse = forms.find((f) => f.respondedAt)
+    if (!lastResponse) return true
+    const respondedAt = new Date(lastResponse.respondedAt!)
+    const now = new Date()
+    const days = Math.ceil((now.getTime() - respondedAt.getTime()) / (1000 * 60 * 60 * 24))
+    return days > 45
+  })
+}
+
 export function getMRRClients() {
   return mockClients.filter((c) => c.clientType === 'mrr')
 }
