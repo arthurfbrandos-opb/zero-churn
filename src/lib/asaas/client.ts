@@ -217,6 +217,82 @@ export async function getActiveCustomerIds(apiKey: string, days = 90): Promise<S
   return activeIds
 }
 
+// ── Criação de recursos ───────────────────────────────────────
+
+export interface CreateCustomerInput {
+  name:          string
+  cpfCnpj?:      string | null
+  email?:        string | null
+  phone?:        string | null
+  mobilePhone?:  string | null
+  address?:      string | null
+  addressNumber?: string | null
+  complement?:   string | null
+  province?:     string | null
+  postalCode?:   string | null
+  state?:        string | null
+}
+
+/** Cria um customer na conta Asaas */
+export async function createCustomer(apiKey: string, data: CreateCustomerInput): Promise<AsaasCustomer> {
+  return asaasRequest<AsaasCustomer>('/customers', apiKey, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export type BillingType = 'BOLETO' | 'PIX' | 'CREDIT_CARD' | 'UNDEFINED'
+export type SubscriptionCycle = 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUALLY' | 'YEARLY'
+
+export interface CreatePaymentInput {
+  customer:     string        // customer id
+  billingType:  BillingType
+  value:        number
+  dueDate:      string        // 'YYYY-MM-DD'
+  description?: string
+}
+
+export interface AsaasCreatedPayment {
+  id:           string
+  invoiceUrl:   string | null
+  bankSlipUrl:  string | null
+  status:       string
+  value:        number
+}
+
+/** Cria uma cobrança avulsa no Asaas */
+export async function createPayment(apiKey: string, data: CreatePaymentInput): Promise<AsaasCreatedPayment> {
+  return asaasRequest<AsaasCreatedPayment>('/payments', apiKey, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export interface CreateSubscriptionInput {
+  customer:     string
+  billingType:  BillingType
+  value:        number
+  nextDueDate:  string        // 'YYYY-MM-DD' — próximo vencimento
+  cycle:        SubscriptionCycle
+  description?: string
+}
+
+export interface AsaasCreatedSubscription {
+  id:          string
+  status:      string
+  value:       number
+  cycle:       string
+  nextDueDate: string
+}
+
+/** Cria uma assinatura recorrente no Asaas */
+export async function createSubscription(apiKey: string, data: CreateSubscriptionInput): Promise<AsaasCreatedSubscription> {
+  return asaasRequest<AsaasCreatedSubscription>('/subscriptions', apiKey, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
 export async function getCustomerFinancialSummary(apiKey: string, customerId: string) {
   const res = await getCustomerPayments(apiKey, customerId, 50)
   const payments = res.data

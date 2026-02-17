@@ -5,7 +5,48 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/supabase/encryption'
-import { listCustomers, getActiveCustomerIds } from '@/lib/asaas/client'
+import { listCustomers, getActiveCustomerIds, createCustomer } from '@/lib/asaas/client'
+
+// POST /api/asaas/customers — cria um novo customer no Asaas
+export async function POST(request: Request) {
+  try {
+    const supabase = await createClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error || !user) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+
+    const { data: integration } = await supabase
+      .from('agency_integrations').select('encrypted_key, status').eq('type', 'asaas').single()
+
+    if (!integration?.encrypted_key)
+      return NextResponse.json({ error: 'Integração Asaas não configurada' }, { status: 404 })
+    if (integration.status !== 'active')
+      return NextResponse.json({ error: 'Integração Asaas inativa' }, { status: 403 })
+
+    const creds  = await decrypt<{ api_key: string }>(integration.encrypted_key)
+    const apiKey = creds.api_key
+    const body   = await request.json()
+
+    const customer = await createCustomer(apiKey, {
+      name:          body.name,
+      cpfCnpj:       body.cpfCnpj     ? body.cpfCnpj.replace(/\D/g, '') : undefined,
+      email:         body.email        || undefined,
+      mobilePhone:   body.mobilePhone  || body.phone || undefined,
+      phone:         body.phone        || undefined,
+      address:       body.address      || undefined,
+      addressNumber: body.addressNumber || undefined,
+      complement:    body.complement   || undefined,
+      province:      body.province     || undefined,  // bairro
+      postalCode:    body.postalCode   ? body.postalCode.replace(/\D/g, '') : undefined,
+      state:         body.state        || undefined,
+    })
+
+    return NextResponse.json({ customer })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[POST /api/asaas/customers]', msg)
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
+}
 
 export async function GET() {
   try {

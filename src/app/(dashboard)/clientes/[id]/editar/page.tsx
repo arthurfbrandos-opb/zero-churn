@@ -13,6 +13,7 @@ import {
 import { useClient } from '@/hooks/use-client'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
+import { AsaasCobrancaModal } from '@/components/integracoes/asaas-cobranca-modal'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -340,7 +341,7 @@ interface LinkedIntegration {
   last_sync_at: string | null
 }
 
-function IntegracoesStep({ clientId }: { clientId: string }) {
+function IntegracoesStep({ clientId, clientType, defaultValue }: { clientId: string; clientType?: string; defaultValue?: number }) {
   const [asaasIntegrations, setAsaasIntegrations] = useState<LinkedIntegration[]>([])
   const [loading, setLoading]   = useState(true)
   const [showLinkModal, setShowLinkModal] = useState<'asaas' | 'dom' | null>(null)
@@ -351,6 +352,7 @@ function IntegracoesStep({ clientId }: { clientId: string }) {
   const [selectedCustomer, setSelectedCustomer] = useState<AsaasCustomerRow | null>(null)
   const [linking, setLinking] = useState(false)
   const [linkError, setLinkError] = useState<string | null>(null)
+  const [cobrancaTarget, setCobrancaTarget] = useState<{ id: string; name: string } | null>(null)
 
   interface AsaasCustomerRow { id: string; name: string; cpfCnpj: string | null }
 
@@ -414,6 +416,17 @@ function IntegracoesStep({ clientId }: { clientId: string }) {
 
   return (
     <div className="space-y-4">
+      {/* Modal de cobrança */}
+      {cobrancaTarget && (
+        <AsaasCobrancaModal
+          customerId={cobrancaTarget.id}
+          customerName={cobrancaTarget.name}
+          clientType={(clientType ?? 'mrr') as 'mrr' | 'tcv'}
+          defaultValue={defaultValue}
+          onClose={() => setCobrancaTarget(null)}
+        />
+      )}
+
       {/* Modal de busca Asaas */}
       {showLinkModal === 'asaas' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
@@ -532,7 +545,12 @@ function IntegracoesStep({ clientId }: { clientId: string }) {
                   )}
                 </p>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => setCobrancaTarget({ id: int.credentials?.customer_id ?? '', name: int.credentials?.customer_name ?? int.label ?? '' })}
+                  className="text-blue-500 hover:text-blue-300 transition-colors p-1" title="Criar cobrança">
+                  <CreditCard className="w-3.5 h-3.5" />
+                </button>
                 <button
                   onClick={async () => {
                     await fetch(
@@ -1577,7 +1595,15 @@ export default function EditarClientePage() {
 
         {/* ── STEP 3 — Integrações ─────────────────────────────── */}
         {step === 3 && (
-          <IntegracoesStep clientId={clientId} />
+          <IntegracoesStep
+            clientId={clientId}
+            clientType={form.clientType}
+            defaultValue={
+              form.clientType === 'mrr'
+                ? parseFloat(form.contractValue.replace(',', '.')) || undefined
+                : parseFloat(form.totalProjectValue.replace(',', '.')) || undefined
+            }
+          />
         )}
 
         {/* ── STEP 4 — WhatsApp ───────────────────────────────── */}

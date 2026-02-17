@@ -20,6 +20,7 @@ import { useCep } from '@/hooks/use-cep'
 import { mockServices } from '@/lib/mock-data'
 import { ServiceItem } from '@/types'
 import { cn } from '@/lib/utils'
+import { AsaasCobrancaModal } from '@/components/integracoes/asaas-cobranca-modal'
 
 // ── Tipos para import do Asaas ────────────────────────────────────
 interface AsaasCustomerBasic {
@@ -176,6 +177,7 @@ const STEPS = [
   { label: 'Identificação', icon: Building2    },
   { label: 'Endereço',      icon: MapPin       },
   { label: 'Contrato',      icon: FileText     },
+  { label: 'Integrações',   icon: CreditCard   },
   { label: 'WhatsApp',      icon: MessageCircle },
   { label: 'Contexto',      icon: ClipboardList },
 ]
@@ -554,6 +556,61 @@ export default function NovoClientePage() {
   const [importModal, setImportModal] = useState<ImportSource | null>(null)
   const { fetchCep, loading: loadingCep, error: cepError } = useCep()
 
+  // ── Step Integrações ──────────────────────────────────────────
+  type LinkedAsaas = { id: string; name: string }
+  const [asaasLinked, setAsaasLinked] = useState<LinkedAsaas | null>(null)
+  const [showCobranca, setShowCobranca] = useState(false)
+  // Sub-estados do modal de busca inline
+  const [showLinkSearch, setShowLinkSearch] = useState(false)
+  const [linkCustomers, setLinkCustomers] = useState<{ id: string; name: string; cpfCnpj: string | null }[]>([])
+  const [linkSearch, setLinkSearch] = useState('')
+  const [loadingLinkCustomers, setLoadingLinkCustomers] = useState(false)
+  const [creatingAsaas, setCreatingAsaas] = useState(false)
+  const [asaasError, setAsaasError] = useState<string | null>(null)
+
+  async function openLinkSearch() {
+    setShowLinkSearch(true); setLinkSearch(''); setAsaasError(null)
+    setLoadingLinkCustomers(true)
+    const res = await fetch('/api/asaas/customers')
+    if (res.ok) { const d = await res.json(); setLinkCustomers(d.customers ?? []) }
+    setLoadingLinkCustomers(false)
+  }
+
+  async function handleCreateInAsaas() {
+    setCreatingAsaas(true); setAsaasError(null)
+    try {
+      const res = await fetch('/api/asaas/customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name:          form.razaoSocial || form.nomeResumido,
+          cpfCnpj:       form.cnpjCpf,
+          email:         form.email       || undefined,
+          mobilePhone:   form.telefone    || undefined,
+          address:       form.logradouro  || undefined,
+          addressNumber: form.numero      || undefined,
+          complement:    form.complemento || undefined,
+          province:      form.bairro      || undefined,
+          postalCode:    form.cep         || undefined,
+          state:         form.estado      || undefined,
+        }),
+      })
+      const d = await res.json()
+      if (!res.ok) { setAsaasError(d.error ?? 'Erro ao criar no Asaas'); return }
+      setAsaasLinked({ id: d.customer.id, name: d.customer.name })
+    } catch (e) {
+      setAsaasError(e instanceof Error ? e.message : 'Erro inesperado')
+    } finally {
+      setCreatingAsaas(false)
+    }
+  }
+
+  const filteredLinkCustomers = linkCustomers.filter(c => {
+    if (!linkSearch.trim()) return true
+    const q = linkSearch.toLowerCase()
+    return c.name.toLowerCase().includes(q) || (c.cpfCnpj ?? '').includes(q.replace(/\D/g, ''))
+  })
+
   const set = useCallback((field: keyof FormData, value: unknown) => {
     setForm(prev => ({ ...prev, [field]: value }))
   }, [])
@@ -730,6 +787,21 @@ export default function NovoClientePage() {
         return
       }
 
+      const clientData = await res.json()
+      const newClientId = clientData.client?.id
+
+      // Se o usuário vinculou/criou um customer no Asaas, registra a integração
+      if (newClientId && asaasLinked) {
+        await fetch(`/api/asaas/sync/${newClientId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            asaas_customer_id: asaasLinked.id,
+            customer_name:     asaasLinked.name,
+          }),
+        })
+      }
+
       router.push('/clientes')
     } catch (err) {
       alert('Erro inesperado: ' + (err instanceof Error ? err.message : String(err)))
@@ -749,9 +821,11 @@ export default function NovoClientePage() {
         ? form.contractValue && form.contractMonths
         : form.totalProjectValue && form.projectDeadlineDays
     )),
-    // Step 3 — WhatsApp (sempre pode avançar — é opcional)
+    // Step 3 — Integrações (opcional — pode pular)
     true,
-    // Step 4 — Contexto
+    // Step 4 — WhatsApp (opcional)
+    true,
+    // Step 5 — Contexto
     true,
   ]
 
@@ -1284,13 +1358,179 @@ export default function NovoClientePage() {
           </div>
         )}
 
-        {/* ── STEP 3 — WhatsApp ───────────────────────────────── */}
+        {/* ── STEP 3 — Integrações ─────────────────────────────── */}
         {step === 3 && (
+          <div className="space-y-4">
+
+            {/* Modal de busca inline */}
+            {showLinkSearch && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[80vh]">
+                  <div className="flex items-center justify-between p-5 border-b border-zinc-800">
+                    <div>
+                      <p className="text-zinc-100 font-semibold text-sm">Vincular conta Asaas existente</p>
+                      <p className="text-zinc-500 text-xs">Busque pelo nome ou CNPJ do cliente</p>
+                    </div>
+                    <button onClick={() => setShowLinkSearch(false)} className="text-zinc-500 hover:text-zinc-300">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <div className="p-4 border-b border-zinc-800">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                      <input value={linkSearch} onChange={e => setLinkSearch(e.target.value)}
+                        placeholder="Buscar por nome ou CNPJ..."
+                        className="w-full pl-9 pr-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 placeholder:text-zinc-600 text-sm focus:outline-none focus:border-blue-500" />
+                    </div>
+                  </div>
+                  <div className="overflow-y-auto flex-1 p-2">
+                    {loadingLinkCustomers ? (
+                      <div className="flex items-center justify-center py-12">
+                        <Loader2 className="w-5 h-5 animate-spin text-zinc-500" />
+                      </div>
+                    ) : filteredLinkCustomers.slice(0, 50).map(c => (
+                      <button key={c.id} onClick={() => { setAsaasLinked({ id: c.id, name: c.name }); setShowLinkSearch(false) }}
+                        className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-zinc-800 transition-colors">
+                        <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center shrink-0">
+                          <CreditCard className="w-4 h-4 text-blue-400" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-zinc-200 text-sm font-medium truncate">{c.name}</p>
+                          {c.cpfCnpj && <p className="text-zinc-500 text-xs">{c.cpfCnpj}</p>}
+                        </div>
+                      </button>
+                    ))}
+                    {!loadingLinkCustomers && filteredLinkCustomers.length === 0 && (
+                      <p className="text-zinc-600 text-sm text-center py-8">Nenhum customer encontrado</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Modal de cobrança */}
+            {showCobranca && asaasLinked && (
+              <AsaasCobrancaModal
+                customerId={asaasLinked.id}
+                customerName={asaasLinked.name}
+                clientType={form.clientType}
+                defaultValue={
+                  form.clientType === 'mrr'
+                    ? parseFloat(form.contractValue.replace(',', '.')) || undefined
+                    : parseFloat(form.totalProjectValue.replace(',', '.')) || undefined
+                }
+                onClose={() => setShowCobranca(false)}
+              />
+            )}
+
+            {/* Card Asaas */}
+            <div className="flex items-start gap-3 bg-blue-500/5 border border-blue-500/20 rounded-xl p-4">
+              <CreditCard className="w-4 h-4 text-blue-400 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-blue-300 text-sm font-medium">Por que integrar agora?</p>
+                <p className="text-zinc-400 text-xs mt-1 leading-relaxed">
+                  Vincular ao Asaas permite monitorar o status de pagamento automaticamente,
+                  criar cobranças direto pelo Zero Churn e calcular o health score financeiro do cliente.
+                </p>
+              </div>
+            </div>
+
+            <Card className="bg-zinc-900 border-zinc-800">
+              <CardContent className="p-5 space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                    <CreditCard className="w-5 h-5 text-blue-400" />
+                  </div>
+                  <div>
+                    <p className="text-zinc-200 font-semibold text-sm">Asaas</p>
+                    <p className="text-zinc-500 text-xs">Plataforma de pagamentos</p>
+                  </div>
+                </div>
+
+                {!asaasLinked ? (
+                  <div className="space-y-3">
+                    {asaasError && (
+                      <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                        <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                        <p className="text-red-300 text-xs">{asaasError}</p>
+                      </div>
+                    )}
+                    <p className="text-zinc-400 text-sm">Este cliente ainda não está vinculado ao Asaas. Escolha uma opção:</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Button variant="outline" onClick={handleCreateInAsaas} disabled={creatingAsaas}
+                        className="border-blue-700/40 text-blue-400 hover:bg-blue-500/10 hover:text-blue-300 gap-2 h-auto py-3 flex-col items-start">
+                        <div className="flex items-center gap-2">
+                          {creatingAsaas ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                          <span className="font-medium">Criar no Asaas</span>
+                        </div>
+                        <span className="text-xs text-zinc-500 font-normal text-left">
+                          Cria um novo customer usando os dados preenchidos acima
+                        </span>
+                      </Button>
+                      <Button variant="outline" onClick={openLinkSearch}
+                        className="border-zinc-700 text-zinc-400 hover:text-white gap-2 h-auto py-3 flex-col items-start">
+                        <div className="flex items-center gap-2">
+                          <Search className="w-4 h-4" />
+                          <span className="font-medium">Vincular existente</span>
+                        </div>
+                        <span className="text-xs text-zinc-500 font-normal text-left">
+                          Selecione um customer que já existe na sua conta Asaas
+                        </span>
+                      </Button>
+                    </div>
+                    <p className="text-zinc-600 text-xs text-center">Você também pode configurar integrações depois no perfil do cliente</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-4 py-3">
+                      <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-emerald-300 text-sm font-medium">Vinculado com sucesso</p>
+                        <p className="text-zinc-400 text-xs truncate">{asaasLinked.name}</p>
+                      </div>
+                      <button onClick={() => setAsaasLinked(null)}
+                        className="text-zinc-600 hover:text-zinc-400 transition-colors shrink-0">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <Button variant="outline" onClick={() => setShowCobranca(true)}
+                      className="w-full border-blue-700/40 text-blue-400 hover:bg-blue-500/10 gap-2">
+                      <CreditCard className="w-4 h-4" />
+                      Criar cobrança no Asaas
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Dom Pagamentos — Em breve */}
+            <Card className="bg-zinc-900/50 border-zinc-800 opacity-60">
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-zinc-800 flex items-center justify-center">
+                      <CreditCard className="w-5 h-5 text-zinc-500" />
+                    </div>
+                    <div>
+                      <p className="text-zinc-400 font-semibold text-sm">Dom Pagamentos</p>
+                      <p className="text-zinc-600 text-xs">Integração em breve</p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="border-zinc-700 text-zinc-500 text-xs">Em breve</Badge>
+                </div>
+              </CardContent>
+            </Card>
+
+          </div>
+        )}
+
+        {/* ── STEP 4 — WhatsApp ───────────────────────────────── */}
+        {step === 4 && (
           <WhatsAppStep form={form} setForm={setForm} />
         )}
 
-        {/* ── STEP 4 — Contexto & Briefing ────────────────────── */}
-        {step === 4 && (
+        {/* ── STEP 5 — Contexto & Briefing ────────────────────── */}
+        {step === 5 && (
           <div className="space-y-4">
 
             {/* Info do contexto */}
