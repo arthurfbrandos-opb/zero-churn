@@ -135,6 +135,17 @@ function maskCep(v: string) {
   return v.replace(/\D/g, '').slice(0, 8).replace(/(\d{5})(\d{3})/, '$1-$2')
 }
 
+/** #9 — parse robusto: aceita "1.500,00", "1500.00", "1500", "R$ 1.500,00" */
+function parseMoney(v: string): number {
+  const s = String(v).trim().replace(/[R$\s]/g, '')
+  // Formato BR: "1.500,00" → "1500.00"
+  if (/^\d{1,3}(\.\d{3})*(,\d{1,2})?$/.test(s)) {
+    return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0
+  }
+  // Formato US ou plain: "1500.00" / "1500"
+  return parseFloat(s.replace(',', '.')) || 0
+}
+
 function calcEndDate(startDate: string, months: string) {
   if (!months) return ''
   const base = startDate ? new Date(startDate + 'T00:00:00') : new Date()
@@ -742,7 +753,7 @@ export default function NovoClientePage() {
 
   // Totais de parcelas customizadas
   const totalParcelas = form.parcelas.reduce((s, p) => s + parseFloat(p.valor || '0'), 0)
-  const totalProjeto = parseFloat(form.totalProjectValue.replace(',', '.') || '0')
+  const totalProjeto = parseMoney(form.totalProjectValue)
   const diffParcelas = totalProjeto - totalParcelas
 
   async function handleSubmit() {
@@ -766,8 +777,8 @@ export default function NovoClientePage() {
         cidade:            form.cidade || null,
         estado:            form.estado || null,
         client_type:       form.clientType,
-        mrr_value:         form.clientType === 'mrr' ? parseFloat(form.contractValue.replace(',', '.') || '0') : null,
-        tcv_value:         form.clientType === 'tcv' ? parseFloat(form.totalProjectValue.replace(',', '.') || '0') : null,
+        mrr_value:         form.clientType === 'mrr' ? parseMoney(form.contractValue) : null,
+        tcv_value:         form.clientType === 'tcv' ? parseMoney(form.totalProjectValue) : null,
         contract_start:    form.contractStartDate || new Date().toISOString().slice(0, 10),
         contract_end:      null,
         whatsapp_group_id: form.whatsappGroupLink || null,
@@ -783,7 +794,12 @@ export default function NovoClientePage() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        alert('Erro ao salvar: ' + (data.error ?? `HTTP ${res.status}`))
+        if (res.status === 409 && data.existingId) {
+          const ir = confirm(`${data.error}\n\nDeseja abrir o cadastro deste cliente?`)
+          if (ir) router.push(`/clientes/${data.existingId}`)
+        } else {
+          alert('Erro ao salvar: ' + (data.error ?? `HTTP ${res.status}`))
+        }
         return
       }
 
@@ -827,11 +843,11 @@ export default function NovoClientePage() {
     !!(form.razaoSocial && form.nomeResumido && form.cnpjCpf && form.nomeDecisor && form.telefone && form.email && form.segment),
     // Step 1 — Endereço (numero e complemento são opcionais — Asaas frequentemente retorna null)
     !!(form.cep && form.logradouro && form.bairro && form.cidade && form.estado),
-    // Step 2 — Contrato
-    !!(form.serviceId && form.entregaveisIncluidos.length > 0 && (
+    // Step 2 — Contrato (#6 valor>0, #7 data obrigatória, #9 parse robusto)
+    !!(form.serviceId && form.entregaveisIncluidos.length > 0 && form.contractStartDate && (
       form.clientType === 'mrr'
-        ? form.contractValue && form.contractMonths
-        : form.totalProjectValue && form.projectDeadlineDays
+        ? parseFloat(String(form.contractValue).replace(',', '.') || '0') > 0 && form.contractMonths
+        : parseFloat(String(form.totalProjectValue).replace(',', '.') || '0') > 0 && form.projectDeadlineDays
     )),
     // Step 3 — Integrações (opcional — pode pular)
     true,
@@ -1428,8 +1444,8 @@ export default function NovoClientePage() {
                 clientType={form.clientType}
                 defaultValue={
                   form.clientType === 'mrr'
-                    ? parseFloat(form.contractValue.replace(',', '.')) || undefined
-                    : parseFloat(form.totalProjectValue.replace(',', '.')) || undefined
+                    ? parseMoney(form.contractValue) || undefined
+                    : parseMoney(form.totalProjectValue) || undefined
                 }
                 onClose={() => setShowCobranca(false)}
               />

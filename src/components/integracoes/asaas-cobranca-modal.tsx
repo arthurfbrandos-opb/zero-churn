@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { X, CreditCard, CheckCircle2, ExternalLink, Copy, Check, AlertCircle, Info } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { X, CreditCard, CheckCircle2, ExternalLink, Copy, Check, AlertCircle, Info, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 type BillingType = 'BOLETO' | 'PIX' | 'CREDIT_CARD'
@@ -43,10 +43,29 @@ export function AsaasCobrancaModal({ customerId, customerName, clientType, defau
   })
   const [cycle, setCycle]     = useState<Cycle>('MONTHLY')
   const [description, setDesc] = useState('')
-  const [loading, setLoading]  = useState(false)
-  const [error, setError]      = useState<string | null>(null)
-  const [result, setResult]    = useState<{ url?: string | null; id: string; isCreditCard?: boolean } | null>(null)
-  const [copied, setCopied]    = useState(false)
+  const [loading, setLoading]   = useState(false)
+  const [error, setError]       = useState<string | null>(null)
+  const [result, setResult]     = useState<{ url?: string | null; id: string; isCreditCard?: boolean } | null>(null)
+  const [copied, setCopied]     = useState(false)
+
+  // #11 — verificação de assinatura duplicada
+  const [existingSubs, setExistingSubs]         = useState<{ id: string; value: number; cycle: string }[]>([])
+  const [checkingSubs, setCheckingSubs]         = useState(false)
+  const [subsChecked, setSubsChecked]           = useState(false)
+  const [confirmDuplicate, setConfirmDuplicate] = useState(false)
+
+  // Quando muda para modo recorrente, verifica assinaturas existentes
+  useEffect(() => {
+    if (mode !== 'recorrente' || subsChecked || !customerId) return
+    setCheckingSubs(true)
+    fetch(`/api/asaas/subscriptions?customer=${customerId}`)
+      .then(r => r.json())
+      .then(d => { setExistingSubs(d.subscriptions ?? []); setSubsChecked(true) })
+      .catch(() => setSubsChecked(true))
+      .finally(() => setCheckingSubs(false))
+  }, [mode, customerId, subsChecked])
+
+  const hasDuplicateSub = mode === 'recorrente' && existingSubs.length > 0 && !confirmDuplicate
 
   // Fix #3 — data mínima = hoje
   const today = new Date().toISOString().slice(0, 10)
@@ -297,6 +316,41 @@ export function AsaasCobrancaModal({ customerId, customerName, clientType, defau
             />
           </div>
 
+          {/* #11 — Aviso de assinatura duplicada */}
+          {mode === 'recorrente' && (
+            checkingSubs ? (
+              <div className="flex items-center gap-2 text-zinc-500 text-xs">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                Verificando assinaturas existentes…
+              </div>
+            ) : hasDuplicateSub ? (
+              <div className="space-y-2">
+                <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2.5">
+                  <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-amber-300 text-xs font-medium">
+                      {existingSubs.length} assinatura{existingSubs.length > 1 ? 's' : ''} ativa{existingSubs.length > 1 ? 's' : ''} encontrada{existingSubs.length > 1 ? 's' : ''}
+                    </p>
+                    <ul className="mt-1 space-y-0.5">
+                      {existingSubs.map(s => (
+                        <li key={s.id} className="text-zinc-400 text-xs">
+                          R$ {s.value?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · {
+                            ({ MONTHLY:'Mensal', QUARTERLY:'Trimestral', SEMIANNUALLY:'Semestral', YEARLY:'Anual' } as Record<string,string>)[s.cycle] ?? s.cycle
+                          }
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      onClick={() => setConfirmDuplicate(true)}
+                      className="mt-2 text-amber-400 text-xs underline hover:text-amber-300">
+                      Criar mesmo assim
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null
+          )}
+
           {error && (
             <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
               <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
@@ -311,8 +365,10 @@ export function AsaasCobrancaModal({ customerId, customerName, clientType, defau
             className="flex-1 border-zinc-700 text-zinc-400 hover:text-white">
             Cancelar
           </Button>
-          <Button onClick={handleSubmit} disabled={loading || !parsedValue}
-            className="flex-1 bg-blue-600 hover:bg-blue-500 text-white">
+          <Button
+            onClick={handleSubmit}
+            disabled={loading || !parsedValue || hasDuplicateSub}
+            className="flex-1 bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-40">
             {loading ? 'Criando…' : mode === 'unica' ? 'Criar cobrança' : 'Criar assinatura'}
           </Button>
         </div>

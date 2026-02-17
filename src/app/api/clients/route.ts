@@ -65,6 +65,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Nome e tipo de cliente são obrigatórios' }, { status: 400 })
     }
 
+    // #4 — Verificar CNPJ duplicado dentro da mesma agência
+    if (cnpj) {
+      const cnpjLimpo = String(cnpj).replace(/\D/g, '')
+      if (cnpjLimpo.length >= 11) {
+        const { data: dup } = await supabase
+          .from('clients')
+          .select('id, name')
+          .eq('agency_id', agencyUser.agency_id)
+          .eq('cnpj', cnpjLimpo)
+          .maybeSingle()
+        if (dup) {
+          return NextResponse.json(
+            { error: `Já existe um cliente com este CNPJ: ${dup.name}`, existingId: dup.id },
+            { status: 409 }
+          )
+        }
+      }
+    }
+
     const { data: client, error } = await supabase
       .from('clients')
       .insert({

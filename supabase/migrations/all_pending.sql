@@ -36,3 +36,8 @@ alter table clients
   add column if not exists bairro      text,
   add column if not exists cidade      text,
   add column if not exists estado      text;
+
+-- Migration 006: CNPJ único por agência (partial index — só quando não nulo/vazio)
+CREATE UNIQUE INDEX IF NOT EXISTS clients_agency_cnpj_unique
+  ON clients (agency_id, cnpj)
+  WHERE cnpj IS NOT NULL AND cnpj != '';

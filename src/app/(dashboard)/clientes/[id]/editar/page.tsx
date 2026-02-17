@@ -132,6 +132,14 @@ function maskPhone(v: string) {
   return d.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3')
 }
 
+/** #9 — parse robusto de valor monetário */
+function parseMoney(v: string): number {
+  const s = String(v).trim().replace(/[R$\s]/g, '')
+  if (/^\d{1,3}(\.\d{3})*(,\d{1,2})?$/.test(s))
+    return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0
+  return parseFloat(s.replace(',', '.')) || 0
+}
+
 function maskCep(v: string) {
   return v.replace(/\D/g, '').slice(0, 8).replace(/(\d{5})(\d{3})/, '$1-$2')
 }
@@ -1010,7 +1018,7 @@ export default function EditarClientePage() {
 
   // Totais de parcelas customizadas
   const totalParcelas = form.parcelas.reduce((s, p) => s + parseFloat(p.valor || '0'), 0)
-  const totalProjeto = parseFloat(form.totalProjectValue.replace(',', '.') || '0')
+  const totalProjeto = parseMoney(form.totalProjectValue)
   const diffParcelas = totalProjeto - totalParcelas
 
   async function handleSubmit() {
@@ -1034,8 +1042,8 @@ export default function EditarClientePage() {
         cidade:            form.cidade || null,
         estado:            form.estado || null,
         client_type:       form.clientType,
-        mrr_value:         form.clientType === 'mrr' ? parseFloat(form.contractValue.replace(',', '.') || '0') : null,
-        tcv_value:         form.clientType === 'tcv' ? parseFloat(form.totalProjectValue.replace(',', '.') || '0') : null,
+        mrr_value:         form.clientType === 'mrr' ? parseMoney(form.contractValue) : null,
+        tcv_value:         form.clientType === 'tcv' ? parseMoney(form.totalProjectValue) : null,
         contract_start:    form.contractStartDate || null,
         whatsapp_group_id: form.whatsappGroupLink || null,
         observations:      form.notes || null,
@@ -1083,11 +1091,11 @@ export default function EditarClientePage() {
     !!(form.razaoSocial && form.nomeResumido && form.cnpjCpf && form.nomeDecisor && form.telefone && form.email && form.segment),
     // Step 1 — Endereço (numero e complemento são opcionais)
     !!(form.cep && form.logradouro && form.bairro && form.cidade && form.estado),
-    // Step 2 — Contrato
-    !!(form.serviceId && form.entregaveisIncluidos.length > 0 && (
+    // Step 2 — Contrato (#6 valor>0, #7 data obrigatória, #9 parse robusto)
+    !!(form.serviceId && form.entregaveisIncluidos.length > 0 && form.contractStartDate && (
       form.clientType === 'mrr'
-        ? form.contractValue && form.contractMonths
-        : form.totalProjectValue && form.projectDeadlineDays
+        ? parseFloat(String(form.contractValue).replace(',', '.') || '0') > 0 && form.contractMonths
+        : parseFloat(String(form.totalProjectValue).replace(',', '.') || '0') > 0 && form.projectDeadlineDays
     )),
     // Step 3 — Integrações (sempre pode avançar — é opcional)
     true,
@@ -1622,8 +1630,8 @@ export default function EditarClientePage() {
             clientType={form.clientType}
             defaultValue={
               form.clientType === 'mrr'
-                ? parseFloat(form.contractValue.replace(',', '.')) || undefined
-                : parseFloat(form.totalProjectValue.replace(',', '.')) || undefined
+                ? parseMoney(form.contractValue) || undefined
+                : parseMoney(form.totalProjectValue) || undefined
             }
           />
         )}
