@@ -138,12 +138,25 @@ function maskCep(v: string) {
 /** #9 — parse robusto: aceita "1.500,00", "1500.00", "1500", "R$ 1.500,00" */
 function parseMoney(v: string): number {
   const s = String(v).trim().replace(/[R$\s]/g, '')
-  // Formato BR: "1.500,00" → "1500.00"
   if (/^\d{1,3}(\.\d{3})*(,\d{1,2})?$/.test(s)) {
     return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0
   }
-  // Formato US ou plain: "1500.00" / "1500"
   return parseFloat(s.replace(',', '.')) || 0
+}
+
+function formatMoney(v: string): string {
+  const n = parseMoney(v)
+  if (!n) return v
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+/** Valida data ISO (YYYY-MM-DD): deve ser real e entre 2000 e 2100 */
+function isValidDate(iso: string): boolean {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false
+  const d = new Date(iso + 'T12:00:00')
+  if (isNaN(d.getTime())) return false
+  const y = d.getFullYear()
+  return y >= 2000 && y <= 2100
 }
 
 function calcEndDate(startDate: string, months: string) {
@@ -863,12 +876,17 @@ export default function NovoClientePage() {
     !!(form.razaoSocial && form.nomeResumido && form.cnpjCpf && form.nomeDecisor && form.telefone && form.email && form.segment),
     // Step 1 — Endereço (numero e complemento são opcionais — Asaas frequentemente retorna null)
     !!(form.cep && form.logradouro && form.bairro && form.cidade && form.estado),
-    // Step 2 — Contrato (#6 valor>0, #7 data obrigatória, #9 parse robusto)
-    !!(form.serviceId && form.entregaveisIncluidos.length > 0 && form.contractStartDate && (
-      form.clientType === 'mrr'
-        ? parseFloat(String(form.contractValue).replace(',', '.') || '0') > 0 && form.contractMonths
-        : parseFloat(String(form.totalProjectValue).replace(',', '.') || '0') > 0 && form.projectDeadlineDays
-    )),
+    // Step 2 — Contrato (data válida + valor > 0)
+    !!(form.serviceId && form.entregaveisIncluidos.length > 0
+      && isValidDate(form.contractStartDate)
+      && (
+        form.clientType === 'mrr'
+          ? parseMoney(form.contractValue) > 0 && parseInt(form.contractMonths) > 0
+          : parseMoney(form.totalProjectValue) > 0 && parseInt(form.projectDeadlineDays) > 0
+      )
+      // validação da taxa de implementação: se ativada, valor e data obrigatórios
+      && (!form.hasImplementationFee || (parseMoney(form.implementationFeeValue) > 0 && isValidDate(form.implementationFeeDate)))
+    ),
     // Step 3 — Integrações (opcional — pode pular)
     true,
     // Step 4 — WhatsApp (opcional)
@@ -1192,7 +1210,10 @@ export default function NovoClientePage() {
                     <Field label="Data de início do contrato">
                       <Input type="date" value={form.contractStartDate}
                         onChange={e => set('contractStartDate', e.target.value)}
-                        className={inputCls} />
+                        className={cn(inputCls, form.contractStartDate && !isValidDate(form.contractStartDate) ? 'border-red-500' : '')} />
+                      {form.contractStartDate && !isValidDate(form.contractStartDate) && (
+                        <p className="text-red-400 text-xs mt-1">Data inválida</p>
+                      )}
                     </Field>
 
                     <Field label="Prazo do contrato (meses)">
@@ -1202,20 +1223,26 @@ export default function NovoClientePage() {
                     </Field>
 
                     <div className="col-span-2">
-                      <Field label="Valor da mensalidade (R$)">
-                        <Input value={form.contractValue} onChange={e => set('contractValue', e.target.value)}
-                          placeholder="3.500,00" className={inputCls} />
+                      <Field label="Valor da mensalidade">
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm select-none pointer-events-none">R$</span>
+                          <Input
+                            value={form.contractValue}
+                            onChange={e => set('contractValue', e.target.value)}
+                            onBlur={e => set('contractValue', formatMoney(e.target.value))}
+                            placeholder="3.500,00"
+                            className={cn(inputCls, 'pl-9 text-right')}
+                          />
+                        </div>
                       </Field>
                     </div>
                   </div>
 
-                  {form.contractMonths && (
+                  {form.contractMonths && isValidDate(form.contractStartDate) && (
                     <p className="text-zinc-500 text-xs">
                       Vigência:{' '}
                       <span className="text-zinc-300">
-                        {form.contractStartDate
-                          ? new Date(form.contractStartDate + 'T00:00:00').toLocaleDateString('pt-BR')
-                          : '—'}
+                        {new Date(form.contractStartDate + 'T00:00:00').toLocaleDateString('pt-BR')}
                         {' até '}
                         {calcEndDate(form.contractStartDate, form.contractMonths)}
                       </span>
@@ -1230,15 +1257,25 @@ export default function NovoClientePage() {
                     </div>
                     {form.hasImplementationFee && (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <Field label="Valor da implementação (R$)">
-                          <Input value={form.implementationFeeValue}
-                            onChange={e => set('implementationFeeValue', e.target.value)}
-                            placeholder="2.000,00" className={inputCls} />
+                        <Field label="Valor da implementação">
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm select-none pointer-events-none">R$</span>
+                            <Input
+                              value={form.implementationFeeValue}
+                              onChange={e => set('implementationFeeValue', e.target.value)}
+                              onBlur={e => set('implementationFeeValue', formatMoney(e.target.value))}
+                              placeholder="2.000,00"
+                              className={cn(inputCls, 'pl-9 text-right')}
+                            />
+                          </div>
                         </Field>
                         <Field label="Data de pagamento">
                           <Input type="date" value={form.implementationFeeDate}
                             onChange={e => set('implementationFeeDate', e.target.value)}
-                            className={inputCls} />
+                            className={cn(inputCls, !form.implementationFeeDate || isValidDate(form.implementationFeeDate) ? '' : 'border-red-500')} />
+                          {form.implementationFeeDate && !isValidDate(form.implementationFeeDate) && (
+                            <p className="text-red-400 text-xs mt-1">Data inválida</p>
+                          )}
                         </Field>
                       </div>
                     )}
@@ -1257,7 +1294,10 @@ export default function NovoClientePage() {
                     <Field label="Data de início do projeto">
                       <Input type="date" value={form.contractStartDate}
                         onChange={e => set('contractStartDate', e.target.value)}
-                        className={inputCls} />
+                        className={cn(inputCls, form.contractStartDate && !isValidDate(form.contractStartDate) ? 'border-red-500' : '')} />
+                      {form.contractStartDate && !isValidDate(form.contractStartDate) && (
+                        <p className="text-red-400 text-xs mt-1">Data inválida</p>
+                      )}
                     </Field>
 
                     <Field label="Prazo do projeto (dias)">
@@ -1267,15 +1307,22 @@ export default function NovoClientePage() {
                     </Field>
 
                     <div className="col-span-2">
-                      <Field label="Valor total do projeto (R$)">
-                        <Input value={form.totalProjectValue}
-                          onChange={e => set('totalProjectValue', e.target.value)}
-                          placeholder="18.000,00" className={inputCls} />
+                      <Field label="Valor total do projeto">
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm select-none pointer-events-none">R$</span>
+                          <Input
+                            value={form.totalProjectValue}
+                            onChange={e => set('totalProjectValue', e.target.value)}
+                            onBlur={e => set('totalProjectValue', formatMoney(e.target.value))}
+                            placeholder="18.000,00"
+                            className={cn(inputCls, 'pl-9 text-right')}
+                          />
+                        </div>
                       </Field>
                     </div>
                   </div>
 
-                  {form.contractStartDate && form.projectDeadlineDays && (
+                  {isValidDate(form.contractStartDate) && form.projectDeadlineDays && (
                     <p className="text-zinc-500 text-xs">
                       Entrega prevista:{' '}
                       <span className="text-zinc-300">
@@ -1383,10 +1430,15 @@ export default function NovoClientePage() {
                                     onChange={e => updateParcela(p.id, 'vencimento', e.target.value)}
                                     className={cn(inputCls, 'h-8 text-xs')} />
                                 </div>
-                                <div className="flex-1">
-                                  <Input placeholder="R$ valor" value={p.valor}
+                                <div className="flex-1 relative">
+                                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500 text-xs select-none pointer-events-none">R$</span>
+                                  <Input
+                                    placeholder="0,00"
+                                    value={p.valor}
                                     onChange={e => updateParcela(p.id, 'valor', e.target.value)}
-                                    className={cn(inputCls, 'h-8 text-xs')} />
+                                    onBlur={e => updateParcela(p.id, 'valor', formatMoney(e.target.value))}
+                                    className={cn(inputCls, 'h-8 text-xs pl-8 text-right')}
+                                  />
                                 </div>
                                 <Badge variant="outline" className="text-zinc-500 border-zinc-600 text-xs shrink-0">A vencer</Badge>
                                 <button onClick={() => removeParcela(p.id)}
