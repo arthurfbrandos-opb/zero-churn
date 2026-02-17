@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import Link from 'next/link'
@@ -23,10 +23,10 @@ import { useAnalysisCredits } from '@/hooks/use-analysis-credits'
 import { getNpsClassification, isInObservation } from '@/lib/nps-utils'
 import { ChurnModal, CHURN_CATEGORIES } from '@/components/dashboard/churn-modal'
 import { useClient } from '@/hooks/use-client'
-import { Loader2 } from 'lucide-react'
-import { AsaasLinkModal } from '@/components/integracoes/asaas-link-modal'
+import { Loader2, Plus, Search, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { mockServices } from '@/lib/mock-data'
+import { AsaasCobrancaModal } from '@/components/integracoes/asaas-cobranca-modal'
 
 // ── Helpers ───────────────────────────────────────────────────────
 function fmt(v: number) {
@@ -43,6 +43,7 @@ function daysTo(d: string) {
 const TABS = [
   { id: 'visao-geral',  label: 'Visão Geral',  icon: Activity  },
   { id: 'cadastro',     label: 'Cadastro',     icon: Building2 },
+  { id: 'financeiro',   label: 'Financeiro',   icon: CreditCard },
   { id: 'integracoes',  label: 'Integrações',  icon: Plug      },
   { id: 'formularios',  label: 'Formulários',  icon: FileText  },
   { id: 'historico',    label: 'Histórico',    icon: History   },
@@ -526,98 +527,536 @@ function TabCadastro({ client }: { client: Client }) {
 // ─────────────────────────────────────────────────────────────────
 // TAB 3 — INTEGRAÇÕES
 // ─────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// TAB — FINANCEIRO
+// ─────────────────────────────────────────────────────────────────
+
+type PaymentWithAccount = {
+  id: string; value: number; dueDate: string; paymentDate: string | null
+  status: string; billingType: string; description: string | null
+  invoiceUrl: string | null; _customerName: string | null
+}
+type SubWithAccount = {
+  id: string; value: number; cycle: string; nextDueDate: string
+  status: string; description: string | null; _customerName: string | null
+}
+
+const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
+  RECEIVED:          { label: 'Recebido',    cls: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30' },
+  CONFIRMED:         { label: 'Confirmado',  cls: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30' },
+  RECEIVED_IN_CASH:  { label: 'Recebido',   cls: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30' },
+  PENDING:           { label: 'Pendente',    cls: 'text-blue-400 bg-blue-500/10 border-blue-500/30'         },
+  OVERDUE:           { label: 'Vencido',     cls: 'text-red-400 bg-red-500/10 border-red-500/30'            },
+  REFUNDED:          { label: 'Estornado',   cls: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30'   },
+  REFUND_REQUESTED:  { label: 'Estorno req.', cls: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30' },
+  CHARGEBACK_REQUESTED: { label: 'Chargeback', cls: 'text-orange-400 bg-orange-500/10 border-orange-500/30' },
+}
+
+const BILLING_LABEL: Record<string, string> = {
+  BOLETO: 'Boleto', PIX: 'PIX', CREDIT_CARD: 'Cartão', UNDEFINED: 'Boleto / PIX',
+}
+
+const CYCLE_LABEL: Record<string, string> = {
+  MONTHLY: 'Mensal', QUARTERLY: 'Trimestral', SEMIANNUALLY: 'Semestral', YEARLY: 'Anual',
+}
+
+function TabFinanceiro({ client }: { client: Client }) {
+  const [payments,      setPayments]      = useState<PaymentWithAccount[]>([])
+  const [subscriptions, setSubscriptions] = useState<SubWithAccount[]>([])
+  const [accounts,      setAccounts]      = useState<{ id: string; name: string }[]>([])
+  const [loading,       setLoading]       = useState(true)
+  const [error,         setError]         = useState<string | null>(null)
+  const [showAll,       setShowAll]       = useState(false)
+  const [cobrancaTarget, setCobrancaTarget] = useState<{ id: string; name: string } | null>(null)
+
+  useEffect(() => {
+    setLoading(true)
+    fetch(`/api/asaas/payments?clientId=${client.id}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) { setError(d.error); return }
+        setPayments(d.payments ?? [])
+        setSubscriptions(d.subscriptions ?? [])
+        setAccounts(d.accounts ?? [])
+      })
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false))
+  }, [client.id])
+
+  const isPaid    = (s: string) => ['RECEIVED','CONFIRMED','RECEIVED_IN_CASH'].includes(s)
+  const isOverdue = (s: string) => s === 'OVERDUE'
+  const isPending = (s: string) => s === 'PENDING'
+
+  const overdue  = payments.filter(p => isOverdue(p.status))
+  const pending  = payments.filter(p => isPending(p.status)).sort((a,b) => a.dueDate.localeCompare(b.dueDate))
+  const history  = payments.filter(p => isPaid(p.status))
+  const historyVisible = showAll ? history : history.slice(0, 10)
+
+  const clientDefaultValue = client.clientType === 'mrr'
+    ? (client.mrrValue ?? client.contractValue)
+    : (client.tcvValue ?? client.totalProjectValue)
+
+  function PayRow({ p }: { p: PaymentWithAccount }) {
+    const sc = STATUS_LABEL[p.status] ?? { label: p.status, cls: 'text-zinc-500 bg-zinc-800 border-zinc-700' }
+    return (
+      <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${
+        isOverdue(p.status) ? 'bg-red-500/5 border-red-500/20' :
+        isPending(p.status) ? 'bg-blue-500/5 border-blue-500/15' :
+        'bg-zinc-800/40 border-zinc-700/50'
+      }`}>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-zinc-200 text-sm font-semibold">
+              {p.value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+            </span>
+            <Badge variant="outline" className={`text-xs px-1.5 py-0 ${sc.cls}`}>{sc.label}</Badge>
+            <span className="text-zinc-600 text-xs">{BILLING_LABEL[p.billingType] ?? p.billingType}</span>
+          </div>
+          {p.description && <p className="text-zinc-500 text-xs mt-0.5 truncate">{p.description}</p>}
+          <div className="flex items-center gap-3 mt-1 text-zinc-500 text-xs">
+            <span>Venc. {fmtDate(p.dueDate)}</span>
+            {p.paymentDate && <span className="text-emerald-500">Pago {fmtDate(p.paymentDate)}</span>}
+            {p._customerName && accounts.length > 1 && <span className="text-zinc-600 truncate max-w-[120px]">{p._customerName}</span>}
+          </div>
+        </div>
+        {p.invoiceUrl && (isPending(p.status) || isOverdue(p.status)) && (
+          <a href={p.invoiceUrl} target="_blank" rel="noreferrer"
+            className="p-1.5 text-zinc-500 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors shrink-0"
+            title="Ver boleto/link">
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        )}
+      </div>
+    )
+  }
+
+  if (loading) return (
+    <div className="flex items-center justify-center py-16">
+      <Loader2 className="w-5 h-5 animate-spin text-zinc-500" />
+    </div>
+  )
+
+  if (error) return (
+    <Card className="bg-zinc-900 border-zinc-800">
+      <CardContent className="p-6 text-center">
+        <p className="text-zinc-500 text-sm">{error}</p>
+      </CardContent>
+    </Card>
+  )
+
+  if (accounts.length === 0) return (
+    <Card className="bg-zinc-900 border-zinc-800">
+      <CardContent className="p-8 flex flex-col items-center gap-3 text-center">
+        <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center">
+          <CreditCard className="w-6 h-6 text-zinc-600" />
+        </div>
+        <p className="text-zinc-400 text-sm font-medium">Nenhuma conta Asaas vinculada</p>
+        <p className="text-zinc-600 text-xs">Vincule uma conta na aba Integrações para visualizar o histórico financeiro.</p>
+      </CardContent>
+    </Card>
+  )
+
+  return (
+    <div className="space-y-5">
+      {/* Modal cobrança */}
+      {cobrancaTarget && (
+        <AsaasCobrancaModal
+          customerId={cobrancaTarget.id}
+          customerName={cobrancaTarget.name}
+          clientType={client.clientType ?? 'mrr'}
+          defaultValue={clientDefaultValue}
+          contractMonths={client.contractMonths}
+          contractStartDate={client.contractStartDate}
+          onClose={() => setCobrancaTarget(null)}
+        />
+      )}
+
+      {/* Assinaturas ativas */}
+      {subscriptions.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-zinc-400 text-xs font-semibold uppercase tracking-wide">Assinaturas ativas</p>
+          {subscriptions.map(s => (
+            <div key={s.id} className="flex items-center gap-3 px-4 py-3 bg-emerald-500/5 border border-emerald-500/20 rounded-xl">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-zinc-200 text-sm font-semibold">
+                    {s.value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </span>
+                  <Badge variant="outline" className="text-xs text-emerald-400 bg-emerald-500/10 border-emerald-500/30">
+                    {CYCLE_LABEL[s.cycle] ?? s.cycle}
+                  </Badge>
+                </div>
+                {s.description && <p className="text-zinc-500 text-xs mt-0.5">{s.description}</p>}
+                <p className="text-zinc-500 text-xs mt-1">
+                  Próxima cobrança: <span className="text-zinc-300">{fmtDate(s.nextDueDate)}</span>
+                  {s._customerName && accounts.length > 1 && <span className="text-zinc-600"> · {s._customerName}</span>}
+                </p>
+              </div>
+              <button onClick={() => setCobrancaTarget(accounts[0])}
+                title="Nova cobrança"
+                className="p-1.5 text-blue-500 hover:text-blue-300 hover:bg-blue-500/10 rounded-lg transition-colors shrink-0">
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Em atraso */}
+      {overdue.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-red-400 text-xs font-semibold uppercase tracking-wide">
+              Em atraso ({overdue.length})
+            </p>
+            <span className="text-red-400 text-xs font-semibold">
+              {overdue.reduce((s,p) => s + p.value, 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' })}
+            </span>
+          </div>
+          {overdue.map(p => <PayRow key={p.id} p={p} />)}
+        </div>
+      )}
+
+      {/* Próximas cobranças */}
+      {pending.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-blue-400 text-xs font-semibold uppercase tracking-wide">
+              Próximas cobranças ({pending.length})
+            </p>
+            <span className="text-blue-400 text-xs font-semibold">
+              {pending.reduce((s,p) => s + p.value, 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' })}
+            </span>
+          </div>
+          {pending.map(p => <PayRow key={p.id} p={p} />)}
+        </div>
+      )}
+
+      {/* Histórico */}
+      {history.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-zinc-400 text-xs font-semibold uppercase tracking-wide">
+              Histórico de pagamentos
+            </p>
+            <span className="text-zinc-400 text-xs">
+              Total recebido: {history.reduce((s,p) => s + p.value, 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' })}
+            </span>
+          </div>
+          {historyVisible.map(p => <PayRow key={p.id} p={p} />)}
+          {history.length > 10 && (
+            <button onClick={() => setShowAll(v => !v)}
+              className="w-full py-2 text-zinc-500 text-xs hover:text-zinc-300 transition-colors">
+              {showAll ? 'Ver menos' : `Ver todos os ${history.length} pagamentos`}
+            </button>
+          )}
+        </div>
+      )}
+
+      {overdue.length === 0 && pending.length === 0 && history.length === 0 && (
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-8 text-center">
+            <p className="text-zinc-500 text-sm">Nenhuma cobrança encontrada no Asaas.</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Botão nova cobrança */}
+      {accounts.length > 0 && (
+        <Button variant="outline" onClick={() => setCobrancaTarget(accounts[0])}
+          className="w-full border-zinc-700 text-zinc-400 hover:text-white gap-2">
+          <Plus className="w-4 h-4" /> Nova cobrança
+        </Button>
+      )}
+    </div>
+  )
+}
+
+// ─── Tipo de integração Asaas com credenciais ────────────────────
+interface AsaasInteg {
+  id:          string
+  status:      string
+  last_sync_at: string | null
+  label:       string | null
+  credentials: { customer_id: string; customer_name?: string | null } | null
+}
+
 function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => void }) {
-  const [asaasModal, setAsaasModal] = useState(false)
+  const [asaasAccounts, setAsaasAccounts]   = useState<AsaasInteg[]>([])
+  const [loadingAccounts, setLoadingAccounts] = useState(true)
+  const [removing, setRemoving]             = useState<string | null>(null)
+  const [showSearch, setShowSearch]         = useState(false)
+  const [customers, setCustomers]           = useState<{ id: string; name: string; cpfCnpj: string | null }[]>([])
+  const [search, setSearch]                 = useState('')
+  const [loadingCust, setLoadingCust]       = useState(false)
+  const [linking, setLinking]               = useState(false)
+  const [linkError, setLinkError]           = useState<string | null>(null)
+  const [cobrancaTarget, setCobrancaTarget] = useState<{ id: string; name: string } | null>(null)
+  const [creating, setCreating]             = useState(false)
+  const [createError, setCreateError]       = useState<string | null>(null)
 
-  const integrations = client.integrations ?? []
-
-  const DEFS = [
-    { type: 'whatsapp',       label: 'WhatsApp',        sub: 'Análise de sentimento via Evolution API',       icon: MessageCircle, color: 'text-emerald-400 bg-emerald-500/10' },
-    { type: 'asaas',          label: 'Asaas',           sub: 'Cobranças e status de pagamento em tempo real', icon: CreditCard,    color: 'text-blue-400 bg-blue-500/10'       },
-    { type: 'dom_pagamentos', label: 'Dom Pagamentos',  sub: 'Gateway alternativo de cobranças',              icon: Building2,     color: 'text-violet-400 bg-violet-500/10'   },
-  ] as const
-
-  const statusConfig = {
-    connected:    { label: 'Conectado',    cls: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' },
-    error:        { label: 'Erro',         cls: 'text-red-400 border-red-500/30 bg-red-500/10'             },
-    expired:      { label: 'Expirado',     cls: 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10'    },
-    disconnected: { label: 'Desconectado', cls: 'text-zinc-500 border-zinc-700 bg-zinc-800'                },
+  async function loadAccounts() {
+    setLoadingAccounts(true)
+    const res = await fetch(`/api/asaas/sync/${client.id}`)
+    if (res.ok) { const d = await res.json(); setAsaasAccounts(d.integrations ?? []) }
+    setLoadingAccounts(false)
   }
 
-  function handleConnect(type: string) {
-    if (type === 'asaas') setAsaasModal(true)
+  useState(() => { loadAccounts() })
+
+  async function openSearch() {
+    setShowSearch(true); setSearch(''); setLinkError(null)
+    setLoadingCust(true)
+    const res = await fetch('/api/asaas/customers')
+    if (res.ok) { const d = await res.json(); setCustomers(d.customers ?? []) }
+    setLoadingCust(false)
   }
+
+  async function handleLink(c: { id: string; name: string }) {
+    setLinking(true); setLinkError(null)
+    const res = await fetch(`/api/asaas/sync/${client.id}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ asaas_customer_id: c.id, customer_name: c.name }),
+    })
+    if (res.ok) { setShowSearch(false); loadAccounts(); refetch() }
+    else { const d = await res.json(); setLinkError(d.error ?? 'Erro ao vincular') }
+    setLinking(false)
+  }
+
+  async function handleCreateInAsaas() {
+    setCreating(true); setCreateError(null)
+    const res = await fetch('/api/asaas/customers', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name:        client.razaoSocial || client.name,
+        cpfCnpj:     client.cnpj,
+        email:       client.email,
+        mobilePhone: client.telefone,
+      }),
+    })
+    const d = await res.json()
+    if (!res.ok) { setCreateError(d.error ?? 'Erro ao criar no Asaas'); setCreating(false); return }
+    // Auto-vincula
+    await fetch(`/api/asaas/sync/${client.id}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ asaas_customer_id: d.customer.id, customer_name: d.customer.name }),
+    })
+    loadAccounts(); refetch(); setCreating(false)
+  }
+
+  async function handleRemove(integId: string) {
+    setRemoving(integId)
+    await fetch(`/api/asaas/sync/${client.id}?integrationId=${integId}`, { method: 'DELETE' })
+    loadAccounts(); refetch(); setRemoving(null)
+  }
+
+  async function handleSync(integId: string) {
+    await fetch(`/api/asaas/sync/${client.id}?integrationId=${integId}`, { method: 'PATCH' })
+    loadAccounts()
+  }
+
+  const filtered = customers.filter(c => {
+    if (!search.trim()) return true
+    const q = search.toLowerCase()
+    return c.name.toLowerCase().includes(q) || (c.cpfCnpj ?? '').includes(q.replace(/\D/g, ''))
+  })
+
+  const clientDefaultValue = client.clientType === 'mrr'
+    ? (client.mrrValue ?? client.contractValue)
+    : (client.tcvValue ?? client.totalProjectValue)
 
   return (
     <>
-      <div className="space-y-3">
-        {DEFS.map(({ type, label, sub, icon: Icon, color }) => {
-          const integ = integrations.find(i => i.type === type)
-          const status = (integ?.status ?? 'disconnected') as keyof typeof statusConfig
-          const sc = statusConfig[status]
-          const isConnected = status === 'connected'
-          const hasIssue = status === 'error' || status === 'expired'
-
-          return (
-            <Card key={type} className={cn('border', hasIssue ? 'border-red-500/20 bg-red-500/3' : 'border-zinc-800 bg-zinc-900')}>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-4">
-                  <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center shrink-0', color)}>
-                    <Icon className="w-5 h-5" />
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-zinc-200 font-medium text-sm">{label}</p>
-                      <Badge variant="outline" className={cn('text-xs', sc.cls)}>
-                        {isConnected ? '●' : hasIssue ? '⚠' : '○'} {sc.label}
-                      </Badge>
-                    </div>
-                    <p className="text-zinc-500 text-xs mt-0.5">{sub}</p>
-                    {integ?.lastSyncAt && (
-                      <p className="text-zinc-600 text-xs mt-0.5">
-                        Última sync: {fmtDate(integ.lastSyncAt)}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="shrink-0">
-                    {isConnected ? (
-                      <div className="flex items-center gap-2">
-                        <Button size="sm" variant="outline"
-                          onClick={() => handleConnect(type)}
-                          className="border-zinc-700 text-zinc-400 hover:text-white gap-1 text-xs">
-                          <RefreshCw className="w-3 h-3" /> Reconfigurar
-                        </Button>
+      {/* Modal busca Asaas */}
+      {showSearch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[80vh]">
+            <div className="flex items-center justify-between p-5 border-b border-zinc-800">
+              <div>
+                <p className="text-zinc-100 font-semibold text-sm">Vincular conta Asaas</p>
+                <p className="text-zinc-500 text-xs">Busque pelo nome ou CNPJ</p>
+              </div>
+              <button onClick={() => setShowSearch(false)} className="text-zinc-500 hover:text-zinc-300 p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 border-b border-zinc-800">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                <input value={search} onChange={e => setSearch(e.target.value)}
+                  placeholder="Buscar por nome ou CNPJ..."
+                  className="w-full pl-9 pr-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 placeholder:text-zinc-600 text-sm focus:outline-none focus:border-blue-500" />
+              </div>
+            </div>
+            <div className="overflow-y-auto flex-1 p-2">
+              {loadingCust
+                ? <div className="flex items-center justify-center py-10"><Loader2 className="w-5 h-5 animate-spin text-zinc-500" /></div>
+                : filtered.length === 0
+                  ? <p className="text-zinc-600 text-sm text-center py-8">Nenhum customer encontrado</p>
+                  : filtered.slice(0, 50).map(c => (
+                    <button key={c.id} onClick={() => handleLink(c)} disabled={linking}
+                      className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-zinc-800 transition-colors">
+                      <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center shrink-0">
+                        <CreditCard className="w-4 h-4 text-blue-400" />
                       </div>
-                    ) : hasIssue ? (
-                      <Button size="sm" onClick={() => handleConnect(type)}
-                        className="bg-red-500 hover:bg-red-600 text-white gap-1 text-xs">
-                        <RefreshCw className="w-3 h-3" /> Reconectar
-                      </Button>
-                    ) : (
-                      <Button size="sm" onClick={() => handleConnect(type)}
-                        className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1 text-xs">
-                        <Zap className="w-3 h-3" /> Conectar
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
+                      <div className="min-w-0">
+                        <p className="text-zinc-200 text-sm font-medium truncate">{c.name}</p>
+                        {c.cpfCnpj && <p className="text-zinc-500 text-xs">{c.cpfCnpj}</p>}
+                      </div>
+                    </button>
+                  ))
+              }
+            </div>
+            {linkError && <p className="text-red-400 text-xs px-5 pb-3">{linkError}</p>}
+          </div>
+        </div>
+      )}
 
-      {asaasModal && (
-        <AsaasLinkModal
-          clientId={client.id}
-          clientName={client.nomeResumido ?? client.name}
-          clientCnpj={client.cnpj}
-          onSuccess={() => { setAsaasModal(false); refetch() }}
-          onClose={() => setAsaasModal(false)}
+      {/* Modal de cobrança */}
+      {cobrancaTarget && (
+        <AsaasCobrancaModal
+          customerId={cobrancaTarget.id}
+          customerName={cobrancaTarget.name}
+          clientType={client.clientType ?? 'mrr'}
+          defaultValue={clientDefaultValue}
+          contractMonths={client.contractMonths}
+          contractStartDate={client.contractStartDate}
+          onClose={() => setCobrancaTarget(null)}
         />
       )}
+
+      <div className="space-y-4">
+
+        {/* ── Asaas ─────────────────────────────────────────────── */}
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-5 space-y-4">
+
+            {/* Header da seção */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0">
+                  <CreditCard className="w-5 h-5 text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-zinc-200 font-semibold text-sm">Asaas</p>
+                  <p className="text-zinc-500 text-xs">Cobranças e status de pagamento</p>
+                </div>
+              </div>
+              <Button size="sm" variant="outline" onClick={openSearch}
+                className="border-zinc-700 text-zinc-400 hover:text-white gap-1.5 text-xs">
+                <Plus className="w-3.5 h-3.5" /> Adicionar conta
+              </Button>
+            </div>
+
+            {/* Lista de contas vinculadas */}
+            {loadingAccounts
+              ? <div className="flex items-center justify-center py-6"><Loader2 className="w-4 h-4 animate-spin text-zinc-600" /></div>
+              : asaasAccounts.length === 0
+                ? (
+                  <div className="space-y-3">
+                    <div className="flex flex-col items-center gap-2 py-4 text-center">
+                      <p className="text-zinc-500 text-sm">Nenhuma conta Asaas vinculada</p>
+                      <p className="text-zinc-600 text-xs">Vincule uma conta existente ou crie este cliente no Asaas</p>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <Button variant="outline" onClick={openSearch}
+                        className="border-zinc-700 text-zinc-400 hover:text-white gap-2 text-xs">
+                        <Search className="w-3.5 h-3.5" /> Vincular existente
+                      </Button>
+                      <Button variant="outline" onClick={handleCreateInAsaas} disabled={creating}
+                        className="border-blue-700/40 text-blue-400 hover:bg-blue-500/10 gap-2 text-xs">
+                        {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                        Criar no Asaas
+                      </Button>
+                    </div>
+                    {createError && <p className="text-red-400 text-xs">{createError}</p>}
+                  </div>
+                )
+                : (
+                  <div className="space-y-2">
+                    {asaasAccounts.map(integ => {
+                      const customerId   = integ.credentials?.customer_id ?? ''
+                      const customerName = integ.credentials?.customer_name ?? integ.label ?? customerId
+                      return (
+                        <div key={integ.id} className="flex items-center gap-3 bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-3">
+                          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+                            <Check className="w-4 h-4 text-emerald-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-zinc-200 text-sm font-medium truncate">{customerName}</p>
+                            <p className="text-zinc-500 text-xs">
+                              ID: {customerId}
+                              {integ.last_sync_at && <> · Sync: {new Date(integ.last_sync_at).toLocaleDateString('pt-BR')}</>}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {customerId && (
+                              <button title="Criar cobrança"
+                                onClick={() => setCobrancaTarget({ id: customerId, name: customerName })}
+                                className="p-1.5 text-blue-500 hover:text-blue-300 hover:bg-blue-500/10 rounded-lg transition-colors">
+                                <CreditCard className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            <button title="Sincronizar"
+                              onClick={() => handleSync(integ.id)}
+                              className="p-1.5 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700 rounded-lg transition-colors">
+                              <RefreshCw className="w-3.5 h-3.5" />
+                            </button>
+                            <button title="Desvincular"
+                              onClick={() => handleRemove(integ.id)}
+                              disabled={removing === integ.id}
+                              className="p-1.5 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors">
+                              {removing === integ.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+
+                    {/* Botão adicionar mais */}
+                    <button onClick={openSearch}
+                      className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-dashed border-zinc-700 text-zinc-500 hover:border-zinc-600 hover:text-zinc-400 text-xs transition-colors">
+                      <Plus className="w-3.5 h-3.5" /> Adicionar outra conta Asaas
+                    </button>
+                  </div>
+                )
+            }
+          </CardContent>
+        </Card>
+
+        {/* ── WhatsApp ──────────────────────────────────────────── */}
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
+                <MessageCircle className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-zinc-200 font-semibold text-sm">WhatsApp</p>
+                <p className="text-zinc-500 text-xs">Análise de sentimento via Evolution API</p>
+              </div>
+              <Badge variant="outline" className="border-zinc-700 text-zinc-500 text-xs shrink-0">Em breve</Badge>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ── Dom Pagamentos ────────────────────────────────────── */}
+        <Card className="bg-zinc-900/50 border-zinc-800 opacity-60">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-violet-500/10 flex items-center justify-center shrink-0">
+                <Building2 className="w-5 h-5 text-violet-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-zinc-400 font-semibold text-sm">Dom Pagamentos</p>
+                <p className="text-zinc-600 text-xs">Gateway alternativo de cobranças</p>
+              </div>
+              <Badge variant="outline" className="border-zinc-700 text-zinc-500 text-xs shrink-0">Em breve</Badge>
+            </div>
+          </CardContent>
+        </Card>
+
+      </div>
     </>
   )
 }
@@ -1032,6 +1471,7 @@ function ClientePerfilInner() {
       <div className="p-4 lg:p-6 max-w-4xl">
         {activeTab === 'visao-geral' && <TabVisaoGeral client={client} />}
         {activeTab === 'cadastro'    && <TabCadastro client={client} />}
+        {activeTab === 'financeiro'  && <TabFinanceiro client={client} />}
         {activeTab === 'integracoes' && <TabIntegracoes client={client} refetch={refetch} />}
         {activeTab === 'formularios' && <TabFormularios clientId={client.id} client={client} />}
         {activeTab === 'historico'   && <TabHistorico clientId={client.id} />}
