@@ -560,6 +560,19 @@ const CYCLE_LABEL: Record<string, string> = {
   MONTHLY: 'Mensal', QUARTERLY: 'Trimestral', SEMIANNUALLY: 'Semestral', YEARLY: 'Anual',
 }
 
+// ── Helpers moeda ────────────────────────────────────────────────
+function parseMoney(str: string): number {
+  if (!str) return 0
+  const clean = str.replace(/R\$\s?/g, '').trim()
+  if (clean.includes(',')) return parseFloat(clean.replace(/\./g, '').replace(',', '.')) || 0
+  return parseFloat(clean.replace(/[^\d.]/g, '')) || 0
+}
+function formatMoney(str: string): string {
+  const n = parseMoney(str)
+  if (!n) return str
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 // ─── EditablePayRow — linha de cobrança com edição inline ────────
 function EditablePayRow({
   p, accounts, onUpdated, onCancelled,
@@ -575,7 +588,9 @@ function EditablePayRow({
   const canEdit   = isPending || isOverdue
 
   const [mode, setMode]         = useState<'view' | 'edit' | 'confirm-cancel'>('view')
-  const [editVal, setEditVal]   = useState(String(p.value))
+  const [editVal, setEditVal]   = useState(() =>
+    p.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  )
   const [editDate, setEditDate] = useState(p.dueDate)
   const [editDesc, setEditDesc] = useState(p.description ?? '')
   const [saving, setSaving]     = useState(false)
@@ -585,7 +600,7 @@ function EditablePayRow({
   const today = new Date().toISOString().slice(0, 10)
 
   async function handleSave() {
-    const val = parseFloat(editVal.replace(',', '.'))
+    const val = parseMoney(editVal)
     if (!val || val <= 0) { setRowError('Valor inválido'); return }
     if (!editDate)        { setRowError('Data inválida'); return }
     setSaving(true); setRowError(null)
@@ -633,9 +648,13 @@ function EditablePayRow({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <p className="text-zinc-500 text-xs mb-1.5">Valor (R$)</p>
-            <input type="number" min="0.01" step="0.01" value={editVal}
-              onChange={e => setEditVal(e.target.value)}
-              className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm focus:outline-none focus:border-blue-500" />
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm select-none">R$</span>
+              <input type="text" inputMode="decimal" value={editVal}
+                onChange={e => setEditVal(e.target.value)}
+                onBlur={e => setEditVal(formatMoney(e.target.value))}
+                className="w-full pl-9 pr-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm focus:outline-none focus:border-blue-500 text-right" />
+            </div>
           </div>
           <div>
             <p className="text-zinc-500 text-xs mb-1.5">Vencimento</p>

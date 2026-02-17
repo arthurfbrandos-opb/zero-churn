@@ -33,6 +33,24 @@ const CYCLE_MONTHS: Record<Cycle, number> = {
   MONTHLY: 1, QUARTERLY: 3, SEMIANNUALLY: 6, YEARLY: 12,
 }
 
+// ── Helpers de moeda ─────────────────────────────────────────────
+function parseMoney(str: string): number {
+  if (!str) return 0
+  const clean = str.replace(/R\$\s?/g, '').trim()
+  // formato brasileiro: 1.500,00
+  if (clean.includes(',')) {
+    return parseFloat(clean.replace(/\./g, '').replace(',', '.')) || 0
+  }
+  // formato US: 1500.00
+  return parseFloat(clean.replace(/[^\d.]/g, '')) || 0
+}
+
+function formatMoney(str: string): string {
+  const n = parseMoney(str)
+  if (!n) return str
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 function addMonths(dateStr: string, months: number): string {
   const d = new Date(dateStr + 'T12:00:00')
   d.setMonth(d.getMonth() + months)
@@ -92,7 +110,9 @@ export function AsaasCobrancaModal({
 
   // Gera lista de parcelas
   const generate = useCallback(() => {
-    const defVal = defaultValue ? String(defaultValue) : ''
+    const defVal = defaultValue
+      ? defaultValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : ''
     let dates: string[]
     if (endDate) {
       dates = calcDates(firstDue, cycle, endDate)
@@ -118,20 +138,25 @@ export function AsaasCobrancaModal({
   }
   function addInst() {
     const lastDate = installments.at(-1)?.dueDate ?? firstDue
+    const defVal = defaultValue
+      ? defaultValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : ''
     setInst(prev => [...prev, {
       id: uid(),
       dueDate: addMonths(lastDate, CYCLE_MONTHS[cycle]),
-      value: defaultValue ? String(defaultValue) : '',
+      value: defVal,
     }])
   }
   function applyValueToAll() {
-    const defVal = defaultValue ? String(defaultValue) : ''
+    const defVal = defaultValue
+      ? defaultValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : ''
     setInst(prev => prev.map(i => ({ ...i, value: defVal })))
   }
 
   // Total
-  const total = installments.reduce((s, i) => s + (parseFloat(i.value.replace(',', '.')) || 0), 0)
-  const validCount = installments.filter(i => parseFloat(i.value.replace(',', '.')) > 0 && i.dueDate).length
+  const total = installments.reduce((s, i) => s + parseMoney(i.value), 0)
+  const validCount = installments.filter(i => parseMoney(i.value) > 0 && i.dueDate).length
 
   // ── Submit ────────────────────────────────────────────────────
   const [loading, setLoad]   = useState(false)
@@ -145,7 +170,7 @@ export function AsaasCobrancaModal({
 
     try {
       if (mode === 'unica') {
-        const val = parseFloat(uValue.replace(',', '.'))
+        const val = parseMoney(uValue)
         if (!val || val <= 0) { setError('Valor inválido'); return }
         if (uDue < today)    { setError('Data de vencimento não pode ser no passado'); return }
 
@@ -162,11 +187,11 @@ export function AsaasCobrancaModal({
           .map((ins, i) => ({
             customer:    customerId,
             billingType,
-            value:       parseFloat(ins.value.replace(',', '.')) || 0,
+            value:       parseMoney(ins.value),
             dueDate:     ins.dueDate,
             description: desc ? `${desc} (${i + 1}/${installments.length})` : `Parcela ${i + 1}/${installments.length}`,
           }))
-          .filter(p => p.value > 0 && p.dueDate)
+          .filter(p => p.value > 0 && p.dueDate >= today)
 
         if (payments.length === 0) { setError('Nenhum lançamento válido'); return }
 
@@ -312,10 +337,17 @@ export function AsaasCobrancaModal({
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <p className="text-zinc-500 text-xs font-semibold uppercase tracking-wide mb-1.5">Valor (R$)</p>
-                        <input type="number" min="0.01" step="0.01" value={uValue}
-                          onChange={e => setUValue(e.target.value)} placeholder="0,00"
-                          className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-xl text-zinc-200 text-sm focus:outline-none focus:border-blue-500 transition-colors" />
+                        <p className="text-zinc-500 text-xs font-semibold uppercase tracking-wide mb-1.5">Valor</p>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm select-none">R$</span>
+                          <input
+                            type="text" inputMode="decimal" value={uValue}
+                            onChange={e => setUValue(e.target.value)}
+                            onBlur={e => setUValue(formatMoney(e.target.value))}
+                            placeholder="0,00"
+                            className="w-full pl-9 pr-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-xl text-zinc-200 text-sm focus:outline-none focus:border-blue-500 transition-colors text-right"
+                          />
+                        </div>
                       </div>
                       <div>
                         <p className="text-zinc-500 text-xs font-semibold uppercase tracking-wide mb-1.5">Vencimento</p>
@@ -395,16 +427,16 @@ export function AsaasCobrancaModal({
                         </div>
 
                         {/* Grid header */}
-                        <div className="grid grid-cols-[1fr_140px_32px] gap-2 px-1">
+                        <div className="grid grid-cols-[1fr_148px_32px] gap-2 px-1">
                           <p className="text-zinc-600 text-xs">Vencimento</p>
-                          <p className="text-zinc-600 text-xs">Valor (R$)</p>
+                          <p className="text-zinc-600 text-xs text-right">Valor</p>
                           <span />
                         </div>
 
                         {/* Linhas scrolláveis */}
                         <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
                           {installments.map((ins, idx) => (
-                            <div key={ins.id} className="grid grid-cols-[1fr_140px_32px] gap-2 items-center">
+                            <div key={ins.id} className="grid grid-cols-[1fr_148px_32px] gap-2 items-center">
                               {/* Data */}
                               <div className="relative">
                                 <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-600 pointer-events-none" />
@@ -415,16 +447,19 @@ export function AsaasCobrancaModal({
                                   className="w-full pl-8 pr-2 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-blue-500 transition-colors"
                                 />
                               </div>
-                              {/* Valor */}
-                              <input
-                                type="number"
-                                min="0.01"
-                                step="0.01"
-                                placeholder={idx === 0 ? 'R$ 0,00' : ''}
-                                value={ins.value}
-                                onChange={e => updateInst(ins.id, 'value', e.target.value)}
-                                className="w-full px-2.5 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-blue-500 transition-colors text-right"
-                              />
+                              {/* Valor com prefixo R$ */}
+                              <div className="relative">
+                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500 text-xs select-none">R$</span>
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  placeholder={idx === 0 ? '0,00' : ''}
+                                  value={ins.value}
+                                  onChange={e => updateInst(ins.id, 'value', e.target.value)}
+                                  onBlur={e => updateInst(ins.id, 'value', formatMoney(e.target.value))}
+                                  className="w-full pl-8 pr-2 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-blue-500 transition-colors text-right"
+                                />
+                              </div>
                               {/* Remover */}
                               <button
                                 onClick={() => removeInst(ins.id)}
