@@ -21,6 +21,7 @@ import { useClients } from '@/hooks/use-clients'
 import { sortClientsByRisk } from '@/lib/client-stats'
 import { getNpsClassification, isInObservation } from '@/lib/nps-utils'
 import { CHURN_CATEGORIES } from '@/components/dashboard/churn-modal'
+import { AsaasImportModal } from '@/components/integracoes/asaas-import-modal'
 import { Integration, ChurnRisk, ClientType, PaymentStatus, ChurnRecord } from '@/types'
 import { cn } from '@/lib/utils'
 
@@ -146,7 +147,7 @@ function FilterPill({ active, onClick, children, color }: {
 
 // ── Página ────────────────────────────────────────────────────────
 export default function ClientesPage() {
-  const { clients: rawClients, loading } = useClients()
+  const { clients: rawClients, loading, refetch } = useClients()
   const allClients = sortClientsByRisk(rawClients)
 
   const [search, setSearch] = useState('')
@@ -158,6 +159,7 @@ export default function ClientesPage() {
   const [statusFilter, setStatusFilter]   = useState<StatusFilter>('active')
   const [inactiveMap, setInactiveMap]     = useState<Record<string, ChurnRecord>>({})
   const [churnTargetId, setChurnTargetId] = useState<string | null>(null)
+  const [showAsaasImport, setShowAsaasImport] = useState(false)
 
   const churnTargetClient = churnTargetId ? allClients.find(c => c.id === churnTargetId) : null
 
@@ -257,6 +259,11 @@ export default function ClientesPage() {
               onClick={openNpsForAll}
               className="border-zinc-700 text-zinc-400 hover:text-white gap-1.5">
               <Send className="w-3.5 h-3.5" /> Enviar NPS
+            </Button>
+            <Button size="sm" variant="outline"
+              onClick={() => setShowAsaasImport(true)}
+              className="border-blue-500/40 text-blue-400 hover:bg-blue-500/10 gap-1.5">
+              <CreditCard className="w-3.5 h-3.5" /> Importar do Asaas
             </Button>
             <Link href="/clientes/novo">
               <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white">
@@ -394,12 +401,20 @@ export default function ClientesPage() {
                     Cadastre seu primeiro cliente e acompanhe a saúde da sua carteira em tempo real.
                   </p>
                 </div>
-                <Link href="/clientes/novo">
-                  <Button className="bg-emerald-500 hover:bg-emerald-600 text-white gap-2 font-medium">
-                    <Plus className="w-4 h-4" />
-                    Cadastrar primeiro cliente
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Button
+                    onClick={() => setShowAsaasImport(true)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white gap-2 font-medium">
+                    <CreditCard className="w-4 h-4" />
+                    Importar do Asaas
                   </Button>
-                </Link>
+                  <Link href="/clientes/novo">
+                    <Button variant="outline" className="border-zinc-700 text-zinc-300 hover:text-white gap-2 font-medium w-full">
+                      <Plus className="w-4 h-4" />
+                      Cadastrar manualmente
+                    </Button>
+                  </Link>
+                </div>
               </div>
             ) : (
               // Filtros sem resultado
@@ -572,6 +587,17 @@ export default function ClientesPage() {
           </div>
         )}
       </div>
+
+      {/* Modal de importação do Asaas */}
+      {showAsaasImport && (
+        <AsaasImportModal
+          onSuccess={(count) => {
+            setShowAsaasImport(false)
+            if (count > 0) refetch()
+          }}
+          onClose={() => setShowAsaasImport(false)}
+        />
+      )}
     </div>
   )
 }
