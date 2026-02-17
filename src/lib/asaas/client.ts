@@ -33,18 +33,23 @@ async function asaasRequest<T>(path: string, apiKey: string, options?: RequestIn
 // ── Tipos ──────────────────────────────────────────────────────
 
 export interface AsaasCustomer {
-  id:            string
-  name:          string
-  cpfCnpj:       string | null
-  email:         string | null
-  phone:         string | null
-  mobilePhone:   string | null
-  address:       string | null
-  city:          string | null
-  state:         string | null
+  id:               string
+  name:             string
+  cpfCnpj:          string | null
+  email:            string | null
+  phone:            string | null
+  mobilePhone:      string | null
+  additionalEmails: string | null  // emails extras separados por vírgula — usado como email financeiro
+  address:          string | null
+  addressNumber:    string | null
+  complement:       string | null
+  province:         string | null  // bairro no Asaas
+  postalCode:       string | null
+  city:             string | null
+  state:            string | null
   externalReference: string | null
   notificationDisabled: boolean
-  deleted:       boolean
+  deleted:          boolean
 }
 
 export interface AsaasPayment {

@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/supabase/encryption'
 import { listCustomers, getCustomerFinancialSummary, getCustomerMrr } from '@/lib/asaas/client'
+import { lookupCnpj } from '@/lib/cnpj/client'
 
 export async function POST(req: NextRequest) {
   try {
@@ -60,9 +61,21 @@ export async function POST(req: NextRequest) {
           if (existing) { results.skipped++; continue }
         }
 
-        // Busca status financeiro e MRR em paralelo
+        // Enriquece com dados financeiros e CNPJ em paralelo
         let paymentStatus = 'em_dia'
         let mrrValue: number | null = null
+        let nomeDecisor: string | null = null
+        let segment: string | null = null
+        let email: string | null = String(c.email ?? '') || null
+        let emailFinanceiro: string | null = null
+        let telefone: string | null =
+          String(c.mobilePhone ?? c.phone ?? '') || null
+
+        // Email financeiro = primeiro additionalEmail do Asaas
+        const addEmails = String(c.additionalEmails ?? '').trim()
+        if (addEmails) {
+          emailFinanceiro = addEmails.split(',')[0].trim() || null
+        }
 
         try {
           const [summary, mrr] = await Promise.all([
@@ -73,20 +86,40 @@ export async function POST(req: NextRequest) {
           mrrValue = mrr > 0 ? Math.round(mrr * 100) / 100 : null
         } catch { /* ignora se falhar */ }
 
-        const clientType = mrrValue !== null ? 'mrr' : 'mrr' // padrão MRR; usuário ajusta depois
+        // Enriquecimento CNPJ (BrasilAPI) — não bloqueia o import se falhar
+        if (cnpj.length === 14) {
+          try {
+            const enriched = await lookupCnpj(cnpj)
+            if (enriched) {
+              nomeDecisor = enriched.nomeDecisor
+              segment     = enriched.segment
+              // Telefone da Receita se não tiver no Asaas
+              if (!telefone && enriched.telefone) telefone = enriched.telefone
+              // Email da Receita se não tiver no Asaas
+              if (!email && enriched.email) email = enriched.email
+            }
+          } catch { /* ignora */ }
+        }
+
+        const clientType = 'mrr' // padrão MRR; usuário ajusta depois
 
         // Cria o cliente
         const { data: newClient, error: cErr } = await supabase
           .from('clients')
           .insert({
-            agency_id:      agencyId,
-            name:           String(c.name ?? ''),
-            nome_resumido:  String(c.name ?? '').split(' ').slice(0, 2).join(' '),
-            cnpj:           cnpj || null,
-            client_type:    clientType,
-            mrr_value:      mrrValue,
-            payment_status: paymentStatus,
-            status:         'active',
+            agency_id:       agencyId,
+            name:            String(c.name ?? ''),
+            nome_resumido:   String(c.name ?? '').split(' ').slice(0, 2).join(' '),
+            cnpj:            cnpj || null,
+            segment:         segment,
+            nome_decisor:    nomeDecisor,
+            email:           email,
+            telefone:        telefone,
+            email_financeiro: emailFinanceiro,
+            client_type:     clientType,
+            mrr_value:       mrrValue,
+            payment_status:  paymentStatus,
+            status:          'active',
           })
           .select('id').single()
 

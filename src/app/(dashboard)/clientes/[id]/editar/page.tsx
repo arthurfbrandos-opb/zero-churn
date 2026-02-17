@@ -25,12 +25,13 @@ import { cn } from '@/lib/utils'
 
 // ── Tipos para import do Asaas ────────────────────────────────────
 interface AsaasCustomerBasic {
-  id: string
-  name: string
-  cpfCnpj: string | null
-  email: string | null
-  mobilePhone: string | null
-  phone: string | null
+  id:               string
+  name:             string
+  cpfCnpj:          string | null
+  email:            string | null
+  mobilePhone:      string | null
+  phone:            string | null
+  additionalEmails: string | null
 }
 
 // ── Tipos internos do formulário ─────────────────────────────────
@@ -46,6 +47,7 @@ interface FormData {
   email: string
   emailFinanceiro: string
   segment: string
+  enrichingCnpj: boolean
   // Step 2
   cep: string
   logradouro: string
@@ -91,7 +93,7 @@ interface FormData {
 
 const INITIAL: FormData = {
   razaoSocial: '', nomeResumido: '', cnpjCpf: '', nomeDecisor: '',
-  telefone: '', email: '', emailFinanceiro: '', segment: '',
+  telefone: '', email: '', emailFinanceiro: '', segment: '', enrichingCnpj: false,
   cep: '', logradouro: '', numero: '', complemento: '',
   bairro: '', cidade: '', estado: '',
   clientType: 'mrr', serviceId: '', entregaveisIncluidos: [], bonusIncluidos: [],
@@ -563,10 +565,13 @@ export default function EditarClientePage() {
     setFormReady(true)
     setForm(prev => ({
       ...prev,
-      razaoSocial:       client.razaoSocial    ?? client.name ?? '',
+      razaoSocial:       (client as unknown as Record<string, unknown>).razao_social as string ?? client.razaoSocial ?? client.name ?? '',
       nomeResumido:      client.nomeResumido   ?? '',
-      cnpjCpf:           client.cnpj           ?? client.cnpjCpf ?? '',
-      nomeDecisor:       client.nomeDecisor    ?? '',
+      cnpjCpf:           client.cnpj           ?? '',
+      nomeDecisor:       (client as unknown as Record<string, unknown>).nome_decisor as string ?? client.nomeDecisor ?? '',
+      email:             (client as unknown as Record<string, unknown>).email as string ?? '',
+      telefone:          (client as unknown as Record<string, unknown>).telefone as string ?? '',
+      emailFinanceiro:   (client as unknown as Record<string, unknown>).email_financeiro as string ?? '',
       segment:           client.segment        ?? '',
       clientType:        client.clientType     ?? 'mrr',
       contractValue:     String(client.mrrValue ?? client.contractValue ?? ''),
@@ -591,16 +596,47 @@ export default function EditarClientePage() {
     </div>
   )
 
-  function handleImport(c: AsaasCustomerBasic) {
+  async function handleImport(c: AsaasCustomerBasic) {
     const words = c.name.split(' ').filter(Boolean)
+    const emailFinanceiro = (c.additionalEmails ?? '').split(',')[0].trim() || ''
+
     setForm(prev => ({
       ...prev,
-      razaoSocial:  c.name,
-      nomeResumido: words.slice(0, 2).join(' '),
-      cnpjCpf:      c.cpfCnpj         ?? '',
-      email:        c.email           ?? '',
-      telefone:     c.mobilePhone ?? c.phone ?? '',
+      razaoSocial:    c.name,
+      nomeResumido:   words.slice(0, 2).join(' '),
+      cnpjCpf:        c.cpfCnpj ?? '',
+      email:          c.email ?? '',
+      emailFinanceiro,
+      telefone:       c.mobilePhone ?? c.phone ?? '',
     }))
+
+    const cnpj = (c.cpfCnpj ?? '').replace(/\D/g, '')
+    if (cnpj.length === 14) {
+      try {
+        const res = await fetch(`/api/cnpj/${cnpj}`)
+        if (res.ok) {
+          const enriched = await res.json()
+          setForm(prev => ({
+            ...prev,
+            razaoSocial:  enriched.razaoSocial ?? prev.razaoSocial,
+            nomeResumido: enriched.nomeFantasia
+              ? enriched.nomeFantasia.split(' ').slice(0, 2).join(' ')
+              : prev.nomeResumido,
+            nomeDecisor:  enriched.nomeDecisor ?? prev.nomeDecisor,
+            segment:      enriched.segment ?? prev.segment,
+            telefone:     prev.telefone || enriched.telefone || '',
+            email:        prev.email || enriched.email || '',
+            cep:          enriched.cep ?? prev.cep,
+            logradouro:   enriched.logradouro ?? prev.logradouro,
+            numero:       enriched.numero ?? prev.numero,
+            complemento:  enriched.complemento ?? prev.complemento,
+            bairro:       enriched.bairro ?? prev.bairro,
+            cidade:       enriched.cidade ?? prev.cidade,
+            estado:       enriched.estado ?? prev.estado,
+          }))
+        }
+      } catch { /* silencioso */ }
+    }
   }
 
   // Busca CEP
@@ -680,6 +716,10 @@ export default function EditarClientePage() {
         razao_social:      form.razaoSocial,
         cnpj:              form.cnpjCpf,
         segment:           form.segment,
+        nome_decisor:      form.nomeDecisor || null,
+        email:             form.email || null,
+        telefone:          form.telefone || null,
+        email_financeiro:  form.emailFinanceiro || null,
         client_type:       form.clientType,
         mrr_value:         form.clientType === 'mrr' ? parseFloat(form.contractValue.replace(',', '.') || '0') : null,
         tcv_value:         form.clientType === 'tcv' ? parseFloat(form.totalProjectValue.replace(',', '.') || '0') : null,

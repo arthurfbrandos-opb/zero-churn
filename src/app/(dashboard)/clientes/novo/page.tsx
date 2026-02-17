@@ -23,12 +23,13 @@ import { cn } from '@/lib/utils'
 
 // ── Tipos para import do Asaas ────────────────────────────────────
 interface AsaasCustomerBasic {
-  id: string
-  name: string
-  cpfCnpj: string | null
-  email: string | null
-  mobilePhone: string | null
-  phone: string | null
+  id:               string
+  name:             string
+  cpfCnpj:          string | null
+  email:            string | null
+  mobilePhone:      string | null
+  phone:            string | null
+  additionalEmails: string | null  // emails extras separados por vírgula
 }
 
 // ── Tipos internos do formulário ─────────────────────────────────
@@ -44,6 +45,7 @@ interface FormData {
   email: string
   emailFinanceiro: string
   segment: string
+  enrichingCnpj: boolean  // loading state da busca CNPJ
   // Step 2
   cep: string
   logradouro: string
@@ -89,7 +91,7 @@ interface FormData {
 
 const INITIAL: FormData = {
   razaoSocial: '', nomeResumido: '', cnpjCpf: '', nomeDecisor: '',
-  telefone: '', email: '', emailFinanceiro: '', segment: '',
+  telefone: '', email: '', emailFinanceiro: '', segment: '', enrichingCnpj: false,
   cep: '', logradouro: '', numero: '', complemento: '',
   bairro: '', cidade: '', estado: '',
   clientType: 'mrr', serviceId: '', entregaveisIncluidos: [], bonusIncluidos: [],
@@ -547,20 +549,59 @@ export default function NovoClientePage() {
     setForm(prev => ({ ...prev, [field]: value }))
   }, [])
 
-  // Importar cliente de Asaas — pré-preenche o formulário
-  function handleImport(client: AsaasCustomerBasic) {
-    // Extrai primeiro nome curto (2 palavras) como nome resumido
+  // Importar cliente de Asaas — pré-preenche + enriquece via CNPJ
+  async function handleImport(client: AsaasCustomerBasic) {
     const words = client.name.split(' ').filter(Boolean)
     const nomeResumido = words.slice(0, 2).join(' ')
 
+    // Email financeiro = additionalEmails do Asaas
+    const emailFinanceiro = (client.additionalEmails ?? '').split(',')[0].trim() || ''
+
+    // Pré-preenche imediatamente com o que temos do Asaas
     setForm(prev => ({
       ...prev,
-      razaoSocial:  client.name,
-      nomeResumido: nomeResumido,
-      cnpjCpf:      client.cpfCnpj  ?? '',
-      email:        client.email    ?? '',
-      telefone:     client.mobilePhone ?? client.phone ?? '',
+      razaoSocial:      client.name,
+      nomeResumido,
+      cnpjCpf:          client.cpfCnpj ?? '',
+      email:            client.email ?? '',
+      emailFinanceiro,
+      telefone:         client.mobilePhone ?? client.phone ?? '',
     }))
+
+    // Enriquece com BrasilAPI se tiver CNPJ
+    const cnpj = (client.cpfCnpj ?? '').replace(/\D/g, '')
+    if (cnpj.length === 14) {
+      try {
+        const res = await fetch(`/api/cnpj/${cnpj}`)
+        if (res.ok) {
+          const enriched = await res.json()
+          setForm(prev => ({
+            ...prev,
+            // Razão social e nome fantasia da Receita (mais completos)
+            razaoSocial:   enriched.razaoSocial ?? prev.razaoSocial,
+            nomeResumido:  enriched.nomeFantasia
+              ? enriched.nomeFantasia.split(' ').slice(0, 2).join(' ')
+              : prev.nomeResumido,
+            // Decisor do QSA
+            nomeDecisor:   enriched.nomeDecisor ?? prev.nomeDecisor,
+            // Segmento pelo CNAE
+            segment:       enriched.segment ?? prev.segment,
+            // Telefone da Receita se não tiver do Asaas
+            telefone:      prev.telefone || enriched.telefone || '',
+            // Email da Receita se não tiver do Asaas
+            email:         prev.email || enriched.email || '',
+            // Endereço da Receita
+            cep:           enriched.cep ?? prev.cep,
+            logradouro:    enriched.logradouro ?? prev.logradouro,
+            numero:        enriched.numero ?? prev.numero,
+            complemento:   enriched.complemento ?? prev.complemento,
+            bairro:        enriched.bairro ?? prev.bairro,
+            cidade:        enriched.cidade ?? prev.cidade,
+            estado:        enriched.estado ?? prev.estado,
+          }))
+        }
+      } catch { /* silencioso — não bloqueia o import */ }
+    }
   }
 
   // Busca CEP
@@ -640,6 +681,10 @@ export default function NovoClientePage() {
         razao_social:      form.razaoSocial,
         cnpj:              form.cnpjCpf,
         segment:           form.segment,
+        nome_decisor:      form.nomeDecisor || null,
+        email:             form.email || null,
+        telefone:          form.telefone || null,
+        email_financeiro:  form.emailFinanceiro || null,
         client_type:       form.clientType,
         mrr_value:         form.clientType === 'mrr' ? parseFloat(form.contractValue.replace(',', '.') || '0') : null,
         tcv_value:         form.clientType === 'tcv' ? parseFloat(form.totalProjectValue.replace(',', '.') || '0') : null,
