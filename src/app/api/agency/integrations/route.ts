@@ -37,8 +37,10 @@ export async function POST(req: NextRequest) {
 
     const { type, credentials } = await req.json()
 
-    if (!type || !credentials?.api_key) {
-      return NextResponse.json({ error: 'Tipo e API Key são obrigatórios' }, { status: 400 })
+    // Aceita api_key (Asaas) ou token (Dom Pagamentos)
+    const hasKey = credentials?.api_key || credentials?.token
+    if (!type || !hasKey) {
+      return NextResponse.json({ error: 'Tipo e credencial são obrigatórios' }, { status: 400 })
     }
 
     // Busca agency_id
