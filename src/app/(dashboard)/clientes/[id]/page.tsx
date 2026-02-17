@@ -23,7 +23,7 @@ import { useAnalysisCredits } from '@/hooks/use-analysis-credits'
 import { getNpsClassification, isInObservation } from '@/lib/nps-utils'
 import { ChurnModal, CHURN_CATEGORIES } from '@/components/dashboard/churn-modal'
 import { useClient } from '@/hooks/use-client'
-import { Loader2, Plus, Search, X } from 'lucide-react'
+import { Loader2, Plus, Search, X, Pencil } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { mockServices } from '@/lib/mock-data'
 import { AsaasCobrancaModal } from '@/components/integracoes/asaas-cobranca-modal'
@@ -560,6 +560,195 @@ const CYCLE_LABEL: Record<string, string> = {
   MONTHLY: 'Mensal', QUARTERLY: 'Trimestral', SEMIANNUALLY: 'Semestral', YEARLY: 'Anual',
 }
 
+// ─── EditablePayRow — linha de cobrança com edição inline ────────
+function EditablePayRow({
+  p, accounts, onUpdated, onCancelled,
+}: {
+  p: PaymentWithAccount
+  accounts: { id: string; name: string }[]
+  onUpdated:  (id: string, value: number, dueDate: string) => void
+  onCancelled:(id: string) => void
+}) {
+  const isPaid    = ['RECEIVED','CONFIRMED','RECEIVED_IN_CASH'].includes(p.status)
+  const isOverdue = p.status === 'OVERDUE'
+  const isPending = p.status === 'PENDING'
+  const canEdit   = isPending || isOverdue
+
+  const [mode, setMode]         = useState<'view' | 'edit' | 'confirm-cancel'>('view')
+  const [editVal, setEditVal]   = useState(String(p.value))
+  const [editDate, setEditDate] = useState(p.dueDate)
+  const [editDesc, setEditDesc] = useState(p.description ?? '')
+  const [saving, setSaving]     = useState(false)
+  const [rowError, setRowError] = useState<string | null>(null)
+
+  const sc    = STATUS_LABEL[p.status] ?? { label: p.status, cls: 'text-zinc-500 bg-zinc-800 border-zinc-700' }
+  const today = new Date().toISOString().slice(0, 10)
+
+  async function handleSave() {
+    const val = parseFloat(editVal.replace(',', '.'))
+    if (!val || val <= 0) { setRowError('Valor inválido'); return }
+    if (!editDate)        { setRowError('Data inválida'); return }
+    setSaving(true); setRowError(null)
+    const res = await fetch(`/api/asaas/payments/${p.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value: val, dueDate: editDate, description: editDesc || undefined }),
+    })
+    const d = await res.json()
+    if (!res.ok) { setRowError(d.error ?? 'Erro ao salvar'); setSaving(false); return }
+    onUpdated(p.id, val, editDate)
+    setMode('view'); setSaving(false)
+  }
+
+  async function handleConfirmCancel() {
+    setSaving(true)
+    const res = await fetch(`/api/asaas/payments/${p.id}`, { method: 'DELETE' })
+    if (res.ok) { onCancelled(p.id) }
+    else {
+      const d = await res.json()
+      setRowError(d.error ?? 'Erro ao cancelar')
+      setSaving(false); setMode('view')
+    }
+  }
+
+  const borderCls = isOverdue ? 'border-red-500/20 bg-red-500/5'
+                  : isPending ? 'border-blue-500/15 bg-blue-500/5'
+                              : 'border-zinc-700/50 bg-zinc-800/40'
+
+  // ── Modo edição ───────────────────────────────────────────────
+  if (mode === 'edit') return (
+    <div className={`rounded-xl border ${borderCls} overflow-hidden`}>
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-zinc-700/40">
+        <div className="flex-1 flex items-center gap-2 flex-wrap">
+          <span className="text-zinc-400 text-sm line-through">
+            {p.value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+          </span>
+          <Badge variant="outline" className={`text-xs px-1.5 py-0 ${sc.cls}`}>{sc.label}</Badge>
+          <span className="text-zinc-600 text-xs">Venc. {fmtDate(p.dueDate)}</span>
+        </div>
+        <button onClick={() => { setMode('view'); setRowError(null) }} className="text-zinc-500 hover:text-zinc-300 p-1">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="px-4 py-3 space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <p className="text-zinc-500 text-xs mb-1.5">Valor (R$)</p>
+            <input type="number" min="0.01" step="0.01" value={editVal}
+              onChange={e => setEditVal(e.target.value)}
+              className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm focus:outline-none focus:border-blue-500" />
+          </div>
+          <div>
+            <p className="text-zinc-500 text-xs mb-1.5">Vencimento</p>
+            <input type="date" min={today} value={editDate}
+              onChange={e => setEditDate(e.target.value)}
+              className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm focus:outline-none focus:border-blue-500" />
+          </div>
+        </div>
+        <div>
+          <p className="text-zinc-500 text-xs mb-1.5">Descrição</p>
+          <input value={editDesc} onChange={e => setEditDesc(e.target.value)}
+            placeholder="Descrição (opcional)"
+            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm focus:outline-none focus:border-blue-500" />
+        </div>
+        {rowError && <p className="text-red-400 text-xs">{rowError}</p>}
+        <div className="flex gap-2">
+          <Button size="sm" onClick={handleSave} disabled={saving}
+            className="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-xs gap-1.5">
+            {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+            {saving ? 'Salvando…' : 'Salvar alterações'}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => { setMode('view'); setRowError(null) }}
+            className="border-zinc-700 text-zinc-400 hover:text-white text-xs">
+            Cancelar
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+
+  // ── Modo confirmação de cancelamento ──────────────────────────
+  if (mode === 'confirm-cancel') return (
+    <div className="rounded-xl border border-red-500/30 bg-red-500/5">
+      <div className="px-4 py-3 space-y-3">
+        <div className="flex items-start gap-2.5">
+          <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-red-300 text-sm font-medium">Cancelar esta cobrança?</p>
+            <p className="text-zinc-400 text-xs mt-0.5">
+              {p.value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} · Venc. {fmtDate(p.dueDate)}
+            </p>
+            <p className="text-zinc-600 text-xs mt-1">Esta ação não pode ser desfeita no Asaas.</p>
+          </div>
+        </div>
+        {rowError && <p className="text-red-400 text-xs">{rowError}</p>}
+        <div className="flex gap-2">
+          <Button size="sm" onClick={handleConfirmCancel} disabled={saving}
+            className="flex-1 bg-red-600 hover:bg-red-500 text-white text-xs gap-1.5">
+            {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+            {saving ? 'Cancelando…' : 'Sim, cancelar cobrança'}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => { setMode('view'); setRowError(null) }}
+            className="border-zinc-700 text-zinc-400 hover:text-white text-xs">
+            Manter
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+
+  // ── Modo visualização ─────────────────────────────────────────
+  return (
+    <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${borderCls}`}>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-zinc-200 text-sm font-semibold">
+            {p.value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+          </span>
+          <Badge variant="outline" className={`text-xs px-1.5 py-0 ${sc.cls}`}>{sc.label}</Badge>
+          <span className="text-zinc-600 text-xs">{BILLING_LABEL[p.billingType] ?? p.billingType}</span>
+        </div>
+        {p.description && <p className="text-zinc-500 text-xs mt-0.5 truncate">{p.description}</p>}
+        <div className="flex items-center gap-3 mt-1 text-zinc-500 text-xs">
+          <span>Venc. {fmtDate(p.dueDate)}</span>
+          {p.paymentDate && <span className="text-emerald-500">Pago {fmtDate(p.paymentDate)}</span>}
+          {p._customerName && accounts.length > 1 &&
+            <span className="text-zinc-600 truncate max-w-[100px]">{p._customerName}</span>}
+        </div>
+      </div>
+      <div className="flex items-center gap-0.5 shrink-0">
+        {p.invoiceUrl && canEdit && (
+          <a href={p.invoiceUrl} target="_blank" rel="noreferrer"
+            className="p-1.5 text-zinc-600 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
+            title="Ver boleto">
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        )}
+        {canEdit && (
+          <>
+            <button onClick={() => setMode('edit')}
+              className="p-1.5 text-zinc-600 hover:text-zinc-200 hover:bg-zinc-700 rounded-lg transition-colors"
+              title="Editar">
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={() => setMode('confirm-cancel')}
+              className="p-1.5 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+              title="Cancelar cobrança">
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </>
+        )}
+        {isPaid && p.invoiceUrl && (
+          <a href={p.invoiceUrl} target="_blank" rel="noreferrer"
+            className="p-1.5 text-zinc-700 hover:text-zinc-500 rounded-lg transition-colors" title="Comprovante">
+            <ExternalLink className="w-3 h-3" />
+          </a>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── TabFinanceiro ────────────────────────────────────────────────
 function TabFinanceiro({ client }: { client: Client }) {
   const [payments,      setPayments]      = useState<PaymentWithAccount[]>([])
   const [subscriptions, setSubscriptions] = useState<SubWithAccount[]>([])
@@ -569,7 +758,7 @@ function TabFinanceiro({ client }: { client: Client }) {
   const [showAll,       setShowAll]       = useState(false)
   const [cobrancaTarget, setCobrancaTarget] = useState<{ id: string; name: string } | null>(null)
 
-  useEffect(() => {
+  function loadPayments() {
     setLoading(true)
     fetch(`/api/asaas/payments?clientId=${client.id}`)
       .then(r => r.json())
@@ -581,7 +770,17 @@ function TabFinanceiro({ client }: { client: Client }) {
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
-  }, [client.id])
+  }
+
+  useEffect(() => { loadPayments() }, [client.id])
+
+  // Callbacks — atualização local sem re-fetch completo
+  function handleUpdated(id: string, value: number, dueDate: string) {
+    setPayments(prev => prev.map(p => p.id === id ? { ...p, value, dueDate } : p))
+  }
+  function handleCancelled(id: string) {
+    setPayments(prev => prev.filter(p => p.id !== id))
+  }
 
   const isPaid    = (s: string) => ['RECEIVED','CONFIRMED','RECEIVED_IN_CASH'].includes(s)
   const isOverdue = (s: string) => s === 'OVERDUE'
@@ -596,54 +795,16 @@ function TabFinanceiro({ client }: { client: Client }) {
     ? (client.mrrValue ?? client.contractValue)
     : (client.tcvValue ?? client.totalProjectValue)
 
-  function PayRow({ p }: { p: PaymentWithAccount }) {
-    const sc = STATUS_LABEL[p.status] ?? { label: p.status, cls: 'text-zinc-500 bg-zinc-800 border-zinc-700' }
-    return (
-      <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${
-        isOverdue(p.status) ? 'bg-red-500/5 border-red-500/20' :
-        isPending(p.status) ? 'bg-blue-500/5 border-blue-500/15' :
-        'bg-zinc-800/40 border-zinc-700/50'
-      }`}>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-zinc-200 text-sm font-semibold">
-              {p.value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-            </span>
-            <Badge variant="outline" className={`text-xs px-1.5 py-0 ${sc.cls}`}>{sc.label}</Badge>
-            <span className="text-zinc-600 text-xs">{BILLING_LABEL[p.billingType] ?? p.billingType}</span>
-          </div>
-          {p.description && <p className="text-zinc-500 text-xs mt-0.5 truncate">{p.description}</p>}
-          <div className="flex items-center gap-3 mt-1 text-zinc-500 text-xs">
-            <span>Venc. {fmtDate(p.dueDate)}</span>
-            {p.paymentDate && <span className="text-emerald-500">Pago {fmtDate(p.paymentDate)}</span>}
-            {p._customerName && accounts.length > 1 && <span className="text-zinc-600 truncate max-w-[120px]">{p._customerName}</span>}
-          </div>
-        </div>
-        {p.invoiceUrl && (isPending(p.status) || isOverdue(p.status)) && (
-          <a href={p.invoiceUrl} target="_blank" rel="noreferrer"
-            className="p-1.5 text-zinc-500 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors shrink-0"
-            title="Ver boleto/link">
-            <ExternalLink className="w-3.5 h-3.5" />
-          </a>
-        )}
-      </div>
-    )
-  }
-
   if (loading) return (
     <div className="flex items-center justify-center py-16">
       <Loader2 className="w-5 h-5 animate-spin text-zinc-500" />
     </div>
   )
-
   if (error) return (
     <Card className="bg-zinc-900 border-zinc-800">
-      <CardContent className="p-6 text-center">
-        <p className="text-zinc-500 text-sm">{error}</p>
-      </CardContent>
+      <CardContent className="p-6 text-center"><p className="text-zinc-500 text-sm">{error}</p></CardContent>
     </Card>
   )
-
   if (accounts.length === 0) return (
     <Card className="bg-zinc-900 border-zinc-800">
       <CardContent className="p-8 flex flex-col items-center gap-3 text-center">
@@ -667,11 +828,11 @@ function TabFinanceiro({ client }: { client: Client }) {
           defaultValue={clientDefaultValue}
           contractMonths={client.contractMonths}
           contractStartDate={client.contractStartDate}
-          onClose={() => setCobrancaTarget(null)}
+          onClose={() => { setCobrancaTarget(null); loadPayments() }}
         />
       )}
 
-      {/* Assinaturas ativas */}
+      {/* Assinaturas ativas (legado Asaas) */}
       {subscriptions.length > 0 && (
         <div className="space-y-2">
           <p className="text-zinc-400 text-xs font-semibold uppercase tracking-wide">Assinaturas ativas</p>
@@ -692,11 +853,6 @@ function TabFinanceiro({ client }: { client: Client }) {
                   {s._customerName && accounts.length > 1 && <span className="text-zinc-600"> · {s._customerName}</span>}
                 </p>
               </div>
-              <button onClick={() => setCobrancaTarget(accounts[0])}
-                title="Nova cobrança"
-                className="p-1.5 text-blue-500 hover:text-blue-300 hover:bg-blue-500/10 rounded-lg transition-colors shrink-0">
-                <Plus className="w-3.5 h-3.5" />
-              </button>
             </div>
           ))}
         </div>
@@ -713,7 +869,10 @@ function TabFinanceiro({ client }: { client: Client }) {
               {overdue.reduce((s,p) => s + p.value, 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' })}
             </span>
           </div>
-          {overdue.map(p => <PayRow key={p.id} p={p} />)}
+          {overdue.map(p => (
+            <EditablePayRow key={p.id} p={p} accounts={accounts}
+              onUpdated={handleUpdated} onCancelled={handleCancelled} />
+          ))}
         </div>
       )}
 
@@ -728,22 +887,26 @@ function TabFinanceiro({ client }: { client: Client }) {
               {pending.reduce((s,p) => s + p.value, 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' })}
             </span>
           </div>
-          {pending.map(p => <PayRow key={p.id} p={p} />)}
+          {pending.map(p => (
+            <EditablePayRow key={p.id} p={p} accounts={accounts}
+              onUpdated={handleUpdated} onCancelled={handleCancelled} />
+          ))}
         </div>
       )}
 
-      {/* Histórico */}
+      {/* Histórico — read-only */}
       {history.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <p className="text-zinc-400 text-xs font-semibold uppercase tracking-wide">
-              Histórico de pagamentos
-            </p>
+            <p className="text-zinc-400 text-xs font-semibold uppercase tracking-wide">Histórico de pagamentos</p>
             <span className="text-zinc-400 text-xs">
               Total recebido: {history.reduce((s,p) => s + p.value, 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' })}
             </span>
           </div>
-          {historyVisible.map(p => <PayRow key={p.id} p={p} />)}
+          {historyVisible.map(p => (
+            <EditablePayRow key={p.id} p={p} accounts={accounts}
+              onUpdated={handleUpdated} onCancelled={handleCancelled} />
+          ))}
           {history.length > 10 && (
             <button onClick={() => setShowAll(v => !v)}
               className="w-full py-2 text-zinc-500 text-xs hover:text-zinc-300 transition-colors">

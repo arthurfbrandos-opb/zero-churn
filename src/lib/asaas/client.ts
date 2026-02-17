@@ -294,6 +294,25 @@ export async function createSubscription(apiKey: string, data: CreateSubscriptio
   })
 }
 
+export interface UpdatePaymentInput {
+  value?:       number
+  dueDate?:     string
+  description?: string
+}
+
+export async function updatePayment(apiKey: string, paymentId: string, data: UpdatePaymentInput): Promise<AsaasCreatedPayment> {
+  return asaasRequest<AsaasCreatedPayment>(`/payments/${paymentId}`, apiKey, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function cancelPayment(apiKey: string, paymentId: string): Promise<{ deleted: boolean }> {
+  return asaasRequest<{ deleted: boolean }>(`/payments/${paymentId}/cancel`, apiKey, {
+    method: 'POST',
+  })
+}
+
 export async function getCustomerFinancialSummary(apiKey: string, customerId: string) {
   const res = await getCustomerPayments(apiKey, customerId, 50)
   const payments = res.data
