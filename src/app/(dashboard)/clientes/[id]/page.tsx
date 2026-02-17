@@ -11,7 +11,7 @@ import {
   RefreshCw, Send, Clock, User, Calendar,
   Phone, Mail, MapPin, FileText, History,
   Plug, Zap, ExternalLink, ChevronRight,
-  Shield, Activity, Heart, Star, UserMinus, UserCheck,
+  Shield, Activity, Heart, Star, UserMinus, UserCheck, Trash2,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -599,11 +599,30 @@ function ClientePerfilInner() {
   const searchParams = useSearchParams()
   const initialTab = searchParams.get('tab') ?? 'visao-geral'
   const [activeTab, setActiveTab]     = useState(initialTab)
-  const [showChurnModal, setShowChurnModal] = useState(false)
-  const [churnRecord, setChurnRecord]      = useState<ChurnRecord | undefined>(undefined)
-  const [isInactive, setIsInactive]        = useState(false)
+  const [showChurnModal, setShowChurnModal]   = useState(false)
+  const [churnRecord, setChurnRecord]          = useState<ChurnRecord | undefined>(undefined)
+  const [isInactive, setIsInactive]            = useState(false)
+  const [showDeleteModal, setShowDeleteModal]  = useState(false)
+  const [deleting, setDeleting]                = useState(false)
 
   const { client, loading, error, refetch } = useClient(id)
+
+  async function handleDelete() {
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/clients/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        alert('Erro ao excluir: ' + (d.error ?? `HTTP ${res.status}`))
+        setDeleting(false)
+        return
+      }
+      router.push('/clientes')
+    } catch (err) {
+      alert('Erro inesperado: ' + (err instanceof Error ? err.message : String(err)))
+      setDeleting(false)
+    }
+  }
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -645,6 +664,37 @@ function ClientePerfilInner() {
         />
       )}
 
+      {/* Modal de exclusão */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-zinc-900 border border-red-500/30 rounded-2xl p-6 max-w-sm w-full space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-500/15 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <p className="text-white font-semibold">Excluir cliente permanentemente?</p>
+                <p className="text-zinc-500 text-xs mt-0.5">{client.nomeResumido ?? client.name}</p>
+              </div>
+            </div>
+            <p className="text-zinc-400 text-sm leading-relaxed">
+              Esta ação é <span className="text-red-400 font-medium">irreversível</span>. Todo o histórico, health scores,
+              análises e integrações do cliente serão apagados permanentemente.
+            </p>
+            <div className="flex items-center gap-3 pt-1">
+              <Button variant="outline" size="sm" className="flex-1 border-zinc-700 text-zinc-400 hover:text-white"
+                onClick={() => setShowDeleteModal(false)} disabled={deleting}>
+                Cancelar
+              </Button>
+              <Button size="sm" className="flex-1 bg-red-600 hover:bg-red-700 text-white gap-1.5"
+                onClick={handleDelete} disabled={deleting}>
+                {deleting ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Excluindo...</> : <><Trash2 className="w-3.5 h-3.5" /> Excluir</>}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header do perfil */}
       <div className="border-b border-zinc-800 bg-zinc-950 sticky top-0 z-10">
         <div className="px-4 lg:px-6 pt-4 pb-0">
@@ -672,9 +722,14 @@ function ClientePerfilInner() {
                 <Button size="sm" variant="outline"
                   onClick={() => setShowChurnModal(true)}
                   className="border-red-800/40 text-red-400 hover:bg-red-500/10 text-xs gap-1.5">
-                  <UserMinus className="w-3.5 h-3.5" /> Inativar cliente
+                  <UserMinus className="w-3.5 h-3.5" /> Inativar
                 </Button>
               )}
+              <Button size="sm" variant="outline"
+                onClick={() => setShowDeleteModal(true)}
+                className="border-red-900/50 text-red-600 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/40 text-xs gap-1.5">
+                <Trash2 className="w-3.5 h-3.5" /> Excluir
+              </Button>
               <Link href={`/clientes/${id}/editar`}>
                 <Button size="sm" variant="outline" className="border-zinc-700 text-zinc-400 hover:text-white text-xs">
                   Editar cadastro
