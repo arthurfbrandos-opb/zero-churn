@@ -78,9 +78,26 @@ function mapDbClient(row: Record<string, unknown>): Client {
     whatsappGroupId:   row.whatsapp_group_id  ? String(row.whatsapp_group_id)  : undefined,
     observations:      row.observations       ? String(row.observations)       : undefined,
     // Produto / Serviço contratado
-    serviceId:              row.service_id              ? String(row.service_id)   : undefined,
+    serviceId:              row.service_id ? String(row.service_id) : undefined,
     entregaveisIncluidos:   Array.isArray(row.entregaveis_incluidos) ? (row.entregaveis_incluidos as string[]) : [],
     bonusIncluidos:         Array.isArray(row.bonus_incluidos)       ? (row.bonus_incluidos as string[])       : [],
+    // Contrato MRR
+    contractMonths:         row.contract_months          != null ? Number(row.contract_months)          : undefined,
+    hasImplementationFee:   Boolean(row.has_implementation_fee),
+    implementationFeeValue: row.implementation_fee_value != null ? Number(row.implementation_fee_value) : undefined,
+    implementationFeeDate:  row.implementation_fee_date  ? String(row.implementation_fee_date)  : undefined,
+    // Contrato TCV
+    projectDeadlineDays:    row.project_deadline_days    != null ? Number(row.project_deadline_days)    : undefined,
+    hasInstallments:        Boolean(row.has_installments),
+    installmentsType:       row.installments_type        ? String(row.installments_type)        : undefined,
+    installmentsCount:      row.installments_count       != null ? Number(row.installments_count)       : undefined,
+    firstInstallmentDate:   row.first_installment_date   ? String(row.first_installment_date)   : undefined,
+    parcelas:               Array.isArray(row.parcelas)  ? row.parcelas as {id:string;vencimento:string;valor:string}[] : [],
+    // Contexto / Briefing
+    nichoEspecifico:        row.nicho_especifico     ? String(row.nicho_especifico)     : undefined,
+    resumoReuniao:          row.resumo_reuniao        ? String(row.resumo_reuniao)        : undefined,
+    expectativasCliente:    row.expectativas_cliente  ? String(row.expectativas_cliente)  : undefined,
+    principaisDores:        row.principais_dores      ? String(row.principais_dores)      : undefined,
     // Endereço
     cep:               row.cep         ? String(row.cep)         : undefined,
     logradouro:        row.logradouro  ? String(row.logradouro)  : undefined,

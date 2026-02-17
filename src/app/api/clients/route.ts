@@ -59,6 +59,13 @@ export async function POST(request: NextRequest) {
       service_id, entregaveis_incluidos, bonus_incluidos,
       client_type, mrr_value, tcv_value,
       contract_start, contract_end,
+      // MRR
+      contract_months, has_implementation_fee, implementation_fee_value, implementation_fee_date,
+      // TCV
+      project_deadline_days, has_installments, installments_type, installments_count,
+      first_installment_date, parcelas,
+      // Contexto
+      nicho_especifico, resumo_reuniao, expectativas_cliente, principais_dores,
       whatsapp_group_id, observations, payment_status,
     } = body
 
@@ -94,6 +101,10 @@ export async function POST(request: NextRequest) {
         cep, logradouro, numero, complemento, bairro, cidade, estado,
         service_id, entregaveis_incluidos, bonus_incluidos,
         client_type, mrr_value, tcv_value,
+        contract_months, has_implementation_fee, implementation_fee_value, implementation_fee_date,
+        project_deadline_days, has_installments, installments_type, installments_count,
+        first_installment_date, parcelas,
+        nicho_especifico, resumo_reuniao, expectativas_cliente, principais_dores,
         contract_start, contract_end,
         whatsapp_group_id, observations,
         payment_status: payment_status ?? 'em_dia',

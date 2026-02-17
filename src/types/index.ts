@@ -130,11 +130,27 @@ export interface Client {
   serviceId?: string
   entregaveisIncluidos?: string[]
   bonusIncluidos?: string[]
+  // Contrato MRR
+  contractMonths?: number
+  hasImplementationFee?: boolean
+  implementationFeeValue?: number
+  implementationFeeDate?: string
+  // Contrato TCV
+  projectDeadlineDays?: number
+  hasInstallments?: boolean
+  installmentsType?: string
+  installmentsCount?: number
+  firstInstallmentDate?: string
+  parcelas?: { id: string; vencimento: string; valor: string }[]
+  // Contexto / Briefing
+  nichoEspecifico?: string
+  resumoReuniao?: string
+  expectativasCliente?: string
+  principaisDores?: string
 
   // TCV
   totalProjectValue?: number
   tcvValue?: number
-  projectDeadlineDays?: number
   projectStartDate?: string
 
   // Endereço (objeto aninhado legado)

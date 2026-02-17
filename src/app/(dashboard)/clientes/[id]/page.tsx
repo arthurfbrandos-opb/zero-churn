@@ -456,6 +456,39 @@ function TabCadastro({ client }: { client: Client }) {
         </Card>
       )}
 
+      {/* Contexto / Briefing */}
+      {(client.resumoReuniao || client.expectativasCliente || client.principaisDores || client.nichoEspecifico) && (
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-5 space-y-4">
+            <h3 className="text-zinc-200 font-semibold text-sm">Contexto do cliente</h3>
+            {client.nichoEspecifico && (
+              <div>
+                <p className="text-zinc-500 text-xs mb-1">Nicho específico</p>
+                <p className="text-zinc-300 text-sm">{client.nichoEspecifico}</p>
+              </div>
+            )}
+            {client.resumoReuniao && (
+              <div>
+                <p className="text-zinc-500 text-xs mb-1">Resumo da reunião de fechamento</p>
+                <p className="text-zinc-300 text-sm leading-relaxed whitespace-pre-wrap">{client.resumoReuniao}</p>
+              </div>
+            )}
+            {client.expectativasCliente && (
+              <div>
+                <p className="text-zinc-500 text-xs mb-1">Expectativas declaradas</p>
+                <p className="text-zinc-300 text-sm leading-relaxed whitespace-pre-wrap">{client.expectativasCliente}</p>
+              </div>
+            )}
+            {client.principaisDores && (
+              <div>
+                <p className="text-zinc-500 text-xs mb-1">Principais dores e motivações</p>
+                <p className="text-zinc-300 text-sm leading-relaxed whitespace-pre-wrap">{client.principaisDores}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {client.observations && (
         <Card className="bg-zinc-900 border-zinc-800">
           <CardContent className="p-5 space-y-2">

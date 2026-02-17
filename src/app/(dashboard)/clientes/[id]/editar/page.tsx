@@ -881,15 +881,32 @@ export default function EditarClientePage() {
       cidade:           client.cidade         ?? '',
       estado:           client.estado         ?? '',
       // Produto / Serviço
-      serviceId:             client.serviceId             ?? '',
-      entregaveisIncluidos:  client.entregaveisIncluidos  ?? [],
-      bonusIncluidos:        client.bonusIncluidos         ?? [],
+      serviceId:             client.serviceId            ?? '',
+      entregaveisIncluidos:  client.entregaveisIncluidos ?? [],
+      bonusIncluidos:        client.bonusIncluidos        ?? [],
       // Contrato
-      clientType:        client.clientType    ?? 'mrr',
-      contractValue:     String(client.mrrValue ?? client.contractValue ?? ''),
-      totalProjectValue: String(client.tcvValue ?? client.totalProjectValue ?? ''),
-      contractStartDate: client.contractStartDate ?? '',
-      notes:             client.observations  ?? '',
+      clientType:        client.clientType         ?? 'mrr',
+      contractValue:     String(client.mrrValue    ?? client.contractValue    ?? ''),
+      totalProjectValue: String(client.tcvValue    ?? client.totalProjectValue ?? ''),
+      contractStartDate: client.contractStartDate  ?? '',
+      // MRR
+      contractMonths:          String(client.contractMonths          ?? '12'),
+      hasImplementationFee:    client.hasImplementationFee           ?? false,
+      implementationFeeValue:  String(client.implementationFeeValue  ?? ''),
+      implementationFeeDate:   client.implementationFeeDate          ?? '',
+      // TCV
+      projectDeadlineDays:    String(client.projectDeadlineDays     ?? '90'),
+      hasInstallments:         client.hasInstallments                ?? false,
+      installmentsType:        (client.installmentsType as 'equal' | 'custom') ?? 'equal',
+      installmentsCount:       String(client.installmentsCount       ?? '3'),
+      firstInstallmentDate:    client.firstInstallmentDate           ?? '',
+      parcelas:                client.parcelas                       ?? [],
+      // Contexto
+      nichoEspecifico:     client.nichoEspecifico    ?? '',
+      resumoReuniao:       client.resumoReuniao       ?? '',
+      expectativasCliente: client.expectativasCliente ?? '',
+      principaisDores:     client.principaisDores     ?? '',
+      notes:               client.observations        ?? '',
     }))
   }, [client, formReady])
 
@@ -1053,10 +1070,27 @@ export default function EditarClientePage() {
         service_id:            form.serviceId            || null,
         entregaveis_incluidos: form.entregaveisIncluidos,
         bonus_incluidos:       form.bonusIncluidos,
-        client_type:       form.clientType,
-        mrr_value:         form.clientType === 'mrr' ? parseMoney(form.contractValue) : null,
-        tcv_value:         form.clientType === 'tcv' ? parseMoney(form.totalProjectValue) : null,
-        contract_start:    form.contractStartDate || null,
+        client_type:           form.clientType,
+        mrr_value:             form.clientType === 'mrr' ? parseMoney(form.contractValue)     : null,
+        tcv_value:             form.clientType === 'tcv' ? parseMoney(form.totalProjectValue) : null,
+        contract_start:        form.contractStartDate || null,
+        // MRR
+        contract_months:          form.clientType === 'mrr' ? (parseInt(form.contractMonths) || null) : null,
+        has_implementation_fee:   form.hasImplementationFee,
+        implementation_fee_value: form.hasImplementationFee ? parseMoney(form.implementationFeeValue) : null,
+        implementation_fee_date:  form.hasImplementationFee ? (form.implementationFeeDate || null) : null,
+        // TCV
+        project_deadline_days:  form.clientType === 'tcv' ? (parseInt(form.projectDeadlineDays) || null) : null,
+        has_installments:       form.hasInstallments,
+        installments_type:      form.hasInstallments ? form.installmentsType : null,
+        installments_count:     form.hasInstallments ? (parseInt(form.installmentsCount) || null) : null,
+        first_installment_date: form.hasInstallments ? (form.firstInstallmentDate || null) : null,
+        parcelas:               form.hasInstallments ? form.parcelas : [],
+        // Contexto
+        nicho_especifico:     form.nichoEspecifico     || null,
+        resumo_reuniao:       form.resumoReuniao        || null,
+        expectativas_cliente: form.expectativasCliente  || null,
+        principais_dores:     form.principaisDores      || null,
         whatsapp_group_id: form.whatsappGroupLink || null,
         observations:      form.notes || null,
       }
