@@ -131,6 +131,33 @@ export async function getOverduePayments(apiKey: string, customerId: string) {
   )
 }
 
+/**
+ * Retorna IDs únicos de customers que tiveram pagamento pago nos últimos N dias
+ * Usa os status: RECEIVED, CONFIRMED, RECEIVED_IN_CASH
+ */
+export async function getActiveCustomerIds(apiKey: string, days = 90): Promise<Set<string>> {
+  const since = new Date()
+  since.setDate(since.getDate() - days)
+  const sinceStr = since.toISOString().slice(0, 10) // YYYY-MM-DD
+
+  const activeIds = new Set<string>()
+  let offset = 0
+  let hasMore = true
+
+  // Busca até 1000 pagamentos pagos no período (10 páginas de 100)
+  while (hasMore && offset < 1000) {
+    const res = await asaasRequest<AsaasListResponse<AsaasPayment>>(
+      `/payments?paymentDate[ge]=${sinceStr}&status=RECEIVED,CONFIRMED,RECEIVED_IN_CASH&limit=100&offset=${offset}`,
+      apiKey
+    )
+    res.data.forEach(p => activeIds.add(p.customer))
+    hasMore = res.hasMore
+    offset += 100
+  }
+
+  return activeIds
+}
+
 export async function getCustomerFinancialSummary(apiKey: string, customerId: string) {
   const res = await getCustomerPayments(apiKey, customerId, 50)
   const payments = res.data

@@ -1,26 +1,26 @@
 /**
- * GET /api/asaas/customers
- * Lista todos os customers do Asaas usando a chave salva na agência
+ * GET /api/asaas/customers?active_days=90
+ * Lista customers do Asaas filtrando por pagamento pago nos últimos N dias
  */
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/supabase/encryption'
-import { listCustomers } from '@/lib/asaas/client'
+import { listCustomers, getActiveCustomerIds } from '@/lib/asaas/client'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const supabase = await createClient()
     const { data: { user }, error } = await supabase.auth.getUser()
     if (error || !user) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
 
-    // Busca a chave do Asaas salva pela agência
+    // Busca a chave Asaas da agência
     const { data: integration } = await supabase
       .from('agency_integrations')
       .select('encrypted_key, status')
       .eq('type', 'asaas')
       .single()
 
-    if (!integration || !integration.encrypted_key) {
+    if (!integration?.encrypted_key) {
       return NextResponse.json(
         { error: 'Integração com Asaas não configurada. Vá em Configurações → Integrações.' },
         { status: 404 }
@@ -29,28 +29,43 @@ export async function GET() {
 
     if (integration.status !== 'active') {
       return NextResponse.json(
-        { error: 'Integração Asaas inativa ou com erro. Reconfigure em Configurações → Integrações.' },
+        { error: 'Integração Asaas inativa. Reconfigure em Configurações → Integrações.' },
         { status: 403 }
       )
     }
 
-    // Descriptografa
     const creds = await decrypt<{ api_key: string }>(integration.encrypted_key)
     const apiKey = creds.api_key
 
-    // Busca customers paginando
-    const allCustomers = []
-    let offset = 0
-    let hasMore = true
+    // Parâmetro de filtro (padrão: 90 dias)
+    const activeDays = parseInt(req.nextUrl.searchParams.get('active_days') ?? '90', 10)
 
-    while (hasMore && offset < 500) {
-      const res = await listCustomers(apiKey, 100, offset)
-      allCustomers.push(...res.data)
-      hasMore = res.hasMore
-      offset += 100
-    }
+    // Busca em paralelo: todos os customers + IDs ativos
+    const [customersResult, activeIds] = await Promise.all([
+      (async () => {
+        const all = []
+        let offset = 0
+        let hasMore = true
+        while (hasMore && offset < 1000) {
+          const res = await listCustomers(apiKey, 100, offset)
+          all.push(...res.data)
+          hasMore = res.hasMore
+          offset += 100
+        }
+        return all
+      })(),
+      getActiveCustomerIds(apiKey, activeDays),
+    ])
 
-    return NextResponse.json({ customers: allCustomers, total: allCustomers.length })
+    // Filtra apenas clientes com pagamento pago no período
+    const filtered = customersResult.filter(c => activeIds.has(c.id))
+
+    return NextResponse.json({
+      customers:  filtered,
+      total:      filtered.length,
+      totalAll:   customersResult.length,
+      activeDays,
+    })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[GET /api/asaas/customers]', msg)

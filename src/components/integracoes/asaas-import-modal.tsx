@@ -23,6 +23,12 @@ interface Props {
   onClose: () => void
 }
 
+interface CustomersMeta {
+  total: number
+  totalAll: number
+  activeDays: number
+}
+
 function fmtCnpj(v: string | null) {
   if (!v) return '—'
   const d = v.replace(/\D/g, '')
@@ -33,6 +39,7 @@ function fmtCnpj(v: string | null) {
 
 export function AsaasImportModal({ onSuccess, onClose }: Props) {
   const [customers, setCustomers]   = useState<AsaasCustomer[]>([])
+  const [meta, setMeta]             = useState<CustomersMeta | null>(null)
   const [loading, setLoading]       = useState(true)
   const [error, setError]           = useState<string | null>(null)
   const [search, setSearch]         = useState('')
@@ -45,12 +52,14 @@ export function AsaasImportModal({ onSuccess, onClose }: Props) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/asaas/customers')
+      // Filtra por clientes com pagamento pago nos últimos 90 dias
+      const res = await fetch('/api/asaas/customers?active_days=90')
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
       setCustomers(data.customers ?? [])
-      // Seleciona todos por padrão
-      setSelected(new Set((data.customers ?? []).map((c: AsaasCustomer) => c.id)))
+      setMeta({ total: data.total, totalAll: data.totalAll, activeDays: data.activeDays })
+      // Nenhum pré-selecionado — usuário escolhe
+      setSelected(new Set())
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar')
     } finally {
@@ -121,7 +130,11 @@ export function AsaasImportModal({ onSuccess, onClose }: Props) {
             <div>
               <p className="text-zinc-100 font-semibold">Importar clientes do Asaas</p>
               <p className="text-zinc-500 text-xs">
-                {loading ? 'Carregando...' : `${customers.length} customers encontrados`}
+                {loading
+                  ? 'Buscando clientes ativos...'
+                  : meta
+                  ? `${meta.total} clientes com pagamento nos últimos ${meta.activeDays} dias (de ${meta.totalAll} no total)`
+                  : ''}
               </p>
             </div>
           </div>
