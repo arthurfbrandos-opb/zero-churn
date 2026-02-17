@@ -882,144 +882,268 @@ function AsaasIntegCard() {
   )
 }
 
+// Tipos para o estado do webhook Dom
+interface DomWebhookInfo {
+  configured:  boolean
+  active:      boolean
+  webhook_url: string
+  agency_id:   string
+  has_token:   boolean
+  last_event:  { message: string; event: string; received_at: string } | null
+}
+
 function DomIntegCard() {
-  const [token, setToken]           = useState('')
-  const [publicKey, setPublicKey]   = useState('')
-  const [webhookCode, setWebhookCode] = useState('')
-  const [showToken, setShowToken]   = useState(false)
-  const [saving, setSaving]         = useState(false)
-  const [status, setStatus]         = useState<'idle' | 'active' | 'error'>('idle')
-  const [msg, setMsg]               = useState('')
+  const [info, setInfo]           = useState<DomWebhookInfo | null>(null)
+  const [loading, setLoading]     = useState(true)
+  const [activating, setActivating] = useState(false)
+  const [deactivating, setDeactivating] = useState(false)
+  const [testing, setTesting]     = useState(false)
+  const [testResult, setTestResult] = useState<'ok' | 'error' | null>(null)
+  const [copied, setCopied]       = useState(false)
+  const [msg, setMsg]             = useState('')
 
-  const WEBHOOK_URL = `${typeof window !== 'undefined' ? window.location.origin : 'https://zero-churn.vercel.app'}/api/webhooks/dom`
+  // Token opcional (colapsado)
+  const [showTokenSection, setShowTokenSection] = useState(false)
+  const [token, setToken]         = useState('')
+  const [showToken, setShowToken] = useState(false)
+  const [savingToken, setSavingToken] = useState(false)
 
-  useEffect(() => {
-    fetch('/api/agency/integrations')
-      .then(r => r.json())
-      .then(d => {
-        const dom = (d.integrations ?? []).find((i: { type: string; status: string }) => i.type === 'dom_pagamentos')
-        if (dom) setStatus(dom.status === 'active' ? 'active' : 'error')
-      })
-      .catch(() => {})
-  }, [])
+  function showMsg(text: string) { setMsg(text); setTimeout(() => setMsg(''), 4000) }
 
-  async function handleSave() {
-    if (!token.trim()) return
-    setSaving(true); setMsg('')
+  // Carrega status atual
+  async function loadInfo() {
+    setLoading(true)
     try {
-      const res = await fetch('/api/agency/integrations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'dom_pagamentos',
-          credentials: {
-            token:        token.trim(),
-            public_key:   publicKey.trim() || undefined,
-            webhook_code: webhookCode.trim() || undefined,
-            environment:  'production',
-          },
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setStatus('error')
-        setMsg(data.error ?? 'Erro ao salvar')
-      } else {
-        setStatus('active')
-        setMsg('Conectado com sucesso!')
-        setToken(''); setPublicKey(''); setWebhookCode('')
-        setTimeout(() => setMsg(''), 3000)
-      }
-    } catch {
-      setStatus('error')
-      setMsg('Erro de conexão')
-    } finally {
-      setSaving(false)
-    }
+      const res = await fetch('/api/dom/webhook')
+      if (res.ok) setInfo(await res.json())
+    } catch { /* ignore */ }
+    setLoading(false)
   }
+
+  useEffect(() => { loadInfo() }, [])
+
+  // Gera / ativa a URL de webhook
+  async function handleActivate() {
+    setActivating(true)
+    try {
+      const res = await fetch('/api/dom/webhook', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      if (res.ok) { await loadInfo(); showMsg('Webhook ativado! Copie a URL abaixo.') }
+      else { const d = await res.json(); showMsg(d.error ?? 'Erro ao ativar') }
+    } catch { showMsg('Erro de conexão') }
+    setActivating(false)
+  }
+
+  // Desativa
+  async function handleDeactivate() {
+    if (!confirm('Desativar o webhook Dom Pagamentos? Eventos deixarão de ser recebidos.')) return
+    setDeactivating(true)
+    try {
+      await fetch('/api/dom/webhook', { method: 'DELETE' })
+      await loadInfo()
+      showMsg('Integração desativada.')
+    } catch { showMsg('Erro ao desativar') }
+    setDeactivating(false)
+  }
+
+  // Testa o webhook (GET na URL pública)
+  async function handleTest() {
+    if (!info?.webhook_url) return
+    setTesting(true); setTestResult(null)
+    try {
+      const res = await fetch(info.webhook_url, { method: 'GET' })
+      const d   = await res.json()
+      setTestResult(d.ok ? 'ok' : 'error')
+    } catch { setTestResult('error') }
+    setTesting(false)
+    setTimeout(() => setTestResult(null), 5000)
+  }
+
+  // Copia URL
+  function handleCopy() {
+    if (!info?.webhook_url) return
+    navigator.clipboard.writeText(info.webhook_url)
+    setCopied(true); setTimeout(() => setCopied(false), 2000)
+  }
+
+  // Salva token opcional
+  async function handleSaveToken() {
+    if (!token.trim()) return
+    setSavingToken(true)
+    try {
+      const res = await fetch('/api/dom/webhook', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: token.trim() }) })
+      if (res.ok) {
+        await loadInfo(); setToken(''); setShowTokenSection(false)
+        showMsg('Token salvo. Histórico disponível na página Financeiro.')
+      } else { const d = await res.json(); showMsg(d.error ?? 'Erro ao salvar token') }
+    } catch { showMsg('Erro de conexão') }
+    setSavingToken(false)
+  }
+
+  // ── Formata tempo relativo ──
+  function timeAgo(iso: string) {
+    const diff = Date.now() - new Date(iso).getTime()
+    const min  = Math.floor(diff / 60000)
+    if (min < 1)  return 'agora mesmo'
+    if (min < 60) return `há ${min} min`
+    const h = Math.floor(min / 60)
+    if (h < 24)   return `há ${h}h`
+    return `há ${Math.floor(h / 24)}d`
+  }
+
+  const isActive = info?.active === true
+  const cardStatus = loading ? 'disconnected' : isActive ? 'connected' : 'disconnected'
 
   return (
     <IntegCard icon={CreditCard} name="Dom Pagamentos" color="bg-violet-500/15 text-violet-400"
-      description="Gateway de cobranças — transações, assinaturas e eventos em tempo real"
-      status={status === 'active' ? 'connected' : status === 'error' ? 'error' : 'disconnected'}>
+      description="Receba eventos de pagamento em tempo real via webhook"
+      status={cardStatus}>
       <div className="space-y-4 pt-1">
 
-        {/* Token Bearer */}
-        <div className="space-y-1.5">
-          <Label className="text-zinc-400 text-xs">Token de autenticação</Label>
-          <p className="text-zinc-600 text-xs">Solicite ao suporte da Dom Pagamentos. Usado como Bearer token na API.</p>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Input
-                type={showToken ? 'text' : 'password'}
-                value={token}
-                onChange={e => setToken(e.target.value)}
-                placeholder={status === 'active' ? '••••••••••• (já configurado)' : 'Token fornecido pelo suporte Dom'}
-                className={cn(inputCls, 'text-sm pr-10')}
-              />
-              <button type="button" onClick={() => setShowToken(v => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300">
-                {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+        {loading ? (
+          <div className="flex items-center gap-2 text-zinc-500 text-xs py-2">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            Carregando...
+          </div>
+        ) : !isActive ? (
+          /* ── Estado: não configurado ── */
+          <div className="space-y-3">
+            <div className="p-3 rounded-xl bg-zinc-800/50 border border-zinc-700/50 space-y-2">
+              <p className="text-zinc-400 text-xs">
+                Gere sua URL de webhook exclusiva. Cole-a no painel da Dom Pagamentos e escolha
+                os eventos — o Zero Churn processará tudo automaticamente.
+              </p>
+              <p className="text-zinc-600 text-xs">Nenhum token necessário para começar.</p>
+            </div>
+            <Button onClick={handleActivate} disabled={activating} size="sm"
+              className="bg-violet-600 hover:bg-violet-500 text-white gap-2">
+              {activating
+                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Gerando...</>
+                : <><Check className="w-3.5 h-3.5" /> Gerar URL de Webhook</>}
+            </Button>
+          </div>
+        ) : (
+          /* ── Estado: ativo ── */
+          <div className="space-y-3">
+
+            {/* URL do webhook */}
+            <div className="space-y-1.5">
+              <Label className="text-zinc-400 text-xs">Sua URL de Webhook</Label>
+              <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5">
+                <code className="text-violet-300 text-xs flex-1 break-all leading-relaxed">
+                  {info?.webhook_url}
+                </code>
+                <button onClick={handleCopy}
+                  className={cn('shrink-0 text-xs flex items-center gap-1 transition-colors',
+                    copied ? 'text-emerald-400' : 'text-zinc-500 hover:text-zinc-300')}>
+                  {copied ? <><Check className="w-3 h-3" /> Copiado</> : 'Copiar'}
+                </button>
+              </div>
+              <p className="text-zinc-600 text-xs">
+                Cole esta URL no painel Dom Pagamentos → Webhooks. Sugerimos eventos:
+                <span className="text-zinc-500"> CHARGE-APPROVED, CHARGE-CHARGEBACK, SIGNATURE-INVOICE-PAID, SIGNATURE-INVOICE-FAILED</span>
+              </p>
+            </div>
+
+            {/* Último evento recebido */}
+            <div className={cn('flex items-start gap-3 p-3 rounded-xl border text-xs',
+              info?.last_event
+                ? 'bg-emerald-500/5 border-emerald-500/20'
+                : 'bg-zinc-800/40 border-zinc-700/50')}>
+              {info?.last_event ? (
+                <>
+                  <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 mt-0.5 animate-pulse" />
+                  <div>
+                    <p className="text-emerald-400 font-medium">Funcionando</p>
+                    <p className="text-zinc-400 mt-0.5">{info.last_event.message}</p>
+                    <p className="text-zinc-600 mt-0.5">{timeAgo(info.last_event.received_at)}</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="w-2 h-2 rounded-full bg-yellow-500/70 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-yellow-400/80 font-medium">Aguardando primeiro evento</p>
+                    <p className="text-zinc-500 mt-0.5">
+                      Configure o webhook no painel Dom e aguarde o próximo pagamento.
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Botão de testar */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button variant="outline" size="sm" onClick={handleTest} disabled={testing}
+                className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 gap-2 text-xs h-8">
+                {testing
+                  ? <><Loader2 className="w-3 h-3 animate-spin" /> Testando...</>
+                  : 'Testar conexão'}
+              </Button>
+
+              {testResult === 'ok' && (
+                <span className="text-emerald-400 text-xs flex items-center gap-1">
+                  <Check className="w-3.5 h-3.5" /> Endpoint ativo e respondendo
+                </span>
+              )}
+              {testResult === 'error' && (
+                <span className="text-red-400 text-xs flex items-center gap-1">
+                  <X className="w-3.5 h-3.5" /> Falha ao conectar
+                </span>
+              )}
+
+              <button onClick={handleDeactivate} disabled={deactivating}
+                className="text-xs text-zinc-600 hover:text-red-400 transition-colors ml-auto">
+                {deactivating ? 'Desativando...' : 'Desativar'}
               </button>
             </div>
-          </div>
-        </div>
 
-        {/* Chave pública */}
-        <div className="space-y-1.5">
-          <Label className="text-zinc-400 text-xs">Chave pública <span className="text-zinc-600">(opcional)</span></Label>
-          <Input
-            value={publicKey}
-            onChange={e => setPublicKey(e.target.value)}
-            placeholder="pk_xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-            className={cn(inputCls, 'text-sm font-mono text-xs')}
-          />
-        </div>
+            {/* Token opcional — para puxar histórico */}
+            <div className="border-t border-zinc-800 pt-3">
+              <button onClick={() => setShowTokenSection(v => !v)}
+                className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1.5 transition-colors">
+                <Plus className={cn('w-3.5 h-3.5 transition-transform', showTokenSection && 'rotate-45')} />
+                {info?.has_token
+                  ? 'Token API configurado (histórico ativo)'
+                  : 'Adicionar Token API (opcional — para histórico na Financeiro)'}
+              </button>
 
-        {/* Webhook */}
-        <div className="space-y-2 p-3 rounded-xl bg-zinc-800/50 border border-zinc-700/50">
-          <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-violet-400" />
-            <p className="text-zinc-300 text-xs font-semibold">Configuração do Webhook</p>
+              {showTokenSection && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-zinc-600 text-xs">
+                    Token Bearer fornecido pelo suporte Dom. Permite buscar histórico de transações
+                    na página Financeiro (além dos eventos em tempo real).
+                  </p>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Input type={showToken ? 'text' : 'password'} value={token}
+                        onChange={e => setToken(e.target.value)}
+                        placeholder={info?.has_token ? '••••••••• (já configurado)' : 'Token do suporte Dom'}
+                        className={cn(inputCls, 'text-sm pr-10')} />
+                      <button type="button" onClick={() => setShowToken(v => !v)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300">
+                        {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    <Button size="sm" onClick={handleSaveToken} disabled={!token.trim() || savingToken}
+                      className="bg-violet-600 hover:bg-violet-500 text-white shrink-0">
+                      {savingToken ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Salvar'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-          <p className="text-zinc-500 text-xs">
-            No painel da Dom Pagamentos, cadastre esta URL como webhook e escolha os eventos desejados
-            (recomendado: CHARGE-APPROVED, CHARGE-CHARGEBACK, SIGNATURE-INVOICE-PAID, SIGNATURE-INVOICE-FAILED).
-          </p>
-          <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2">
-            <code className="text-violet-300 text-xs flex-1 break-all">{WEBHOOK_URL}</code>
-            <button
-              onClick={() => navigator.clipboard.writeText(WEBHOOK_URL)}
-              className="text-zinc-500 hover:text-zinc-300 shrink-0 text-xs">
-              Copiar
-            </button>
-          </div>
+        )}
 
-          <div className="space-y-1.5">
-            <Label className="text-zinc-400 text-xs">Código do Webhook <span className="text-zinc-600">(opcional — para verificação)</span></Label>
-            <Input
-              value={webhookCode}
-              onChange={e => setWebhookCode(e.target.value)}
-              placeholder="Código gerado no painel Dom"
-              className={cn(inputCls, 'text-sm')}
-            />
-            <p className="text-zinc-600 text-xs">Se informado, o Zero Churn valida que os eventos vêm da Dom Pagamentos.</p>
-          </div>
-        </div>
-
+        {/* Mensagem de feedback */}
         {msg && (
-          <p className={cn('text-xs px-3 py-2 rounded-lg', status === 'active'
-            ? 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20'
-            : 'text-red-400 bg-red-500/10 border border-red-500/20')}>
+          <p className="text-xs px-3 py-2 rounded-lg text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
             {msg}
           </p>
         )}
-
-        <Button onClick={handleSave} disabled={!token.trim() || saving} size="sm"
-          className="bg-violet-600 hover:bg-violet-500 text-white gap-2">
-          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-          {saving ? 'Salvando...' : status === 'active' ? 'Atualizar token' : 'Conectar Dom Pagamentos'}
-        </Button>
       </div>
     </IntegCard>
   )
