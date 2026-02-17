@@ -824,19 +824,29 @@ export default function EditarClientePage() {
     setFormReady(true)
     setForm(prev => ({
       ...prev,
-      razaoSocial:       (client as unknown as Record<string, unknown>).razao_social as string ?? client.razaoSocial ?? client.name ?? '',
-      nomeResumido:      client.nomeResumido   ?? '',
-      cnpjCpf:           client.cnpj           ?? '',
-      nomeDecisor:       (client as unknown as Record<string, unknown>).nome_decisor as string ?? client.nomeDecisor ?? '',
-      email:             (client as unknown as Record<string, unknown>).email as string ?? '',
-      telefone:          (client as unknown as Record<string, unknown>).telefone as string ?? '',
-      emailFinanceiro:   (client as unknown as Record<string, unknown>).email_financeiro as string ?? '',
-      segment:           client.segment        ?? '',
-      clientType:        client.clientType     ?? 'mrr',
+      // Identificação
+      razaoSocial:      client.razaoSocial    ?? client.name ?? '',
+      nomeResumido:     client.nomeResumido   ?? '',
+      cnpjCpf:          client.cnpj           ?? '',
+      nomeDecisor:      client.nomeDecisor    ?? '',
+      email:            client.email          ?? '',
+      telefone:         client.telefone       ?? '',
+      emailFinanceiro:  client.emailFinanceiro ?? '',
+      segment:          client.segment        ?? '',
+      // Endereço
+      cep:              client.cep            ?? '',
+      logradouro:       client.logradouro     ?? '',
+      numero:           client.numero         ?? '',
+      complemento:      client.complemento    ?? '',
+      bairro:           client.bairro         ?? '',
+      cidade:           client.cidade         ?? '',
+      estado:           client.estado         ?? '',
+      // Contrato
+      clientType:        client.clientType    ?? 'mrr',
       contractValue:     String(client.mrrValue ?? client.contractValue ?? ''),
       totalProjectValue: String(client.tcvValue ?? client.totalProjectValue ?? ''),
       contractStartDate: client.contractStartDate ?? '',
-      notes:             client.observations   ?? '',
+      notes:             client.observations  ?? '',
     }))
   }, [client, formReady])
 
