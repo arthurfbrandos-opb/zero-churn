@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Building2, Briefcase, Plug, Users, Bot, Bell,
-  Plus, Trash2, Check, X, Eye, EyeOff, Loader2,
+  Plus, Trash2, Check, X, Eye, EyeOff, Loader2, Save,
   ChevronRight, Shield, AlertTriangle, RefreshCw,
   MessageCircle, CreditCard, BarChart2, Zap,
   GripVertical, FileText, Lock, AlignLeft, ListChecks, Hash,
@@ -704,12 +704,25 @@ interface IntegCardProps {
   description: string
   color: string
   connected?: boolean
+  status?: 'connected' | 'disconnected' | 'error' | 'coming'
   children: React.ReactNode
 }
 
-function IntegCard({ icon: Icon, name, description, color, connected, children }: IntegCardProps) {
+function IntegCard({ icon: Icon, name, description, color, connected, status, children }: IntegCardProps) {
+  const badgeMap = {
+    connected:    'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+    disconnected: 'bg-zinc-800 text-zinc-500 border-zinc-700',
+    error:        'bg-red-500/10 text-red-400 border-red-500/30',
+    coming:       'bg-zinc-800 text-zinc-600 border-zinc-800',
+  }
+  const badgeLabelMap = {
+    connected: '● Conectado', disconnected: '○ Desconectado',
+    error: '⚠ Erro', coming: '🔒 Em breve',
+  }
+  const resolvedStatus = status ?? (connected === true ? 'connected' : connected === false ? 'disconnected' : undefined)
+
   return (
-    <Card className="bg-zinc-900 border-zinc-800">
+    <Card className={cn('bg-zinc-900', resolvedStatus === 'error' ? 'border-red-500/20' : 'border-zinc-800')}>
       <CardHeader className="p-4 pb-0">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -721,11 +734,9 @@ function IntegCard({ icon: Icon, name, description, color, connected, children }
               <p className="text-zinc-500 text-xs">{description}</p>
             </div>
           </div>
-          {connected !== undefined && (
-            <Badge className={cn('text-xs shrink-0', connected
-              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-              : 'bg-zinc-800 text-zinc-500 border border-zinc-700')}>
-              {connected ? '● Conectado' : '○ Desconectado'}
+          {resolvedStatus && (
+            <Badge className={cn('text-xs shrink-0 border', badgeMap[resolvedStatus])}>
+              {badgeLabelMap[resolvedStatus]}
             </Badge>
           )}
         </div>
@@ -778,74 +789,117 @@ function ApiKeyField({ label, placeholder }: { label: string; placeholder: strin
   )
 }
 
-function IntegracoesSection() {
-  const [waUrl, setWaUrl] = useState('')
-  const [waEnv, setWaEnv] = useState<'sandbox' | 'production'>('sandbox')
+function AsaasIntegCard() {
+  const [apiKey, setApiKey]   = useState('')
+  const [showKey, setShowKey] = useState(false)
+  const [saving, setSaving]   = useState(false)
+  const [status, setStatus]   = useState<'idle' | 'active' | 'error'>('idle')
+  const [msg, setMsg]         = useState('')
 
+  // Carrega status atual
+  useEffect(() => {
+    fetch('/api/agency/integrations')
+      .then(r => r.json())
+      .then(d => {
+        const asaas = (d.integrations ?? []).find((i: { type: string; status: string }) => i.type === 'asaas')
+        if (asaas) setStatus(asaas.status === 'active' ? 'active' : 'error')
+      })
+      .catch(() => {})
+  }, [])
+
+  async function handleSave() {
+    if (!apiKey.trim()) return
+    setSaving(true)
+    setMsg('')
+    try {
+      const res = await fetch('/api/agency/integrations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'asaas', credentials: { api_key: apiKey.trim() } }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setStatus('error')
+        setMsg(data.error ?? 'Erro ao salvar')
+      } else {
+        setStatus('active')
+        setMsg('Conectado com sucesso!')
+        setApiKey('')
+        setTimeout(() => setMsg(''), 3000)
+      }
+    } catch {
+      setStatus('error')
+      setMsg('Erro de conexão')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <IntegCard icon={CreditCard} name="Asaas" color="bg-blue-500/15 text-blue-400"
+      description="Cobranças, pagamentos e status financeiro dos clientes MRR"
+      status={status === 'active' ? 'connected' : status === 'error' ? 'error' : 'disconnected'}>
+      <div className="space-y-3 pt-1">
+        <div className="space-y-1.5">
+          <Label className="text-zinc-400 text-xs">API Key do Asaas</Label>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Input
+                type={showKey ? 'text' : 'password'}
+                value={apiKey}
+                onChange={e => setApiKey(e.target.value)}
+                placeholder={status === 'active' ? '••••••••••••• (já configurada)' : '$aact_prod_...'}
+                className={cn(inputCls, 'text-sm pr-10')}
+              />
+              <button
+                type="button"
+                onClick={() => setShowKey(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300">
+                {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <Button
+              onClick={handleSave}
+              disabled={!apiKey.trim() || saving}
+              className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5 shrink-0">
+              {saving
+                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Testando...</>
+                : <><Save className="w-3.5 h-3.5" /> Salvar</>}
+            </Button>
+          </div>
+          <p className="text-zinc-600 text-xs">
+            Encontre em: app.asaas.com → Minha Conta → Integrações → API Key
+          </p>
+        </div>
+        {msg && (
+          <p className={cn('text-xs flex items-center gap-1.5', status === 'active' ? 'text-emerald-400' : 'text-red-400')}>
+            {status === 'active' ? <Check className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
+            {msg}
+          </p>
+        )}
+      </div>
+    </IntegCard>
+  )
+}
+
+function IntegracoesSection() {
   return (
     <div className="space-y-4">
       <SectionTitle>Integrações</SectionTitle>
 
-      {/* WhatsApp */}
+      {/* Asaas — funcional */}
+      <AsaasIntegCard />
+
+      {/* WhatsApp — em breve */}
       <IntegCard icon={MessageCircle} name="WhatsApp (Evolution API)" color="bg-emerald-500/15 text-emerald-400"
-        description="Análise de sentimento e proximidade via grupos do WhatsApp">
-        <div className="space-y-3 pt-1">
-          <div className="space-y-1.5">
-            <Label className="text-zinc-400 text-xs">URL do servidor Evolution</Label>
-            <Input value={waUrl} onChange={e => setWaUrl(e.target.value)}
-              placeholder="https://evolution.suaagencia.com.br" className={cn(inputCls, 'text-sm')} />
-          </div>
-          <ApiKeyField label="API Key" placeholder="evo_xxxxxxxxxxxxxxxx" />
-        </div>
+        description="Análise de sentimento e proximidade via grupos do WhatsApp" status="coming">
+        <p className="text-zinc-600 text-xs pt-1">Em breve — Sprint 2</p>
       </IntegCard>
 
-      {/* Asaas */}
-      <IntegCard icon={CreditCard} name="Asaas" color="bg-blue-500/15 text-blue-400"
-        description="Cobranças, pagamentos e gestão financeira dos clientes MRR">
-        <div className="space-y-3 pt-1">
-          <div className="flex items-center gap-2">
-            {(['sandbox', 'production'] as const).map(env => (
-              <button key={env} onClick={() => setWaEnv(env)}
-                className={cn('px-3 py-1.5 rounded-lg border text-xs font-medium transition-all',
-                  waEnv === env
-                    ? 'border-blue-500 bg-blue-500/10 text-blue-400'
-                    : 'border-zinc-700 bg-zinc-800 text-zinc-500 hover:border-zinc-600')}>
-                {env === 'sandbox' ? '🧪 Sandbox' : '🚀 Produção'}
-              </button>
-            ))}
-          </div>
-          <ApiKeyField label="API Key" placeholder="$aact_xxxxxxxxxxxxxxxxxx" />
-        </div>
-      </IntegCard>
-
-      {/* Dom Pagamentos */}
+      {/* Dom Pagamentos — em breve */}
       <IntegCard icon={CreditCard} name="Dom Pagamentos" color="bg-violet-500/15 text-violet-400"
-        description="Integração com gateway Dom para cobranças e conciliação">
-        <div className="pt-1">
-          <ApiKeyField label="API Key" placeholder="dom_live_xxxxxxxxxxxxxxxx" />
-        </div>
-      </IntegCard>
-
-      {/* Meta Ads */}
-      <IntegCard icon={BarChart2} name="Meta Ads (Facebook)" color="bg-blue-600/15 text-blue-500"
-        description="Dados de performance de campanhas do cliente no Meta">
-        <div className="pt-1">
-          <Button variant="outline" className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10 gap-2 text-sm">
-            <BarChart2 className="w-4 h-4" /> Conectar com Meta
-          </Button>
-          <p className="text-zinc-600 text-xs mt-2">Redireciona para autenticação OAuth do Meta Business</p>
-        </div>
-      </IntegCard>
-
-      {/* Google Ads */}
-      <IntegCard icon={BarChart2} name="Google Ads" color="bg-red-500/15 text-red-400"
-        description="Dados de performance de campanhas do cliente no Google">
-        <div className="pt-1">
-          <Button variant="outline" className="border-red-500/30 text-red-400 hover:bg-red-500/10 gap-2 text-sm">
-            <BarChart2 className="w-4 h-4" /> Conectar com Google
-          </Button>
-          <p className="text-zinc-600 text-xs mt-2">Redireciona para autenticação OAuth do Google Ads</p>
-        </div>
+        description="Gateway alternativo de cobranças" status="coming">
+        <p className="text-zinc-600 text-xs pt-1">Em breve — Sprint 2</p>
       </IntegCard>
     </div>
   )

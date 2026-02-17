@@ -1,16 +1,19 @@
 /**
  * Asaas API Client
  * Documentação: https://docs.asaas.com/reference
+ *
+ * A API key vem do banco de dados (agency_integrations), criptografada.
+ * Nunca fica em variável de ambiente de produção.
  */
 
-const BASE_URL  = process.env.ASAAS_API_URL  ?? 'https://api.asaas.com/v3'
-const API_KEY   = process.env.ASAAS_API_KEY  ?? ''
+const BASE_URL = process.env.ASAAS_API_URL ?? 'https://api.asaas.com/v3'
 
-async function asaasRequest<T>(path: string, options?: RequestInit): Promise<T> {
+// Recebe apiKey como parâmetro — vem do banco, nunca hardcoded
+async function asaasRequest<T>(path: string, apiKey: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
     headers: {
-      'access_token': API_KEY,
+      'access_token': apiKey,
       'Content-Type': 'application/json',
       ...(options?.headers ?? {}),
     },
@@ -90,59 +93,46 @@ export interface AsaasListResponse<T> {
  * @param limit  max 100 por página
  * @param offset paginação
  */
-export async function listCustomers(limit = 100, offset = 0) {
+export async function listCustomers(apiKey: string, limit = 100, offset = 0) {
   return asaasRequest<AsaasListResponse<AsaasCustomer>>(
-    `/customers?limit=${limit}&offset=${offset}&deleted=false`
+    `/customers?limit=${limit}&offset=${offset}&deleted=false`,
+    apiKey
   )
 }
 
-/**
- * Busca um customer pelo CNPJ/CPF
- */
-export async function findCustomerByCpfCnpj(cpfCnpj: string) {
+export async function findCustomerByCpfCnpj(apiKey: string, cpfCnpj: string) {
   const cleaned = cpfCnpj.replace(/\D/g, '')
   const res = await asaasRequest<AsaasListResponse<AsaasCustomer>>(
-    `/customers?cpfCnpj=${cleaned}&limit=10`
+    `/customers?cpfCnpj=${cleaned}&limit=10`,
+    apiKey
   )
   return res.data[0] ?? null
 }
 
-/**
- * Busca um customer pelo nome (busca parcial)
- */
-export async function findCustomerByName(name: string) {
+export async function findCustomerByName(apiKey: string, name: string) {
   const res = await asaasRequest<AsaasListResponse<AsaasCustomer>>(
-    `/customers?name=${encodeURIComponent(name)}&limit=10`
+    `/customers?name=${encodeURIComponent(name)}&limit=10`,
+    apiKey
   )
   return res.data[0] ?? null
 }
 
-/**
- * Busca pagamentos de um customer específico
- * @param customerId  id do customer no Asaas
- * @param limit       max 100 por página
- */
-export async function getCustomerPayments(customerId: string, limit = 20) {
+export async function getCustomerPayments(apiKey: string, customerId: string, limit = 20) {
   return asaasRequest<AsaasListResponse<AsaasPayment>>(
-    `/payments?customer=${customerId}&limit=${limit}&sort=dueDate&order=desc`
+    `/payments?customer=${customerId}&limit=${limit}&sort=dueDate&order=desc`,
+    apiKey
   )
 }
 
-/**
- * Busca cobranças vencidas de um customer
- */
-export async function getOverduePayments(customerId: string) {
+export async function getOverduePayments(apiKey: string, customerId: string) {
   return asaasRequest<AsaasListResponse<AsaasPayment>>(
-    `/payments?customer=${customerId}&status=OVERDUE&limit=20`
+    `/payments?customer=${customerId}&status=OVERDUE&limit=20`,
+    apiKey
   )
 }
 
-/**
- * Resumo financeiro de um customer para o health score
- * Retorna: status geral, total pago, total em aberto, total vencido, score financeiro (0-100)
- */
-export async function getCustomerFinancialSummary(customerId: string) {
-  const res = await getCustomerPayments(customerId, 50)
+export async function getCustomerFinancialSummary(apiKey: string, customerId: string) {
+  const res = await getCustomerPayments(apiKey, customerId, 50)
   const payments = res.data
 
   const now = new Date()
