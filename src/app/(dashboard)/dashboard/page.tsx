@@ -7,6 +7,7 @@ import {
   ClipboardList, BarChart2, ShieldCheck, ArrowRight,
   CreditCard, CheckCircle2, AlertCircle, XCircle,
   MessageSquare, ThumbsUp, ThumbsDown, Meh, Loader2,
+  Users, Plus,
 } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
@@ -107,6 +108,31 @@ export default function DashboardPage() {
         <AlertCircle className="w-8 h-8 text-red-400 mx-auto" />
         <p className="text-zinc-300 font-medium">Erro ao carregar dados</p>
         <p className="text-zinc-500 text-sm">{error}</p>
+      </div>
+    </div>
+  )
+
+  // Empty state — nenhum cliente cadastrado
+  if (!loading && clients.length === 0) return (
+    <div className="min-h-screen">
+      <Header title="Dashboard" description="Visão geral da sua carteira" />
+      <div className="flex flex-col items-center justify-center min-h-[70vh] px-4 text-center">
+        <div className="w-20 h-20 rounded-2xl bg-emerald-500/10 flex items-center justify-center mb-6">
+          <Users className="w-10 h-10 text-emerald-400" />
+        </div>
+        <h2 className="text-white text-2xl font-bold mb-2">Comece agora</h2>
+        <p className="text-zinc-400 text-base max-w-sm mb-8">
+          Cadastre seu primeiro cliente e comece a monitorar a saúde da sua carteira.
+        </p>
+        <Link href="/clientes/novo">
+          <Button className="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold px-6 py-2.5 text-base gap-2">
+            <Plus className="w-5 h-5" />
+            Cadastrar primeiro cliente
+          </Button>
+        </Link>
+        <p className="text-zinc-600 text-sm mt-4">
+          Leva menos de 2 minutos
+        </p>
       </div>
     </div>
   )

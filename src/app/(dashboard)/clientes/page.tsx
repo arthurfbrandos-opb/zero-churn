@@ -382,11 +382,35 @@ export default function ClientesPage() {
         {/* Lista de clientes */}
         {filtered.length === 0 ? (
           <div className="text-center py-16 text-zinc-600">
-            <Filter className="w-8 h-8 mx-auto mb-3 opacity-40" />
-            <p className="text-sm">Nenhum cliente encontrado com os filtros aplicados.</p>
-            <button onClick={clearFilters} className="text-emerald-400 text-xs mt-2 hover:underline">
-              Limpar filtros
-            </button>
+            {allClients.length === 0 ? (
+              // Carteira vazia — nenhum cliente cadastrado ainda
+              <div className="flex flex-col items-center gap-4">
+                <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
+                  <Users className="w-8 h-8 text-emerald-400" />
+                </div>
+                <div>
+                  <p className="text-white font-semibold text-base mb-1">Comece agora</p>
+                  <p className="text-zinc-500 text-sm max-w-xs mx-auto">
+                    Cadastre seu primeiro cliente e acompanhe a saúde da sua carteira em tempo real.
+                  </p>
+                </div>
+                <Link href="/clientes/novo">
+                  <Button className="bg-emerald-500 hover:bg-emerald-600 text-white gap-2 font-medium">
+                    <Plus className="w-4 h-4" />
+                    Cadastrar primeiro cliente
+                  </Button>
+                </Link>
+              </div>
+            ) : (
+              // Filtros sem resultado
+              <>
+                <Filter className="w-8 h-8 mx-auto mb-3 opacity-40" />
+                <p className="text-sm">Nenhum cliente encontrado com os filtros aplicados.</p>
+                <button onClick={clearFilters} className="text-emerald-400 text-xs mt-2 hover:underline">
+                  Limpar filtros
+                </button>
+              </>
+            )}
           </div>
         ) : (
           <div className="space-y-3">
