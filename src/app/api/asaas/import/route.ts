@@ -146,10 +146,10 @@ export async function POST(req: NextRequest) {
         const email    = c.email?.trim()    || enriched?.email    || null
         const telefone = (c.mobilePhone?.trim() || c.phone?.trim()) || enriched?.telefone || null
 
-        // additionalEmails do Asaas → email financeiro
-        const emailFinanceiro = c.additionalEmails?.trim()
+        // additionalEmails do Asaas → email financeiro; se não tiver, usa o email principal
+        const emailFinanceiro = (c.additionalEmails?.trim()
           ? c.additionalEmails.split(',')[0].trim() || null
-          : null
+          : null) ?? email
 
         // Endereço: do Asaas quando disponível, fallback para Receita
         const logradouro  = c.address     || enriched?.logradouro  || null
