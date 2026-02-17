@@ -526,16 +526,12 @@ function IntegracoesStep({ clientId }: { clientId: string }) {
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <button
-                  onClick={() => {
-                    const res = fetch(`/api/asaas/sync/${clientId}`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        asaas_customer_id: int.credentials?.customer_id,
-                        customer_name: int.credentials?.customer_name,
-                      }),
-                    }).then(() => loadIntegrations())
-                    return res
+                  onClick={async () => {
+                    await fetch(
+                      `/api/asaas/sync/${clientId}?integrationId=${int.id}`,
+                      { method: 'PATCH' }
+                    )
+                    loadIntegrations()
                   }}
                   className="text-zinc-500 hover:text-zinc-300 transition-colors p-1" title="Sincronizar">
                   <RefreshCw className="w-3.5 h-3.5" />

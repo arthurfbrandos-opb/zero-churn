@@ -1,13 +1,33 @@
 /**
  * POST /api/asaas/import
- * Cria clientes no Zero Churn a partir de customers selecionados do Asaas
+ * Cria clientes no Zero Churn a partir de customers selecionados do Asaas.
  * Body: { customer_ids: string[] }
+ *
+ * Fluxo por cliente:
+ *   1. Verifica duplicata pelo CNPJ
+ *   2. Busca financeiro + MRR (Asaas) em paralelo
+ *   3. Enriquece CNPJ via BrasilAPI (timeout 5s — não bloqueia se falhar)
+ *   4. Cria o cliente
+ *   5. Cria a integração Asaas (separado — falha não cancela o cliente)
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/supabase/encryption'
 import { listCustomers, getCustomerFinancialSummary, getCustomerMrr } from '@/lib/asaas/client'
 import { lookupCnpj } from '@/lib/cnpj/client'
+
+/** Chama lookupCnpj com timeout de 5 s para não travar o import */
+async function lookupCnpjSafe(cnpj: string) {
+  try {
+    const result = await Promise.race([
+      lookupCnpj(cnpj),
+      new Promise<null>(resolve => setTimeout(() => resolve(null), 5000)),
+    ])
+    return result
+  } catch {
+    return null
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -37,113 +57,134 @@ export async function POST(req: NextRequest) {
     const creds = await decrypt<{ api_key: string }>(integration.encrypted_key)
     const apiKey = creds.api_key
 
-    // Busca todos os customers do Asaas (para pegar detalhes dos selecionados)
+    // Busca todos os customers do Asaas
     const allCustomers: Record<string, unknown>[] = []
     let offset = 0, hasMore = true
-    while (hasMore && offset < 1000) {
+    while (hasMore && offset < 3000) {
       const res = await listCustomers(apiKey, 100, offset)
-      allCustomers.push(...res.data as unknown as Record<string, unknown>[])
+      allCustomers.push(...(res.data as unknown as Record<string, unknown>[]))
       hasMore = res.hasMore
       offset += 100
     }
 
     const selected = allCustomers.filter(c => customer_ids.includes(String(c.id)))
 
-    const results = { created: 0, skipped: 0, errors: 0 }
+    const results = {
+      created:       0,
+      skipped:       0,
+      errors:        0,
+      errorDetails:  [] as string[],
+    }
 
     for (const c of selected) {
+      const customerName = String(c.name ?? '').trim()
+      const customerId   = String(c.id ?? '').trim()
+      const cnpj         = String(c.cpfCnpj ?? '').replace(/\D/g, '')
+
       try {
-        // Verifica se já existe pelo CNPJ
-        const cnpj = String(c.cpfCnpj ?? '').replace(/\D/g, '')
+        // ── 1. Verifica duplicata ────────────────────────────
         if (cnpj) {
           const { data: existing } = await supabase
             .from('clients').select('id').eq('cnpj', cnpj).eq('agency_id', agencyId).maybeSingle()
           if (existing) { results.skipped++; continue }
         }
 
-        // Enriquece com dados financeiros e CNPJ em paralelo
-        let paymentStatus = 'em_dia'
+        // ── 2. Dados do Asaas ────────────────────────────────
+        let paymentStatus: 'em_dia' | 'vencendo' | 'inadimplente' = 'em_dia'
         let mrrValue: number | null = null
-        let nomeDecisor: string | null = null
-        let segment: string | null = null
-        let email: string | null = String(c.email ?? '') || null
-        let emailFinanceiro: string | null = null
-        let telefone: string | null =
-          String(c.mobilePhone ?? c.phone ?? '') || null
 
-        // Email financeiro = primeiro additionalEmail do Asaas
+        // Email financeiro = additionalEmails do Asaas (campo separado por vírgula)
         const addEmails = String(c.additionalEmails ?? '').trim()
-        if (addEmails) {
-          emailFinanceiro = addEmails.split(',')[0].trim() || null
-        }
+        const emailFinanceiro = addEmails ? addEmails.split(',')[0].trim() || null : null
+        const email    = String(c.email    ?? '').trim() || null
+        const telefone = String(c.mobilePhone ?? c.phone ?? '').trim() || null
 
         try {
           const [summary, mrr] = await Promise.all([
-            getCustomerFinancialSummary(apiKey, String(c.id)),
-            getCustomerMrr(apiKey, String(c.id)),
+            getCustomerFinancialSummary(apiKey, customerId),
+            getCustomerMrr(apiKey, customerId),
           ])
           paymentStatus = summary.paymentStatus
           mrrValue = mrr > 0 ? Math.round(mrr * 100) / 100 : null
-        } catch { /* ignora se falhar */ }
+        } catch { /* financeiro falha? continua com defaults */ }
 
-        // Enriquecimento CNPJ (BrasilAPI) — não bloqueia o import se falhar
+        // ── 3. Enriquecimento CNPJ ───────────────────────────
+        let nomeDecisor: string | null = null
+        let segment: string | null = null
+        let emailReceita: string | null = null
+        let telefoneReceita: string | null = null
+
         if (cnpj.length === 14) {
-          try {
-            const enriched = await lookupCnpj(cnpj)
-            if (enriched) {
-              nomeDecisor = enriched.nomeDecisor
-              segment     = enriched.segment
-              // Telefone da Receita se não tiver no Asaas
-              if (!telefone && enriched.telefone) telefone = enriched.telefone
-              // Email da Receita se não tiver no Asaas
-              if (!email && enriched.email) email = enriched.email
-            }
-          } catch { /* ignora */ }
+          const enriched = await lookupCnpjSafe(cnpj)
+          if (enriched) {
+            nomeDecisor    = enriched.nomeDecisor
+            segment        = enriched.segment
+            emailReceita   = enriched.email
+            telefoneReceita = enriched.telefone
+          }
         }
 
-        const clientType = 'mrr' // padrão MRR; usuário ajusta depois
-
-        // Cria o cliente
+        // ── 4. Cria o cliente ────────────────────────────────
         const { data: newClient, error: cErr } = await supabase
           .from('clients')
           .insert({
-            agency_id:       agencyId,
-            name:            String(c.name ?? ''),
-            nome_resumido:   String(c.name ?? '').split(' ').slice(0, 2).join(' '),
-            cnpj:            cnpj || null,
-            segment:         segment,
-            nome_decisor:    nomeDecisor,
-            email:           email,
-            telefone:        telefone,
+            agency_id:        agencyId,
+            name:             customerName,
+            nome_resumido:    customerName.split(' ').slice(0, 2).join(' '),
+            cnpj:             cnpj || null,
+            segment,
+            nome_decisor:     nomeDecisor,
+            email:            email || emailReceita || null,
+            telefone:         telefone || telefoneReceita || null,
             email_financeiro: emailFinanceiro,
-            client_type:     clientType,
-            mrr_value:       mrrValue,
-            payment_status:  paymentStatus,
-            status:          'active',
+            client_type:      'mrr',
+            mrr_value:        mrrValue,
+            payment_status:   paymentStatus,
+            status:           'active',
           })
           .select('id').single()
 
-        if (cErr) throw cErr
-
-        // Vincula ao Asaas — salva customer_id e nome para exibição
-        await supabase.from('client_integrations').insert({
-          client_id:    newClient.id,
-          agency_id:    agencyId,
-          type:         'asaas',
-          status:       'connected',
-          label:        String(c.name ?? ''),
-          credentials:  { customer_id: String(c.id), customer_name: String(c.name ?? '') },
-          last_sync_at: new Date().toISOString(),
-        })
+        if (cErr) {
+          results.errors++
+          results.errorDetails.push(`${customerName}: ${cErr.message}`)
+          continue
+        }
 
         results.created++
+
+        // ── 5. Vincula ao Asaas (falha não cancela o cliente) ─
+        try {
+          await supabase.from('client_integrations').insert({
+            client_id:    newClient.id,
+            agency_id:    agencyId,
+            type:         'asaas',
+            status:       'connected',
+            label:        customerName,
+            credentials:  { customer_id: customerId, customer_name: customerName },
+            last_sync_at: new Date().toISOString(),
+          })
+        } catch (intErr) {
+          // Integração falhou — registra mas não desfaz o cliente criado
+          const intMsg = intErr instanceof Error ? intErr.message : String(intErr)
+          console.warn(`[import] integração Asaas falhou para ${customerName}:`, intMsg)
+          results.errorDetails.push(`Integração ${customerName}: ${intMsg}`)
+        }
+
       } catch (err) {
-        console.error('[import] erro no customer', c.id, err)
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error('[import] erro no customer', customerId, err)
         results.errors++
+        results.errorDetails.push(`${customerName}: ${msg}`)
       }
     }
 
-    return NextResponse.json({ success: true, ...results })
+    return NextResponse.json({
+      success: true,
+      created:      results.created,
+      skipped:      results.skipped,
+      errors:       results.errors,
+      errorDetails: results.errorDetails,
+    })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[POST /api/asaas/import]', msg)

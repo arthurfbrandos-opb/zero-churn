@@ -43,7 +43,7 @@ export function AsaasImportModal({ onSuccess, onClose }: Props) {
   const [selected, setSelected]       = useState<Set<string>>(new Set())
   const [importing, setImporting]     = useState(false)
   const [done, setDone]               = useState(false)
-  const [importResult, setImportResult] = useState<{ created: number; skipped: number } | null>(null)
+  const [importResult, setImportResult] = useState<{ created: number; skipped: number; errors: number; errorDetails?: string[] } | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -113,9 +113,14 @@ export function AsaasImportModal({ onSuccess, onClose }: Props) {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
-      setImportResult({ created: data.created, skipped: data.skipped })
+      setImportResult({
+        created:      data.created ?? 0,
+        skipped:      data.skipped ?? 0,
+        errors:       data.errors  ?? 0,
+        errorDetails: data.errorDetails ?? [],
+      })
       setDone(true)
-      setTimeout(() => onSuccess(data.created), 2000)
+      setTimeout(() => onSuccess(data.created), 3000)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao importar')
       setImporting(false)
@@ -151,16 +156,24 @@ export function AsaasImportModal({ onSuccess, onClose }: Props) {
 
         {/* Sucesso */}
         {done && importResult ? (
-          <div className="flex-1 flex flex-col items-center justify-center gap-4 p-10 text-center">
+          <div className="flex-1 flex flex-col items-center justify-center gap-4 p-8 text-center">
             <div className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center">
               <Check className="w-8 h-8 text-emerald-400" />
             </div>
-            <div>
+            <div className="space-y-1">
               <p className="text-white font-semibold text-lg">Importação concluída!</p>
-              <p className="text-zinc-400 text-sm mt-1">
+              <p className="text-zinc-400 text-sm">
                 <span className="text-emerald-400 font-semibold">{importResult.created} clientes</span> criados
-                {importResult.skipped > 0 && ` · ${importResult.skipped} já existiam (pulados)`}
+                {importResult.skipped > 0 && <span className="text-zinc-500"> · {importResult.skipped} já existiam</span>}
+                {importResult.errors > 0 && <span className="text-red-400"> · {importResult.errors} com erro</span>}
               </p>
+              {importResult.errorDetails && importResult.errorDetails.length > 0 && (
+                <div className="mt-3 text-left bg-red-500/5 border border-red-500/20 rounded-xl p-3 max-h-32 overflow-y-auto">
+                  {importResult.errorDetails.map((e, i) => (
+                    <p key={i} className="text-red-400/80 text-xs leading-relaxed">{e}</p>
+                  ))}
+                </div>
+              )}
               <p className="text-zinc-600 text-xs mt-2">Redirecionando para sua carteira...</p>
             </div>
           </div>

@@ -109,6 +109,52 @@ export async function POST(req: NextRequest, { params }: Params) {
   }
 }
 
+// PATCH — re-sincroniza status financeiro de uma integração existente
+export async function PATCH(req: NextRequest, { params }: Params) {
+  try {
+    const { clientId } = await params
+    const supabase = await createClient()
+
+    const { data: { user }, error: authErr } = await supabase.auth.getUser()
+    if (authErr || !user) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+
+    const apiKey = await getAgencyApiKey(supabase)
+    if (!apiKey) return NextResponse.json({ error: 'Asaas não configurado' }, { status: 404 })
+
+    const { searchParams } = new URL(req.url)
+    const integrationId = searchParams.get('integrationId')
+    if (!integrationId) return NextResponse.json({ error: 'integrationId obrigatório' }, { status: 400 })
+
+    // Busca a integração existente
+    const { data: int } = await supabase
+      .from('client_integrations')
+      .select('credentials')
+      .eq('id', integrationId)
+      .eq('client_id', clientId)
+      .single()
+
+    if (!int?.credentials?.customer_id) {
+      return NextResponse.json({ error: 'Integração não encontrada' }, { status: 404 })
+    }
+
+    // Re-sincroniza status financeiro
+    const summary = await getCustomerFinancialSummary(apiKey, int.credentials.customer_id)
+
+    await supabase.from('client_integrations')
+      .update({ last_sync_at: new Date().toISOString(), status: 'connected' })
+      .eq('id', integrationId)
+
+    await supabase.from('clients')
+      .update({ payment_status: summary.paymentStatus, updated_at: new Date().toISOString() })
+      .eq('id', clientId)
+
+    return NextResponse.json({ success: true, summary })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
+}
+
 // DELETE — desvincula uma integração específica pelo ID
 export async function DELETE(req: NextRequest, { params }: Params) {
   try {
