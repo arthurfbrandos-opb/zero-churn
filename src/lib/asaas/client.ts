@@ -135,6 +135,54 @@ export async function getOverduePayments(apiKey: string, customerId: string) {
  * Retorna IDs únicos de customers que tiveram pagamento pago nos últimos N dias
  * Usa os status: RECEIVED, CONFIRMED, RECEIVED_IN_CASH
  */
+export interface AsaasSubscription {
+  id: string
+  customer: string
+  value: number
+  cycle: 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUALLY' | 'YEARLY'
+  status: 'ACTIVE' | 'INACTIVE' | 'EXPIRED'
+  nextDueDate: string
+  description: string | null
+}
+
+/**
+ * Busca assinaturas ativas de um customer — usada para determinar o MRR
+ */
+export async function getActiveSubscriptions(apiKey: string, customerId: string) {
+  return asaasRequest<AsaasListResponse<AsaasSubscription>>(
+    `/subscriptions?customer=${customerId}&status=ACTIVE&limit=10`,
+    apiKey
+  )
+}
+
+/**
+ * Retorna o valor mensal recorrente de um customer (0 se não tiver assinatura ativa)
+ */
+export async function getCustomerMrr(apiKey: string, customerId: string): Promise<number> {
+  try {
+    const res = await getActiveSubscriptions(apiKey, customerId)
+    if (!res.data.length) return 0
+
+    return res.data.reduce((total, sub) => {
+      // Normaliza tudo para valor mensal
+      const monthly = (() => {
+        switch (sub.cycle) {
+          case 'WEEKLY':       return sub.value * 4.33
+          case 'BIWEEKLY':     return sub.value * 2.17
+          case 'MONTHLY':      return sub.value
+          case 'QUARTERLY':    return sub.value / 3
+          case 'SEMIANNUALLY': return sub.value / 6
+          case 'YEARLY':       return sub.value / 12
+          default:             return sub.value
+        }
+      })()
+      return total + monthly
+    }, 0)
+  } catch {
+    return 0
+  }
+}
+
 export async function getActiveCustomerIds(apiKey: string, days = 90): Promise<Set<string>> {
   const since = new Date()
   since.setDate(since.getDate() - days)

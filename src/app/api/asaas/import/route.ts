@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/supabase/encryption'
-import { listCustomers, getCustomerFinancialSummary } from '@/lib/asaas/client'
+import { listCustomers, getCustomerFinancialSummary, getCustomerMrr } from '@/lib/asaas/client'
 
 export async function POST(req: NextRequest) {
   try {
@@ -60,12 +60,20 @@ export async function POST(req: NextRequest) {
           if (existing) { results.skipped++; continue }
         }
 
-        // Determina status financeiro
+        // Busca status financeiro e MRR em paralelo
         let paymentStatus = 'em_dia'
+        let mrrValue: number | null = null
+
         try {
-          const summary = await getCustomerFinancialSummary(apiKey, String(c.id))
+          const [summary, mrr] = await Promise.all([
+            getCustomerFinancialSummary(apiKey, String(c.id)),
+            getCustomerMrr(apiKey, String(c.id)),
+          ])
           paymentStatus = summary.paymentStatus
+          mrrValue = mrr > 0 ? Math.round(mrr * 100) / 100 : null
         } catch { /* ignora se falhar */ }
+
+        const clientType = mrrValue !== null ? 'mrr' : 'mrr' // padrão MRR; usuário ajusta depois
 
         // Cria o cliente
         const { data: newClient, error: cErr } = await supabase
@@ -75,7 +83,8 @@ export async function POST(req: NextRequest) {
             name:           String(c.name ?? ''),
             nome_resumido:  String(c.name ?? '').split(' ').slice(0, 2).join(' '),
             cnpj:           cnpj || null,
-            client_type:    'mrr',
+            client_type:    clientType,
+            mrr_value:      mrrValue,
             payment_status: paymentStatus,
             status:         'active',
           })
