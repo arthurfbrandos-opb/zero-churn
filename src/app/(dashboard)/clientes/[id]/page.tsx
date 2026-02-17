@@ -24,6 +24,7 @@ import { getNpsClassification, isInObservation } from '@/lib/nps-utils'
 import { ChurnModal, CHURN_CATEGORIES } from '@/components/dashboard/churn-modal'
 import { useClient } from '@/hooks/use-client'
 import { Loader2 } from 'lucide-react'
+import { AsaasLinkModal } from '@/components/integracoes/asaas-link-modal'
 import { cn } from '@/lib/utils'
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -350,82 +351,99 @@ function TabVisaoGeral({ client }: { client: Client }) {
 // ─────────────────────────────────────────────────────────────────
 // TAB 2 — INTEGRAÇÕES
 // ─────────────────────────────────────────────────────────────────
-function TabIntegracoes({ integrations }: { integrations: Integration[] }) {
+function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => void }) {
+  const [asaasModal, setAsaasModal] = useState(false)
+
+  const integrations = client.integrations ?? []
+
   const DEFS = [
-    { type: 'whatsapp',       label: 'WhatsApp',        sub: 'Análise de sentimento via Evolution API', icon: MessageCircle, color: 'text-emerald-400 bg-emerald-500/10' },
-    { type: 'asaas',          label: 'Asaas',           sub: 'Cobranças e status de pagamento',          icon: CreditCard,   color: 'text-blue-400 bg-blue-500/10'    },
-    { type: 'dom_pagamentos', label: 'Dom Pagamentos',  sub: 'Gateway alternativo de cobranças',         icon: Building2,    color: 'text-violet-400 bg-violet-500/10' },
-    { type: 'meta_ads',       label: 'Meta Ads',        sub: 'Performance de campanhas no Facebook/Instagram', icon: BarChart2, color: 'text-blue-500 bg-blue-600/10'  },
-    { type: 'google_ads',     label: 'Google Ads',      sub: 'Performance de campanhas no Google',       icon: BarChart2,    color: 'text-red-400 bg-red-500/10'       },
+    { type: 'whatsapp',       label: 'WhatsApp',        sub: 'Análise de sentimento via Evolution API',       icon: MessageCircle, color: 'text-emerald-400 bg-emerald-500/10' },
+    { type: 'asaas',          label: 'Asaas',           sub: 'Cobranças e status de pagamento em tempo real', icon: CreditCard,    color: 'text-blue-400 bg-blue-500/10'       },
+    { type: 'dom_pagamentos', label: 'Dom Pagamentos',  sub: 'Gateway alternativo de cobranças',              icon: Building2,     color: 'text-violet-400 bg-violet-500/10'   },
   ] as const
 
   const statusConfig = {
     connected:    { label: 'Conectado',    cls: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' },
     error:        { label: 'Erro',         cls: 'text-red-400 border-red-500/30 bg-red-500/10'             },
-    expired:      { label: 'Expirado',     cls: 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10'   },
-    disconnected: { label: 'Desconectado', cls: 'text-zinc-500 border-zinc-700 bg-zinc-800'               },
+    expired:      { label: 'Expirado',     cls: 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10'    },
+    disconnected: { label: 'Desconectado', cls: 'text-zinc-500 border-zinc-700 bg-zinc-800'                },
+  }
+
+  function handleConnect(type: string) {
+    if (type === 'asaas') setAsaasModal(true)
   }
 
   return (
-    <div className="space-y-3">
-      {DEFS.map(({ type, label, sub, icon: Icon, color }) => {
-        const integ = integrations.find(i => i.type === type)
-        const status = integ?.status ?? 'disconnected'
-        const sc = statusConfig[status]
-        const isConnected = status === 'connected'
-        const hasIssue = status === 'error' || status === 'expired'
+    <>
+      <div className="space-y-3">
+        {DEFS.map(({ type, label, sub, icon: Icon, color }) => {
+          const integ = integrations.find(i => i.type === type)
+          const status = (integ?.status ?? 'disconnected') as keyof typeof statusConfig
+          const sc = statusConfig[status]
+          const isConnected = status === 'connected'
+          const hasIssue = status === 'error' || status === 'expired'
 
-        return (
-          <Card key={type} className={cn('border', hasIssue ? 'border-red-500/20 bg-red-500/3' : 'border-zinc-800 bg-zinc-900')}>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-4">
-                <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center shrink-0', color)}>
-                  <Icon className="w-5 h-5" />
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-zinc-200 font-medium text-sm">{label}</p>
-                    <Badge variant="outline" className={cn('text-xs', sc.cls)}>
-                      {isConnected ? '●' : hasIssue ? '⚠' : '○'} {sc.label}
-                    </Badge>
+          return (
+            <Card key={type} className={cn('border', hasIssue ? 'border-red-500/20 bg-red-500/3' : 'border-zinc-800 bg-zinc-900')}>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-4">
+                  <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center shrink-0', color)}>
+                    <Icon className="w-5 h-5" />
                   </div>
-                  <p className="text-zinc-500 text-xs mt-0.5">{sub}</p>
-                  {integ?.lastSyncAt && (
-                    <p className="text-zinc-600 text-xs mt-0.5">
-                      Última sync: {fmtDate(integ.lastSyncAt)}
-                    </p>
-                  )}
-                </div>
 
-                <div className="shrink-0">
-                  {isConnected ? (
-                    <div className="flex items-center gap-2">
-                      <Button size="sm" variant="outline"
-                        className="border-zinc-700 text-zinc-400 hover:text-white gap-1 text-xs">
-                        <ExternalLink className="w-3 h-3" /> Abrir
-                      </Button>
-                      <Button size="sm" variant="outline"
-                        className="border-zinc-700 text-zinc-500 hover:text-red-400 text-xs">
-                        Desconectar
-                      </Button>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-zinc-200 font-medium text-sm">{label}</p>
+                      <Badge variant="outline" className={cn('text-xs', sc.cls)}>
+                        {isConnected ? '●' : hasIssue ? '⚠' : '○'} {sc.label}
+                      </Badge>
                     </div>
-                  ) : hasIssue ? (
-                    <Button size="sm" className="bg-red-500 hover:bg-red-600 text-white gap-1 text-xs">
-                      <RefreshCw className="w-3 h-3" /> Reconectar
-                    </Button>
-                  ) : (
-                    <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1 text-xs">
-                      <Zap className="w-3 h-3" /> Conectar
-                    </Button>
-                  )}
+                    <p className="text-zinc-500 text-xs mt-0.5">{sub}</p>
+                    {integ?.lastSyncAt && (
+                      <p className="text-zinc-600 text-xs mt-0.5">
+                        Última sync: {fmtDate(integ.lastSyncAt)}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="shrink-0">
+                    {isConnected ? (
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" variant="outline"
+                          onClick={() => handleConnect(type)}
+                          className="border-zinc-700 text-zinc-400 hover:text-white gap-1 text-xs">
+                          <RefreshCw className="w-3 h-3" /> Reconfigurar
+                        </Button>
+                      </div>
+                    ) : hasIssue ? (
+                      <Button size="sm" onClick={() => handleConnect(type)}
+                        className="bg-red-500 hover:bg-red-600 text-white gap-1 text-xs">
+                        <RefreshCw className="w-3 h-3" /> Reconectar
+                      </Button>
+                    ) : (
+                      <Button size="sm" onClick={() => handleConnect(type)}
+                        className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1 text-xs">
+                        <Zap className="w-3 h-3" /> Conectar
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        )
-      })}
-    </div>
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
+
+      {asaasModal && (
+        <AsaasLinkModal
+          clientId={client.id}
+          clientName={client.nomeResumido ?? client.name}
+          clientCnpj={client.cnpj}
+          onSuccess={() => { setAsaasModal(false); refetch() }}
+          onClose={() => setAsaasModal(false)}
+        />
+      )}
+    </>
   )
 }
 
@@ -585,7 +603,7 @@ function ClientePerfilInner() {
   const [churnRecord, setChurnRecord]      = useState<ChurnRecord | undefined>(undefined)
   const [isInactive, setIsInactive]        = useState(false)
 
-  const { client, loading, error } = useClient(id)
+  const { client, loading, error, refetch } = useClient(id)
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -783,7 +801,7 @@ function ClientePerfilInner() {
       {/* Conteúdo da tab */}
       <div className="p-4 lg:p-6 max-w-4xl">
         {activeTab === 'visao-geral' && <TabVisaoGeral client={client} />}
-        {activeTab === 'integracoes' && <TabIntegracoes integrations={client.integrations} />}
+        {activeTab === 'integracoes' && <TabIntegracoes client={client} refetch={refetch} />}
         {activeTab === 'formularios' && <TabFormularios clientId={client.id} client={client} />}
         {activeTab === 'historico' && <TabHistorico clientId={client.id} />}
       </div>
