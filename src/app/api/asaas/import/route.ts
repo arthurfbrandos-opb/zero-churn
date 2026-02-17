@@ -125,13 +125,14 @@ export async function POST(req: NextRequest) {
 
         if (cErr) throw cErr
 
-        // Vincula ao Asaas
+        // Vincula ao Asaas — salva customer_id e nome para exibição
         await supabase.from('client_integrations').insert({
           client_id:    newClient.id,
           agency_id:    agencyId,
           type:         'asaas',
           status:       'connected',
-          credentials:  { customer_id: String(c.id) },
+          label:        String(c.name ?? ''),
+          credentials:  { customer_id: String(c.id), customer_name: String(c.name ?? '') },
           last_sync_at: new Date().toISOString(),
         })
 

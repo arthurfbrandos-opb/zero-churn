@@ -6,9 +6,9 @@ import Link from 'next/link'
 import {
   ArrowLeft, ArrowRight, Check, Loader2, Plus, Trash2,
   Building2, MapPin, FileText, ClipboardList,
-  Download, CreditCard, X, Search, ChevronDown,
+  CreditCard, X, Search, ChevronDown,
   MessageCircle, Link2, Users, AlertCircle, SkipForward,
-  AlertTriangle,
+  AlertTriangle, Plug, RefreshCw,
 } from 'lucide-react'
 import { useClient } from '@/hooks/use-client'
 import { Header } from '@/components/layout/header'
@@ -169,6 +169,7 @@ const STEPS = [
   { label: 'Identificação', icon: Building2    },
   { label: 'Endereço',      icon: MapPin       },
   { label: 'Contrato',      icon: FileText     },
+  { label: 'Integrações',   icon: Plug         },
   { label: 'WhatsApp',      icon: MessageCircle },
   { label: 'Contexto',      icon: ClipboardList },
 ]
@@ -319,6 +320,260 @@ function Toggle({ checked, onToggle }: { checked: boolean; onToggle: () => void 
       className={cn('w-10 h-6 rounded-full transition-all relative shrink-0', checked ? 'bg-emerald-500' : 'bg-zinc-700')}>
       <span className={cn('absolute top-1 w-4 h-4 rounded-full bg-white transition-all', checked ? 'left-5' : 'left-1')} />
     </button>
+  )
+}
+
+// ── Step Integrações ─────────────────────────────────────────────
+interface LinkedIntegration {
+  id: string
+  label: string | null
+  credentials: { customer_id: string; customer_name?: string | null } | null
+  status: string
+  last_sync_at: string | null
+}
+
+function IntegracoesStep({ clientId }: { clientId: string }) {
+  const [asaasIntegrations, setAsaasIntegrations] = useState<LinkedIntegration[]>([])
+  const [loading, setLoading]   = useState(true)
+  const [showLinkModal, setShowLinkModal] = useState<'asaas' | 'dom' | null>(null)
+  const [removing, setRemoving] = useState<string | null>(null)
+  const [customers, setCustomers] = useState<AsaasCustomerRow[]>([])
+  const [searchModal, setSearchModal] = useState('')
+  const [loadingCustomers, setLoadingCustomers] = useState(false)
+  const [selectedCustomer, setSelectedCustomer] = useState<AsaasCustomerRow | null>(null)
+  const [linking, setLinking] = useState(false)
+  const [linkError, setLinkError] = useState<string | null>(null)
+
+  interface AsaasCustomerRow { id: string; name: string; cpfCnpj: string | null }
+
+  async function loadIntegrations() {
+    setLoading(true)
+    const res = await fetch(`/api/asaas/sync/${clientId}`)
+    if (res.ok) {
+      const d = await res.json()
+      setAsaasIntegrations(d.integrations ?? [])
+    }
+    setLoading(false)
+  }
+
+  useEffect(() => { loadIntegrations() }, [clientId])
+
+  async function openLinkModal() {
+    setShowLinkModal('asaas')
+    setSearchModal('')
+    setSelectedCustomer(null)
+    setLinkError(null)
+    setLoadingCustomers(true)
+    const res = await fetch('/api/asaas/customers')
+    if (res.ok) {
+      const d = await res.json()
+      setCustomers(d.customers ?? [])
+    }
+    setLoadingCustomers(false)
+  }
+
+  async function handleLink() {
+    if (!selectedCustomer) return
+    setLinking(true)
+    setLinkError(null)
+    const res = await fetch(`/api/asaas/sync/${clientId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ asaas_customer_id: selectedCustomer.id, customer_name: selectedCustomer.name }),
+    })
+    if (res.ok) {
+      setShowLinkModal(null)
+      loadIntegrations()
+    } else {
+      const d = await res.json().catch(() => ({}))
+      setLinkError(d.error ?? 'Erro ao vincular')
+    }
+    setLinking(false)
+  }
+
+  async function handleRemove(integrationId: string) {
+    setRemoving(integrationId)
+    await fetch(`/api/asaas/sync/${clientId}?integrationId=${integrationId}`, { method: 'DELETE' })
+    loadIntegrations()
+    setRemoving(null)
+  }
+
+  const filteredCustomers = customers.filter(c => {
+    if (!searchModal.trim()) return true
+    const q = searchModal.toLowerCase()
+    return c.name.toLowerCase().includes(q) || (c.cpfCnpj ?? '').replace(/\D/g, '').includes(q.replace(/\D/g, ''))
+  })
+
+  return (
+    <div className="space-y-4">
+      {/* Modal de busca Asaas */}
+      {showLinkModal === 'asaas' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between p-5 border-b border-zinc-800">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                  <CreditCard className="w-5 h-5 text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-zinc-100 font-semibold text-sm">Vincular conta Asaas</p>
+                  <p className="text-zinc-500 text-xs">Selecione um customer para vincular</p>
+                </div>
+              </div>
+              <button onClick={() => setShowLinkModal(null)} className="text-zinc-500 hover:text-zinc-300 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 border-b border-zinc-800">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                <input value={searchModal} onChange={e => setSearchModal(e.target.value)}
+                  placeholder="Buscar por nome ou CNPJ..."
+                  className="w-full pl-9 pr-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 placeholder:text-zinc-600 text-sm focus:outline-none focus:border-blue-500" />
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+              {loadingCustomers ? (
+                <div className="flex items-center justify-center py-10 gap-2 text-zinc-500">
+                  <Loader2 className="w-5 h-5 animate-spin" /><span className="text-sm">Carregando...</span>
+                </div>
+              ) : filteredCustomers.map(c => (
+                <button key={c.id} onClick={() => setSelectedCustomer(c)}
+                  className={cn('w-full text-left p-3 rounded-xl border transition-all',
+                    selectedCustomer?.id === c.id
+                      ? 'border-blue-500/50 bg-blue-500/10'
+                      : 'border-zinc-800 bg-zinc-800/40 hover:border-zinc-700')}>
+                  <p className={cn('text-sm font-medium', selectedCustomer?.id === c.id ? 'text-blue-300' : 'text-zinc-200')}>
+                    {c.name}
+                  </p>
+                  <p className="text-zinc-500 text-xs mt-0.5">{c.cpfCnpj ?? '—'}</p>
+                </button>
+              ))}
+            </div>
+            {linkError && (
+              <div className="mx-4 mb-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+                <p className="text-red-400 text-sm">{linkError}</p>
+              </div>
+            )}
+            <div className="p-4 border-t border-zinc-800 flex items-center justify-between gap-3">
+              <Button variant="ghost" onClick={() => setShowLinkModal(null)} className="text-zinc-500 hover:text-zinc-300">Cancelar</Button>
+              <Button onClick={handleLink} disabled={!selectedCustomer || linking}
+                className="bg-blue-600 hover:bg-blue-700 text-white gap-2">
+                {linking ? <><Loader2 className="w-4 h-4 animate-spin" />Vinculando...</> : <>Vincular conta</>}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cabeçalho informativo */}
+      <div className="flex items-start gap-3 bg-zinc-800/40 border border-zinc-800 rounded-xl p-4">
+        <Plug className="w-4 h-4 text-zinc-400 mt-0.5 shrink-0" />
+        <div>
+          <p className="text-zinc-300 text-sm font-medium">Integrações de cobrança</p>
+          <p className="text-zinc-500 text-xs mt-0.5 leading-relaxed">
+            Vincule uma ou mais contas do Asaas ou Dom Pagamentos a este cliente.
+            Cada conta vinculada alimenta o pilar Financeiro do health score automaticamente.
+          </p>
+        </div>
+      </div>
+
+      {/* Seção Asaas */}
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardContent className="p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                <CreditCard className="w-4 h-4 text-blue-400" />
+              </div>
+              <p className="text-zinc-200 font-semibold text-sm">Asaas</p>
+              {loading && <Loader2 className="w-3.5 h-3.5 text-zinc-500 animate-spin" />}
+            </div>
+            <Button size="sm" variant="outline"
+              onClick={openLinkModal}
+              className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10 text-xs gap-1.5">
+              <Plus className="w-3.5 h-3.5" /> Vincular conta
+            </Button>
+          </div>
+
+          {!loading && asaasIntegrations.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-6 text-center gap-2">
+              <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center">
+                <Link2 className="w-5 h-5 text-zinc-600" />
+              </div>
+              <p className="text-zinc-500 text-sm">Nenhuma conta Asaas vinculada</p>
+              <button onClick={openLinkModal} className="text-blue-400 text-xs hover:underline">
+                + Vincular conta Asaas
+              </button>
+            </div>
+          )}
+
+          {asaasIntegrations.map(int => (
+            <div key={int.id} className="flex items-center gap-3 bg-zinc-800/50 rounded-xl p-3 border border-zinc-700/50">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+                <Check className="w-4 h-4 text-emerald-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-zinc-200 text-sm font-medium truncate">
+                  {int.credentials?.customer_name ?? int.label ?? int.credentials?.customer_id}
+                </p>
+                <p className="text-zinc-500 text-xs">
+                  ID: {int.credentials?.customer_id}
+                  {int.last_sync_at && (
+                    <> · Sync: {new Date(int.last_sync_at).toLocaleDateString('pt-BR')}</>
+                  )}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => {
+                    const res = fetch(`/api/asaas/sync/${clientId}`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        asaas_customer_id: int.credentials?.customer_id,
+                        customer_name: int.credentials?.customer_name,
+                      }),
+                    }).then(() => loadIntegrations())
+                    return res
+                  }}
+                  className="text-zinc-500 hover:text-zinc-300 transition-colors p-1" title="Sincronizar">
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => handleRemove(int.id)}
+                  disabled={removing === int.id}
+                  className="text-zinc-600 hover:text-red-400 transition-colors p-1" title="Desvincular">
+                  {removing === int.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      {/* Seção Dom Pagamentos */}
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-violet-500/10 flex items-center justify-center">
+                <CreditCard className="w-4 h-4 text-violet-400" />
+              </div>
+              <p className="text-zinc-200 font-semibold text-sm">Dom Pagamentos</p>
+            </div>
+            <Button size="sm" variant="outline" disabled
+              className="border-zinc-700 text-zinc-600 text-xs gap-1.5 cursor-not-allowed">
+              <Plus className="w-3.5 h-3.5" /> Em breve
+            </Button>
+          </div>
+          <div className="flex flex-col items-center justify-center py-4 text-center gap-1.5">
+            <p className="text-zinc-600 text-sm">Dom Pagamentos em breve</p>
+            <p className="text-zinc-700 text-xs">A integração será habilitada na próxima sprint</p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   )
 }
 
@@ -776,9 +1031,11 @@ export default function EditarClientePage() {
         ? form.contractValue && form.contractMonths
         : form.totalProjectValue && form.projectDeadlineDays
     )),
-    // Step 3 — WhatsApp (sempre pode avançar — é opcional)
+    // Step 3 — Integrações (sempre pode avançar — é opcional)
     true,
-    // Step 4 — Contexto
+    // Step 4 — WhatsApp (sempre pode avançar — é opcional)
+    true,
+    // Step 5 — Contexto
     true,
   ]
 
@@ -838,31 +1095,6 @@ export default function EditarClientePage() {
         {/* ── STEP 0 — Identificação ───────────────────────────── */}
         {step === 0 && (
           <div className="space-y-4">
-
-            {/* Importação opcional */}
-            <Card className="bg-zinc-800/30 border-zinc-700/50 border-dashed">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <Download className="w-4 h-4 text-zinc-400 mt-0.5 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-zinc-300 text-sm font-medium">Importar de uma plataforma de pagamento</p>
-                    <p className="text-zinc-500 text-xs mt-0.5 mb-3">Pré-preencha os dados com um cliente já cadastrado no Asaas ou Dom Pagamentos.</p>
-                    <div className="flex items-center gap-2">
-                      <Button size="sm" variant="outline"
-                        className="border-blue-500/40 text-blue-400 hover:bg-blue-500/10 hover:text-blue-300 gap-1.5 text-xs"
-                        onClick={() => setImportModal('asaas')}>
-                        <CreditCard className="w-3.5 h-3.5" /> Importar do Asaas
-                      </Button>
-                      <Button size="sm" variant="outline"
-                        className="border-violet-500/40 text-violet-400 hover:bg-violet-500/10 hover:text-violet-300 gap-1.5 text-xs"
-                        onClick={() => setImportModal('dom')}>
-                        <CreditCard className="w-3.5 h-3.5" /> Importar do Dom
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
 
             {/* Formulário */}
             <Card className="bg-zinc-900 border-zinc-800">
@@ -1311,13 +1543,18 @@ export default function EditarClientePage() {
           </div>
         )}
 
-        {/* ── STEP 3 — WhatsApp ───────────────────────────────── */}
+        {/* ── STEP 3 — Integrações ─────────────────────────────── */}
         {step === 3 && (
+          <IntegracoesStep clientId={clientId} />
+        )}
+
+        {/* ── STEP 4 — WhatsApp ───────────────────────────────── */}
+        {step === 4 && (
           <WhatsAppStep form={form} setForm={setForm} />
         )}
 
-        {/* ── STEP 4 — Contexto & Briefing ────────────────────── */}
-        {step === 4 && (
+        {/* ── STEP 5 — Contexto & Briefing ────────────────────── */}
+        {step === 5 && (
           <div className="space-y-4">
 
             {/* Info do contexto */}

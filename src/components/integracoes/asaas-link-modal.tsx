@@ -82,7 +82,10 @@ export function AsaasLinkModal({ clientId, clientName, clientCnpj, onSuccess, on
       const res = await fetch(`/api/asaas/sync/${clientId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ asaas_customer_id: selected.id }),
+        body: JSON.stringify({
+          asaas_customer_id: selected.id,
+          customer_name: selected.name,
+        }),
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
