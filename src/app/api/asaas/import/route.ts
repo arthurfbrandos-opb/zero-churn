@@ -1,31 +1,50 @@
 /**
  * POST /api/asaas/import
  * Cria clientes no Zero Churn a partir de customers selecionados do Asaas.
- * Body: { customer_ids: string[] }
  *
- * Fluxo por cliente:
- *   1. Verifica duplicata pelo CNPJ
- *   2. Busca financeiro + MRR (Asaas) em paralelo
- *   3. Enriquece CNPJ via BrasilAPI (timeout 5s — não bloqueia se falhar)
- *   4. Cria o cliente
- *   5. Cria a integração Asaas (separado — falha não cancela o cliente)
+ * Estratégia de performance:
+ *   - Busca detalhes individuais de cada customer selecionado em PARALELO
+ *     (GET /customers/{id} retorna additionalEmails, endereço completo, etc.)
+ *   - CNPJ enrichment (BrasilAPI) em paralelo, timeout 8s por CNPJ
+ *   - Dados financeiros (Asaas) em paralelo
+ *   - Inserts no DB em sequência (após todos os fetches)
+ *   - Integração Asaas separada do cliente — falha não cancela a criação
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/supabase/encryption'
-import { listCustomers, getCustomerFinancialSummary, getCustomerMrr } from '@/lib/asaas/client'
-import { lookupCnpj } from '@/lib/cnpj/client'
+import {
+  listCustomers,
+  getCustomer,
+  getCustomerFinancialSummary,
+  getCustomerMrr,
+  AsaasCustomer,
+} from '@/lib/asaas/client'
+import { lookupCnpj, CnpjEnrichment } from '@/lib/cnpj/client'
 
-/** Chama lookupCnpj com timeout de 5 s para não travar o import */
-async function lookupCnpjSafe(cnpj: string) {
+/** lookupCnpj com timeout configurável */
+async function lookupCnpjSafe(cnpj: string, timeoutMs = 8000): Promise<CnpjEnrichment | null> {
+  if (!cnpj || cnpj.length !== 14) return null
   try {
-    const result = await Promise.race([
+    return await Promise.race([
       lookupCnpj(cnpj),
-      new Promise<null>(resolve => setTimeout(() => resolve(null), 5000)),
+      new Promise<null>(resolve => setTimeout(() => resolve(null), timeoutMs)),
     ])
-    return result
   } catch {
     return null
+  }
+}
+
+/** Dados financeiros com fallback seguro */
+async function getFinancialSafe(apiKey: string, customerId: string) {
+  try {
+    const [summary, mrr] = await Promise.all([
+      getCustomerFinancialSummary(apiKey, customerId),
+      getCustomerMrr(apiKey, customerId),
+    ])
+    return { paymentStatus: summary.paymentStatus, mrrValue: mrr > 0 ? Math.round(mrr * 100) / 100 : null }
+  } catch {
+    return { paymentStatus: 'em_dia' as const, mrrValue: null }
   }
 }
 
@@ -44,7 +63,7 @@ export async function POST(req: NextRequest) {
     if (!agencyUser) return NextResponse.json({ error: 'Agência não encontrada' }, { status: 404 })
     const agencyId = agencyUser.agency_id
 
-    // Busca chave Asaas
+    // Chave Asaas
     const { data: integration } = await supabase
       .from('agency_integrations')
       .select('encrypted_key, status')
@@ -57,74 +76,92 @@ export async function POST(req: NextRequest) {
     const creds = await decrypt<{ api_key: string }>(integration.encrypted_key)
     const apiKey = creds.api_key
 
-    // Busca todos os customers do Asaas
-    const allCustomers: Record<string, unknown>[] = []
-    let offset = 0, hasMore = true
-    while (hasMore && offset < 3000) {
-      const res = await listCustomers(apiKey, 100, offset)
-      allCustomers.push(...(res.data as unknown as Record<string, unknown>[]))
-      hasMore = res.hasMore
-      offset += 100
+    // ── FASE 1: resolve IDs selecionados ─────────────────────────
+    // Se a lista de clientes já foi carregada no browser, só precisamos dos selecionados
+    // Buscamos todos para filtrar (até 3000 customers)
+    let selectedFromList: Record<string, unknown>[] = []
+    {
+      const all: Record<string, unknown>[] = []
+      let offset = 0, hasMore = true
+      while (hasMore && offset < 3000) {
+        const res = await listCustomers(apiKey, 100, offset)
+        all.push(...(res.data as unknown as Record<string, unknown>[]))
+        hasMore = res.hasMore
+        offset += 100
+      }
+      selectedFromList = all.filter(c => customer_ids.includes(String(c.id)))
     }
 
-    const selected = allCustomers.filter(c => customer_ids.includes(String(c.id)))
+    if (!selectedFromList.length) {
+      return NextResponse.json({ error: 'Nenhum dos customers selecionados foi encontrado' }, { status: 404 })
+    }
 
+    // ── FASE 2: busca detalhes COMPLETOS de cada customer em paralelo ──
+    // GET /customers/{id} retorna additionalEmails, endereço, etc.
+    const customerDetails: (AsaasCustomer | null)[] = await Promise.all(
+      selectedFromList.map(c =>
+        getCustomer(apiKey, String(c.id)).catch(() => null)
+      )
+    )
+
+    // ── FASE 3: CNPJ enrichment em paralelo ──────────────────────
+    const cnpjs = customerDetails.map(c => String(c?.cpfCnpj ?? '').replace(/\D/g, ''))
+    const enrichments: (CnpjEnrichment | null)[] = await Promise.all(
+      cnpjs.map(cnpj => lookupCnpjSafe(cnpj))
+    )
+
+    // ── FASE 4: dados financeiros em paralelo ────────────────────
+    const financials = await Promise.all(
+      customerDetails.map(c =>
+        c ? getFinancialSafe(apiKey, c.id) : Promise.resolve({ paymentStatus: 'em_dia' as const, mrrValue: null })
+      )
+    )
+
+    // ── FASE 5: inserts no DB ────────────────────────────────────
     const results = {
-      created:       0,
-      skipped:       0,
-      errors:        0,
-      errorDetails:  [] as string[],
+      created:      0,
+      skipped:      0,
+      errors:       0,
+      errorDetails: [] as string[],
     }
 
-    for (const c of selected) {
+    for (let i = 0; i < customerDetails.length; i++) {
+      const c = customerDetails[i]
+      if (!c) { results.errors++; continue }
+
       const customerName = String(c.name ?? '').trim()
-      const customerId   = String(c.id ?? '').trim()
-      const cnpj         = String(c.cpfCnpj ?? '').replace(/\D/g, '')
+      const cnpj         = cnpjs[i]
+      const enriched     = enrichments[i]
+      const financial    = financials[i]
 
       try {
-        // ── 1. Verifica duplicata ────────────────────────────
+        // Verifica duplicata pelo CNPJ
         if (cnpj) {
           const { data: existing } = await supabase
             .from('clients').select('id').eq('cnpj', cnpj).eq('agency_id', agencyId).maybeSingle()
           if (existing) { results.skipped++; continue }
         }
 
-        // ── 2. Dados do Asaas ────────────────────────────────
-        let paymentStatus: 'em_dia' | 'vencendo' | 'inadimplente' = 'em_dia'
-        let mrrValue: number | null = null
+        // Monta os campos de contato (Asaas tem prioridade; Receita preenche o que faltar)
+        const email    = c.email?.trim()    || enriched?.email    || null
+        const telefone = (c.mobilePhone?.trim() || c.phone?.trim()) || enriched?.telefone || null
 
-        // Email financeiro = additionalEmails do Asaas (campo separado por vírgula)
-        const addEmails = String(c.additionalEmails ?? '').trim()
-        const emailFinanceiro = addEmails ? addEmails.split(',')[0].trim() || null : null
-        const email    = String(c.email    ?? '').trim() || null
-        const telefone = String(c.mobilePhone ?? c.phone ?? '').trim() || null
+        // additionalEmails do Asaas → email financeiro
+        const emailFinanceiro = c.additionalEmails?.trim()
+          ? c.additionalEmails.split(',')[0].trim() || null
+          : null
 
-        try {
-          const [summary, mrr] = await Promise.all([
-            getCustomerFinancialSummary(apiKey, customerId),
-            getCustomerMrr(apiKey, customerId),
-          ])
-          paymentStatus = summary.paymentStatus
-          mrrValue = mrr > 0 ? Math.round(mrr * 100) / 100 : null
-        } catch { /* financeiro falha? continua com defaults */ }
+        // Endereço: do Asaas quando disponível, fallback para Receita
+        const logradouro  = c.address     || enriched?.logradouro  || null
+        const numero      = c.addressNumber || enriched?.numero     || null
+        const complemento = c.complement  || enriched?.complemento || null
+        const bairro      = c.province    || enriched?.bairro      || null
+        const cidade      = c.city        || enriched?.cidade       || null
+        const estado      = c.state       || enriched?.estado       || null
+        const cep         = c.postalCode?.replace(/\D/g, '').replace(/(\d{5})(\d{3})/, '$1-$2')
+                          || enriched?.cep || null
 
-        // ── 3. Enriquecimento CNPJ ───────────────────────────
-        let nomeDecisor: string | null = null
-        let segment: string | null = null
-        let emailReceita: string | null = null
-        let telefoneReceita: string | null = null
-
-        if (cnpj.length === 14) {
-          const enriched = await lookupCnpjSafe(cnpj)
-          if (enriched) {
-            nomeDecisor    = enriched.nomeDecisor
-            segment        = enriched.segment
-            emailReceita   = enriched.email
-            telefoneReceita = enriched.telefone
-          }
-        }
-
-        // ── 4. Cria o cliente ────────────────────────────────
+        // Cria o cliente
         const { data: newClient, error: cErr } = await supabase
           .from('clients')
           .insert({
@@ -132,14 +169,14 @@ export async function POST(req: NextRequest) {
             name:             customerName,
             nome_resumido:    customerName.split(' ').slice(0, 2).join(' '),
             cnpj:             cnpj || null,
-            segment,
-            nome_decisor:     nomeDecisor,
-            email:            email || emailReceita || null,
-            telefone:         telefone || telefoneReceita || null,
+            segment:          enriched?.segment     ?? null,
+            nome_decisor:     enriched?.nomeDecisor ?? null,
+            email,
+            telefone,
             email_financeiro: emailFinanceiro,
             client_type:      'mrr',
-            mrr_value:        mrrValue,
-            payment_status:   paymentStatus,
+            mrr_value:        financial.mrrValue,
+            payment_status:   financial.paymentStatus,
             status:           'active',
           })
           .select('id').single()
@@ -152,7 +189,7 @@ export async function POST(req: NextRequest) {
 
         results.created++
 
-        // ── 5. Vincula ao Asaas (falha não cancela o cliente) ─
+        // Vincula integração Asaas (falha não cancela o cliente criado)
         try {
           await supabase.from('client_integrations').insert({
             client_id:    newClient.id,
@@ -160,31 +197,30 @@ export async function POST(req: NextRequest) {
             type:         'asaas',
             status:       'connected',
             label:        customerName,
-            credentials:  { customer_id: customerId, customer_name: customerName },
+            credentials:  { customer_id: c.id, customer_name: customerName },
             last_sync_at: new Date().toISOString(),
           })
         } catch (intErr) {
-          // Integração falhou — registra mas não desfaz o cliente criado
-          const intMsg = intErr instanceof Error ? intErr.message : String(intErr)
-          console.warn(`[import] integração Asaas falhou para ${customerName}:`, intMsg)
-          results.errorDetails.push(`Integração ${customerName}: ${intMsg}`)
+          const m = intErr instanceof Error ? intErr.message : String(intErr)
+          console.warn(`[import] integração falhou para ${customerName}:`, m)
         }
 
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
-        console.error('[import] erro no customer', customerId, err)
+        console.error('[import] erro cliente', c.id, err)
         results.errors++
         results.errorDetails.push(`${customerName}: ${msg}`)
       }
     }
 
     return NextResponse.json({
-      success: true,
+      success:      true,
       created:      results.created,
       skipped:      results.skipped,
       errors:       results.errors,
       errorDetails: results.errorDetails,
     })
+
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[POST /api/asaas/import]', msg)

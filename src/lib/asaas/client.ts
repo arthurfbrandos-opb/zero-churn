@@ -105,6 +105,11 @@ export async function listCustomers(apiKey: string, limit = 100, offset = 0) {
   )
 }
 
+/** Busca um customer completo — inclui additionalEmails, endereço, etc. */
+export async function getCustomer(apiKey: string, customerId: string): Promise<AsaasCustomer> {
+  return asaasRequest<AsaasCustomer>(`/customers/${customerId}`, apiKey)
+}
+
 export async function findCustomerByCpfCnpj(apiKey: string, cpfCnpj: string) {
   const cleaned = cpfCnpj.replace(/\D/g, '')
   const res = await asaasRequest<AsaasListResponse<AsaasCustomer>>(
