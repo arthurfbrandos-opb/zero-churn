@@ -29,7 +29,15 @@ interface AsaasCustomerBasic {
   email:            string | null
   mobilePhone:      string | null
   phone:            string | null
-  additionalEmails: string | null  // emails extras separados por vírgula
+  additionalEmails: string | null
+  // Endereço (vem da listagem do Asaas)
+  address:          string | null
+  addressNumber:    string | null
+  complement:       string | null
+  province:         string | null   // bairro
+  postalCode:       string | null
+  city:             string | null
+  state:            string | null
 }
 
 // ── Tipos internos do formulário ─────────────────────────────────
@@ -553,22 +561,34 @@ export default function NovoClientePage() {
   async function handleImport(client: AsaasCustomerBasic) {
     const words = client.name.split(' ').filter(Boolean)
     const nomeResumido = words.slice(0, 2).join(' ')
+    const emailPrincipal  = client.email?.trim() ?? ''
+    const emailFinanceiro = (client.additionalEmails ?? '').split(',')[0].trim() || emailPrincipal
+    const telefone        = client.mobilePhone?.trim() || client.phone?.trim() || ''
 
-    // Email financeiro = additionalEmails do Asaas
-    const emailFinanceiro = (client.additionalEmails ?? '').split(',')[0].trim() || ''
+    // Formata CEP do Asaas (pode vir como "01310100" ou "01310-100")
+    const cepAsaas = (client.postalCode ?? '').replace(/\D/g, '')
+    const cepFmt   = cepAsaas.length === 8 ? `${cepAsaas.slice(0,5)}-${cepAsaas.slice(5)}` : ''
 
-    // Pré-preenche imediatamente com o que temos do Asaas
+    // Pré-preenche imediatamente com tudo do Asaas (endereço incluído)
     setForm(prev => ({
       ...prev,
-      razaoSocial:      client.name,
+      razaoSocial:    client.name,
       nomeResumido,
-      cnpjCpf:          client.cpfCnpj ?? '',
-      email:            client.email ?? '',
+      cnpjCpf:        client.cpfCnpj ?? '',
+      email:          emailPrincipal,
       emailFinanceiro,
-      telefone:         client.mobilePhone ?? client.phone ?? '',
+      telefone,
+      // Endereço do Asaas
+      cep:            cepFmt,
+      logradouro:     client.address        ?? '',
+      numero:         client.addressNumber  ?? '',
+      complemento:    client.complement     ?? '',
+      bairro:         client.province       ?? '',
+      cidade:         client.city           ?? '',
+      estado:         client.state          ?? '',
     }))
 
-    // Enriquece com BrasilAPI se tiver CNPJ
+    // Enriquece com BrasilAPI — adiciona decisor, segmento e preenche o que faltar
     const cnpj = (client.cpfCnpj ?? '').replace(/\D/g, '')
     if (cnpj.length === 14) {
       try {
@@ -577,30 +597,25 @@ export default function NovoClientePage() {
           const enriched = await res.json()
           setForm(prev => ({
             ...prev,
-            // Razão social e nome fantasia da Receita (mais completos)
-            razaoSocial:   enriched.razaoSocial ?? prev.razaoSocial,
-            nomeResumido:  enriched.nomeFantasia
+            razaoSocial:  enriched.razaoSocial  || prev.razaoSocial,
+            nomeResumido: enriched.nomeFantasia
               ? enriched.nomeFantasia.split(' ').slice(0, 2).join(' ')
               : prev.nomeResumido,
-            // Decisor do QSA
-            nomeDecisor:   enriched.nomeDecisor ?? prev.nomeDecisor,
-            // Segmento pelo CNAE
-            segment:       enriched.segment ?? prev.segment,
-            // Telefone da Receita se não tiver do Asaas
-            telefone:      prev.telefone || enriched.telefone || '',
-            // Email da Receita se não tiver do Asaas
-            email:         prev.email || enriched.email || '',
-            // Endereço da Receita
-            cep:           enriched.cep ?? prev.cep,
-            logradouro:    enriched.logradouro ?? prev.logradouro,
-            numero:        enriched.numero ?? prev.numero,
-            complemento:   enriched.complemento ?? prev.complemento,
-            bairro:        enriched.bairro ?? prev.bairro,
-            cidade:        enriched.cidade ?? prev.cidade,
-            estado:        enriched.estado ?? prev.estado,
+            nomeDecisor:  enriched.nomeDecisor  || prev.nomeDecisor,
+            segment:      enriched.segment       || prev.segment,
+            telefone:     prev.telefone || enriched.telefone || '',
+            email:        prev.email    || enriched.email    || '',
+            // Endereço: usa Asaas se já preenchido, Receita como fallback
+            cep:          prev.cep         || enriched.cep         || '',
+            logradouro:   prev.logradouro  || enriched.logradouro  || '',
+            numero:       prev.numero      || enriched.numero       || '',
+            complemento:  prev.complemento || enriched.complemento || '',
+            bairro:       prev.bairro      || enriched.bairro       || '',
+            cidade:       prev.cidade      || enriched.cidade       || '',
+            estado:       prev.estado      || enriched.estado       || '',
           }))
         }
-      } catch { /* silencioso — não bloqueia o import */ }
+      } catch { /* silencioso */ }
     }
   }
 

@@ -10,12 +10,21 @@ import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
 interface AsaasCustomer {
-  id: string
-  name: string
-  cpfCnpj: string | null
-  email: string | null
-  cityName?: string
-  state?: string
+  id:               string
+  name:             string
+  cpfCnpj:          string | null
+  email:            string | null
+  mobilePhone:      string | null
+  phone:            string | null
+  additionalEmails: string | null
+  address:          string | null
+  addressNumber:    string | null
+  complement:       string | null
+  province:         string | null
+  postalCode:       string | null
+  city:             string | null
+  cityName:         string | null
+  state:            string | null
 }
 
 interface Props {
@@ -106,10 +115,12 @@ export function AsaasImportModal({ onSuccess, onClose }: Props) {
     if (selected.size === 0) return
     setImporting(true)
     try {
+      // Manda os dados completos dos customers selecionados (evita re-fetch no servidor)
+      const selectedCustomers = customers.filter(c => selected.has(c.id))
       const res = await fetch('/api/asaas/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customer_ids: Array.from(selected) }),
+        body: JSON.stringify({ customers: selectedCustomers }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)

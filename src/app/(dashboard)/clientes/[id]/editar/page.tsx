@@ -32,6 +32,13 @@ interface AsaasCustomerBasic {
   mobilePhone:      string | null
   phone:            string | null
   additionalEmails: string | null
+  address:          string | null
+  addressNumber:    string | null
+  complement:       string | null
+  province:         string | null
+  postalCode:       string | null
+  city:             string | null
+  state:            string | null
 }
 
 // ── Tipos internos do formulário ─────────────────────────────────
@@ -849,16 +856,27 @@ export default function EditarClientePage() {
 
   async function handleImport(c: AsaasCustomerBasic) {
     const words = c.name.split(' ').filter(Boolean)
-    const emailFinanceiro = (c.additionalEmails ?? '').split(',')[0].trim() || ''
+    const emailPrincipal  = c.email?.trim() ?? ''
+    const emailFinanceiro = (c.additionalEmails ?? '').split(',')[0].trim() || emailPrincipal
+    const telefone        = c.mobilePhone?.trim() || c.phone?.trim() || ''
+    const cepAsaas = (c.postalCode ?? '').replace(/\D/g, '')
+    const cepFmt   = cepAsaas.length === 8 ? `${cepAsaas.slice(0,5)}-${cepAsaas.slice(5)}` : ''
 
     setForm(prev => ({
       ...prev,
       razaoSocial:    c.name,
       nomeResumido:   words.slice(0, 2).join(' '),
       cnpjCpf:        c.cpfCnpj ?? '',
-      email:          c.email ?? '',
+      email:          emailPrincipal,
       emailFinanceiro,
-      telefone:       c.mobilePhone ?? c.phone ?? '',
+      telefone,
+      cep:            cepFmt,
+      logradouro:     c.address        ?? '',
+      numero:         c.addressNumber  ?? '',
+      complemento:    c.complement     ?? '',
+      bairro:         c.province       ?? '',
+      cidade:         c.city           ?? '',
+      estado:         c.state          ?? '',
     }))
 
     const cnpj = (c.cpfCnpj ?? '').replace(/\D/g, '')
@@ -869,21 +887,21 @@ export default function EditarClientePage() {
           const enriched = await res.json()
           setForm(prev => ({
             ...prev,
-            razaoSocial:  enriched.razaoSocial ?? prev.razaoSocial,
+            razaoSocial:  enriched.razaoSocial  || prev.razaoSocial,
             nomeResumido: enriched.nomeFantasia
               ? enriched.nomeFantasia.split(' ').slice(0, 2).join(' ')
               : prev.nomeResumido,
-            nomeDecisor:  enriched.nomeDecisor ?? prev.nomeDecisor,
-            segment:      enriched.segment ?? prev.segment,
+            nomeDecisor:  enriched.nomeDecisor  || prev.nomeDecisor,
+            segment:      enriched.segment       || prev.segment,
             telefone:     prev.telefone || enriched.telefone || '',
-            email:        prev.email || enriched.email || '',
-            cep:          enriched.cep ?? prev.cep,
-            logradouro:   enriched.logradouro ?? prev.logradouro,
-            numero:       enriched.numero ?? prev.numero,
-            complemento:  enriched.complemento ?? prev.complemento,
-            bairro:       enriched.bairro ?? prev.bairro,
-            cidade:       enriched.cidade ?? prev.cidade,
-            estado:       enriched.estado ?? prev.estado,
+            email:        prev.email    || enriched.email    || '',
+            cep:          prev.cep         || enriched.cep         || '',
+            logradouro:   prev.logradouro  || enriched.logradouro  || '',
+            numero:       prev.numero      || enriched.numero       || '',
+            complemento:  prev.complemento || enriched.complemento || '',
+            bairro:       prev.bairro      || enriched.bairro       || '',
+            cidade:       prev.cidade      || enriched.cidade       || '',
+            estado:       prev.estado      || enriched.estado       || '',
           }))
         }
       } catch { /* silencioso */ }
