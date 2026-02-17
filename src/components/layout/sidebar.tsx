@@ -9,6 +9,7 @@ import {
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { getUnreadAlertsCount } from '@/lib/mock-data'
+import { useAgency } from '@/hooks/use-agency'
 
 const mainNav = [
   { href: '/dashboard',     label: 'Dashboard',    icon: LayoutDashboard },
@@ -19,8 +20,20 @@ const mainNav = [
 ]
 
 export function Sidebar() {
-  const pathname = usePathname()
+  const pathname    = usePathname()
   const unreadCount = getUnreadAlertsCount()
+  const { agency, user } = useAgency()
+
+  // Iniciais do nome da agência para o avatar
+  const initials = agency?.name
+    ? agency.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+    : '?'
+
+  const planLabel: Record<string, string> = {
+    starter:    'Plano Starter',
+    growth:     'Plano Growth',
+    enterprise: 'Plano Enterprise',
+  }
 
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(href + '/')
@@ -92,13 +105,13 @@ export function Sidebar() {
       <div className="px-4 py-4 border-t border-zinc-800">
         <Link href="/configuracoes" className="flex items-center gap-3 group">
           <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-xs font-bold shrink-0">
-            AG
+            {initials}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-zinc-300 text-xs font-medium truncate group-hover:text-white transition-colors">
-              Agência Exemplo
+              {agency?.name ?? user?.email ?? 'Carregando...'}
             </p>
-            <p className="text-zinc-600 text-xs">Plano Growth</p>
+            <p className="text-zinc-600 text-xs">{planLabel[agency?.plan ?? ''] ?? ''}</p>
           </div>
           <ChevronRight className="w-3.5 h-3.5 text-zinc-700 group-hover:text-zinc-500 transition-colors" />
         </Link>

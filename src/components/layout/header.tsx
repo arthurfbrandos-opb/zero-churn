@@ -1,9 +1,11 @@
 'use client'
 
-import { Bell } from 'lucide-react'
+import { Bell, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { getUnreadAlertsCount } from '@/lib/mock-data'
+import { createClient } from '@/lib/supabase/client'
 
 interface HeaderProps {
   title: string
@@ -13,6 +15,14 @@ interface HeaderProps {
 
 export function Header({ title, description, action }: HeaderProps) {
   const unreadCount = getUnreadAlertsCount()
+  const router = useRouter()
+
+  async function handleLogout() {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push('/login')
+    router.refresh()
+  }
 
   return (
     <header className="h-14 lg:h-16 border-b border-zinc-800 bg-zinc-950 flex items-center px-4 lg:px-6 gap-3 sticky top-0 z-30">
@@ -23,8 +33,7 @@ export function Header({ title, description, action }: HeaderProps) {
         )}
       </div>
 
-      <div className="flex items-center gap-2 shrink-0">
-        {/* Action — em mobile vira ícone se tiver label longo */}
+      <div className="flex items-center gap-1 shrink-0">
         {action && <div className="flex items-center gap-2">{action}</div>}
 
         <Link href="/alertas">
@@ -38,6 +47,15 @@ export function Header({ title, description, action }: HeaderProps) {
             )}
           </Button>
         </Link>
+
+        <Button
+          variant="ghost" size="icon"
+          onClick={handleLogout}
+          title="Sair"
+          className="text-zinc-500 hover:text-red-400 hover:bg-red-500/10 w-9 h-9"
+        >
+          <LogOut className="w-4 h-4" />
+        </Button>
       </div>
     </header>
   )
