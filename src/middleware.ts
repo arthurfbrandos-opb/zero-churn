@@ -3,7 +3,11 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 // Rotas que não precisam de autenticação
 const PUBLIC_ROUTES = ['/login', '/cadastro', '/recuperar-senha']
-const PUBLIC_PREFIX = '/f/' // formulário público /f/[token]
+const PUBLIC_PREFIXES = [
+  '/f/',          // formulário público /f/[token]
+  '/api/auth/',   // rotas de auth (signup, logout) não exigem sessão
+  '/api/debug',   // diagnóstico temporário
+]
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -11,7 +15,7 @@ export async function middleware(request: NextRequest) {
   // Rotas públicas — passa direto
   if (
     PUBLIC_ROUTES.some(r => pathname.startsWith(r)) ||
-    pathname.startsWith(PUBLIC_PREFIX)
+    PUBLIC_PREFIXES.some(p => pathname.startsWith(p))
   ) {
     return NextResponse.next()
   }
