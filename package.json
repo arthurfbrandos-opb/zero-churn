@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "seed": "node supabase/seed.mjs"
+    "seed": "node supabase/seed.mjs",
+    "setup-demo": "node supabase/setup-demo.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",
