@@ -1055,8 +1055,8 @@ export default function EditarClientePage() {
   const canNext = [
     // Step 0 — Identificação
     !!(form.razaoSocial && form.nomeResumido && form.cnpjCpf && form.nomeDecisor && form.telefone && form.email && form.segment),
-    // Step 1 — Endereço
-    !!(form.cep && form.logradouro && form.numero && form.bairro && form.cidade && form.estado),
+    // Step 1 — Endereço (numero e complemento são opcionais)
+    !!(form.cep && form.logradouro && form.bairro && form.cidade && form.estado),
     // Step 2 — Contrato
     !!(form.serviceId && form.entregaveisIncluidos.length > 0 && (
       form.clientType === 'mrr'
@@ -1217,7 +1217,7 @@ export default function EditarClientePage() {
                   </Field>
                 </div>
 
-                <Field label="Número">
+                <Field label="Número" optional>
                   <Input value={form.numero} onChange={e => set('numero', e.target.value)}
                     placeholder="123" className={inputCls} />
                 </Field>

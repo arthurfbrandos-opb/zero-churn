@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
     let incoming: IncomingCustomer[] = body.customers ?? []
     if (!incoming.length && body.customer_ids?.length) {
       // Fallback legado — lista mínima para não quebrar
-      incoming = body.customer_ids.map((id: string) => ({ id, name: id, cpfCnpj: null, email: null, mobilePhone: null, phone: null, additionalEmails: null, address: null, addressNumber: null, complement: null, province: null, postalCode: null, city: null, state: null }))
+      incoming = body.customer_ids.map((id: string) => ({ id, name: id, cpfCnpj: null, email: null, mobilePhone: null, phone: null, additionalEmails: null, address: null, addressNumber: null, complement: null, province: null, postalCode: null, city: null, cityName: null, state: null }))
     }
     if (!incoming.length) return NextResponse.json({ error: 'Nenhum customer enviado' }, { status: 400 })
 
