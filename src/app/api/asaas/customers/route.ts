@@ -1,19 +1,18 @@
 /**
- * GET /api/asaas/customers?active_days=90
- * Lista customers do Asaas filtrando por pagamento pago nos últimos N dias
+ * GET /api/asaas/customers
+ * Retorna todos os customers + quais estão ativos (pagamento nos últimos 90 dias)
  */
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/supabase/encryption'
 import { listCustomers, getActiveCustomerIds } from '@/lib/asaas/client'
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     const supabase = await createClient()
     const { data: { user }, error } = await supabase.auth.getUser()
     if (error || !user) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
 
-    // Busca a chave Asaas da agência
     const { data: integration } = await supabase
       .from('agency_integrations')
       .select('encrypted_key, status')
@@ -26,7 +25,6 @@ export async function GET(req: NextRequest) {
         { status: 404 }
       )
     }
-
     if (integration.status !== 'active') {
       return NextResponse.json(
         { error: 'Integração Asaas inativa. Reconfigure em Configurações → Integrações.' },
@@ -37,15 +35,11 @@ export async function GET(req: NextRequest) {
     const creds = await decrypt<{ api_key: string }>(integration.encrypted_key)
     const apiKey = creds.api_key
 
-    // Parâmetro de filtro (padrão: 90 dias)
-    const activeDays = parseInt(req.nextUrl.searchParams.get('active_days') ?? '90', 10)
-
-    // Busca em paralelo: todos os customers + IDs ativos
-    const [customersResult, activeIds] = await Promise.all([
+    // Busca em paralelo: todos os customers + IDs com pagamento nos últimos 90 dias
+    const [allCustomers, activeIds] = await Promise.all([
       (async () => {
         const all = []
-        let offset = 0
-        let hasMore = true
+        let offset = 0, hasMore = true
         while (hasMore && offset < 1000) {
           const res = await listCustomers(apiKey, 100, offset)
           all.push(...res.data)
@@ -54,17 +48,14 @@ export async function GET(req: NextRequest) {
         }
         return all
       })(),
-      getActiveCustomerIds(apiKey, activeDays),
+      getActiveCustomerIds(apiKey, 90),
     ])
 
-    // Filtra apenas clientes com pagamento pago no período
-    const filtered = customersResult.filter(c => activeIds.has(c.id))
-
     return NextResponse.json({
-      customers:  filtered,
-      total:      filtered.length,
-      totalAll:   customersResult.length,
-      activeDays,
+      customers:  allCustomers,
+      activeIds:  Array.from(activeIds), // IDs que tiveram pagamento nos últimos 90 dias
+      total:      allCustomers.length,
+      activeCount: activeIds.size,
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

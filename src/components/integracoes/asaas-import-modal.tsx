@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Search, Loader2, Check, CreditCard, X,
-  AlertTriangle, CheckSquare, Square, Download,
+  AlertTriangle, CheckSquare, Square, Download, Clock,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,12 +23,6 @@ interface Props {
   onClose: () => void
 }
 
-interface CustomersMeta {
-  total: number
-  totalAll: number
-  activeDays: number
-}
-
 function fmtCnpj(v: string | null) {
   if (!v) return '—'
   const d = v.replace(/\D/g, '')
@@ -38,27 +32,30 @@ function fmtCnpj(v: string | null) {
 }
 
 export function AsaasImportModal({ onSuccess, onClose }: Props) {
-  const [customers, setCustomers]   = useState<AsaasCustomer[]>([])
-  const [meta, setMeta]             = useState<CustomersMeta | null>(null)
-  const [loading, setLoading]       = useState(true)
-  const [error, setError]           = useState<string | null>(null)
-  const [search, setSearch]         = useState('')
-  const [selected, setSelected]     = useState<Set<string>>(new Set())
-  const [importing, setImporting]   = useState(false)
-  const [done, setDone]             = useState(false)
+  const [customers, setCustomers]     = useState<AsaasCustomer[]>([])
+  const [activeIds, setActiveIds]     = useState<Set<string>>(new Set())
+  const [totalAll, setTotalAll]       = useState(0)
+  const [activeCount, setActiveCount] = useState(0)
+  const [loading, setLoading]         = useState(true)
+  const [error, setError]             = useState<string | null>(null)
+  const [search, setSearch]           = useState('')
+  const [onlyActive, setOnlyActive]   = useState(false)    // toggle filtro 90 dias
+  const [selected, setSelected]       = useState<Set<string>>(new Set())
+  const [importing, setImporting]     = useState(false)
+  const [done, setDone]               = useState(false)
   const [importResult, setImportResult] = useState<{ created: number; skipped: number } | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      // Filtra por clientes com pagamento pago nos últimos 90 dias
-      const res = await fetch('/api/asaas/customers?active_days=90')
+      const res = await fetch('/api/asaas/customers')
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
       setCustomers(data.customers ?? [])
-      setMeta({ total: data.total, totalAll: data.totalAll, activeDays: data.activeDays })
-      // Nenhum pré-selecionado — usuário escolhe
+      setActiveIds(new Set(data.activeIds ?? []))
+      setTotalAll(data.total ?? 0)
+      setActiveCount(data.activeCount ?? 0)
       setSelected(new Set())
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar')
@@ -69,14 +66,19 @@ export function AsaasImportModal({ onSuccess, onClose }: Props) {
 
   useEffect(() => { load() }, [load])
 
+  // Lista filtrada (busca + toggle ativo)
   const filtered = useMemo(() => {
-    if (!search.trim()) return customers
-    const q = search.toLowerCase()
-    return customers.filter(c =>
-      c.name.toLowerCase().includes(q) ||
-      (c.cpfCnpj?.replace(/\D/g, '').includes(q.replace(/\D/g, '')) ?? false)
-    )
-  }, [search, customers])
+    let list = customers
+    if (onlyActive) list = list.filter(c => activeIds.has(c.id))
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      list = list.filter(c =>
+        c.name.toLowerCase().includes(q) ||
+        (c.cpfCnpj?.replace(/\D/g, '').includes(q.replace(/\D/g, '')) ?? false)
+      )
+    }
+    return list
+  }, [customers, search, onlyActive, activeIds])
 
   function toggle(id: string) {
     setSelected(prev => {
@@ -87,11 +89,17 @@ export function AsaasImportModal({ onSuccess, onClose }: Props) {
   }
 
   function toggleAll() {
-    if (selected.size === filtered.length) {
-      setSelected(new Set())
-    } else {
-      setSelected(new Set(filtered.map(c => c.id)))
-    }
+    const allFilteredIds = filtered.map(c => c.id)
+    const allSelected = allFilteredIds.every(id => selected.has(id))
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (allSelected) {
+        allFilteredIds.forEach(id => next.delete(id))
+      } else {
+        allFilteredIds.forEach(id => next.add(id))
+      }
+      return next
+    })
   }
 
   async function handleImport() {
@@ -110,12 +118,12 @@ export function AsaasImportModal({ onSuccess, onClose }: Props) {
       setTimeout(() => onSuccess(data.created), 2000)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao importar')
-    } finally {
       setImporting(false)
     }
   }
 
-  const allFilteredSelected = filtered.length > 0 && filtered.every(c => selected.has(c.id))
+  const allFilteredSelected =
+    filtered.length > 0 && filtered.every(c => selected.has(c.id))
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
@@ -131,14 +139,12 @@ export function AsaasImportModal({ onSuccess, onClose }: Props) {
               <p className="text-zinc-100 font-semibold">Importar clientes do Asaas</p>
               <p className="text-zinc-500 text-xs">
                 {loading
-                  ? 'Buscando clientes ativos...'
-                  : meta
-                  ? `${meta.total} clientes com pagamento nos últimos ${meta.activeDays} dias (de ${meta.totalAll} no total)`
-                  : ''}
+                  ? 'Carregando clientes...'
+                  : `${totalAll} clientes no total · ${activeCount} com pagamento nos últimos 90 dias`}
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300">
+          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -153,15 +159,16 @@ export function AsaasImportModal({ onSuccess, onClose }: Props) {
               <p className="text-white font-semibold text-lg">Importação concluída!</p>
               <p className="text-zinc-400 text-sm mt-1">
                 <span className="text-emerald-400 font-semibold">{importResult.created} clientes</span> criados
-                {importResult.skipped > 0 && ` · ${importResult.skipped} já existiam`}
+                {importResult.skipped > 0 && ` · ${importResult.skipped} já existiam (pulados)`}
               </p>
               <p className="text-zinc-600 text-xs mt-2">Redirecionando para sua carteira...</p>
             </div>
           </div>
         ) : (
           <>
-            {/* Busca + selecionar todos */}
+            {/* Busca + controles */}
             <div className="p-4 border-b border-zinc-800 space-y-3">
+              {/* Busca */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
                 <Input
@@ -171,8 +178,11 @@ export function AsaasImportModal({ onSuccess, onClose }: Props) {
                   className="pl-9 bg-zinc-800 border-zinc-700 text-zinc-200 placeholder:text-zinc-600 focus:border-blue-500"
                 />
               </div>
+
+              {/* Selecionar todos + filtro 90 dias */}
               {!loading && !error && (
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  {/* Selecionar todos (da lista filtrada atual) */}
                   <button
                     onClick={toggleAll}
                     className="flex items-center gap-2 text-zinc-400 hover:text-zinc-200 text-sm transition-colors"
@@ -181,37 +191,82 @@ export function AsaasImportModal({ onSuccess, onClose }: Props) {
                       ? <CheckSquare className="w-4 h-4 text-blue-400" />
                       : <Square className="w-4 h-4" />}
                     {allFilteredSelected ? 'Desmarcar todos' : 'Selecionar todos'}
+                    <span className="text-zinc-600 text-xs">({filtered.length})</span>
                   </button>
-                  <span className="text-zinc-500 text-sm">
-                    <span className="text-blue-400 font-semibold">{selected.size}</span> selecionados
-                  </span>
+
+                  {/* Toggle: filtrar apenas ativos nos últimos 90 dias */}
+                  <button
+                    onClick={() => setOnlyActive(v => !v)}
+                    className={cn(
+                      'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all',
+                      onlyActive
+                        ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400'
+                        : 'border-zinc-700 bg-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300'
+                    )}
+                  >
+                    <Clock className="w-3.5 h-3.5" />
+                    Últimos 90 dias
+                    {!loading && (
+                      <span className={cn(
+                        'ml-0.5 px-1.5 py-0.5 rounded-full text-xs',
+                        onlyActive ? 'bg-emerald-500/20 text-emerald-300' : 'bg-zinc-700 text-zinc-400'
+                      )}>
+                        {activeCount}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Contador de selecionados */}
+                  {selected.size > 0 && (
+                    <span className="text-zinc-500 text-sm ml-auto">
+                      <span className="text-blue-400 font-semibold">{selected.size}</span> selecionados
+                    </span>
+                  )}
                 </div>
               )}
             </div>
 
             {/* Lista */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+            <div className="flex-1 overflow-y-auto p-3 space-y-1">
               {loading ? (
-                <div className="flex items-center justify-center py-16 gap-2 text-zinc-500">
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span className="text-sm">Buscando seus clientes no Asaas...</span>
+                <div className="flex flex-col items-center justify-center py-16 gap-3 text-zinc-500">
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                  <div className="text-center">
+                    <p className="text-sm">Buscando clientes no Asaas...</p>
+                    <p className="text-xs text-zinc-600 mt-1">Verificando pagamentos dos últimos 90 dias</p>
+                  </div>
                 </div>
               ) : error ? (
-                <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
-                  <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
+                <div className="flex items-start gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
+                  <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
                   <div>
                     <p className="text-red-300 text-sm font-medium">Erro ao carregar</p>
                     <p className="text-red-400/70 text-xs mt-0.5">{error}</p>
-                    <button onClick={load} className="text-red-400 text-xs underline mt-1">Tentar novamente</button>
+                    <button onClick={load} className="text-red-400 text-xs underline mt-2">
+                      Tentar novamente
+                    </button>
                   </div>
                 </div>
               ) : filtered.length === 0 ? (
-                <div className="text-center py-10 text-zinc-600 text-sm">
-                  Nenhum customer encontrado para "{search}"
+                <div className="text-center py-12 text-zinc-600">
+                  <p className="text-sm">
+                    {search
+                      ? `Nenhum cliente encontrado para "${search}"`
+                      : 'Nenhum cliente com pagamento nos últimos 90 dias'}
+                  </p>
+                  {onlyActive && (
+                    <button
+                      onClick={() => setOnlyActive(false)}
+                      className="text-zinc-500 text-xs underline mt-2"
+                    >
+                      Ver todos os clientes
+                    </button>
+                  )}
                 </div>
               ) : (
                 filtered.map(c => {
                   const isSelected = selected.has(c.id)
+                  const isActive = activeIds.has(c.id)
                   return (
                     <button
                       key={c.id}
@@ -220,18 +275,24 @@ export function AsaasImportModal({ onSuccess, onClose }: Props) {
                         'w-full text-left p-3 rounded-xl border transition-all',
                         isSelected
                           ? 'border-blue-500/40 bg-blue-500/8'
-                          : 'border-zinc-800 bg-zinc-800/30 hover:border-zinc-700'
+                          : 'border-zinc-800 bg-zinc-800/30 hover:border-zinc-700 hover:bg-zinc-800/50'
                       )}
                     >
                       <div className="flex items-center gap-3">
+                        {/* Checkbox */}
                         <div className={cn(
                           'w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-all',
                           isSelected ? 'border-blue-500 bg-blue-500' : 'border-zinc-600'
                         )}>
                           {isSelected && <Check className="w-3 h-3 text-white" />}
                         </div>
+
+                        {/* Info */}
                         <div className="flex-1 min-w-0">
-                          <p className={cn('text-sm font-medium truncate', isSelected ? 'text-zinc-100' : 'text-zinc-300')}>
+                          <p className={cn(
+                            'text-sm font-medium truncate',
+                            isSelected ? 'text-zinc-100' : 'text-zinc-300'
+                          )}>
                             {c.name}
                           </p>
                           <p className="text-zinc-500 text-xs mt-0.5">
@@ -239,9 +300,24 @@ export function AsaasImportModal({ onSuccess, onClose }: Props) {
                             {c.email && ` · ${c.email}`}
                           </p>
                         </div>
-                        {c.cityName && (
-                          <span className="text-zinc-600 text-xs shrink-0">{c.cityName}/{c.state}</span>
-                        )}
+
+                        {/* Badge ativo */}
+                        <div className="shrink-0 flex items-center gap-2">
+                          {isActive ? (
+                            <span className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                              ativo
+                            </span>
+                          ) : (
+                            <span className="text-xs text-zinc-600 bg-zinc-800 border border-zinc-700 px-2 py-0.5 rounded-full">
+                              inativo
+                            </span>
+                          )}
+                          {c.cityName && (
+                            <span className="text-zinc-600 text-xs hidden sm:block">
+                              {c.cityName}/{c.state}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </button>
                   )
@@ -252,7 +328,7 @@ export function AsaasImportModal({ onSuccess, onClose }: Props) {
             {/* Footer */}
             {!loading && !error && (
               <div className="p-4 border-t border-zinc-800 flex items-center justify-between gap-3">
-                <Button variant="ghost" onClick={onClose} className="text-zinc-500">
+                <Button variant="ghost" onClick={onClose} className="text-zinc-500 hover:text-zinc-300">
                   Cancelar
                 </Button>
                 <Button
@@ -263,7 +339,11 @@ export function AsaasImportModal({ onSuccess, onClose }: Props) {
                   {importing ? (
                     <><Loader2 className="w-4 h-4 animate-spin" /> Importando...</>
                   ) : (
-                    <><Download className="w-4 h-4" /> Importar {selected.size} cliente{selected.size !== 1 ? 's' : ''}</>
+                    <><Download className="w-4 h-4" />
+                      {selected.size === 0
+                        ? 'Selecione clientes para importar'
+                        : `Importar ${selected.size} cliente${selected.size !== 1 ? 's' : ''}`}
+                    </>
                   )}
                 </Button>
               </div>
