@@ -882,439 +882,115 @@ function AsaasIntegCard() {
   )
 }
 
-// ── Helpers ────────────────────────────────────────────────────
-interface DomWebhookInfo {
-  configured:  boolean
-  active:      boolean
-  webhook_url: string
-  agency_id:   string
-  has_token:   boolean
-  last_event:  { message: string; event: string; received_at: string } | null
-}
-
-function timeAgo(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime()
-  const min  = Math.floor(diff / 60000)
-  if (min < 1)  return 'agora mesmo'
-  if (min < 60) return `há ${min} min`
-  const h = Math.floor(min / 60)
-  if (h < 24)   return `há ${h}h`
-  return `há ${Math.floor(h / 24)}d`
-}
-
-// Componente de passo numerado
-function SetupStep({
-  step, title, done, children,
-}: { step: number; title: string; done?: boolean; children: React.ReactNode }) {
-  return (
-    <div className="flex gap-3">
-      {/* Ícone do passo */}
-      <div className={cn(
-        'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5',
-        done
-          ? 'bg-emerald-500/20 text-emerald-400'
-          : 'bg-zinc-700/60 text-zinc-400'
-      )}>
-        {done ? <Check className="w-3.5 h-3.5" /> : step}
-      </div>
-      {/* Conteúdo */}
-      <div className="flex-1 min-w-0">
-        <p className={cn('text-xs font-semibold mb-1.5', done ? 'text-emerald-400' : 'text-zinc-300')}>
-          {title}
-        </p>
-        {children}
-      </div>
-    </div>
-  )
-}
-
-// ── Componente principal ────────────────────────────────────────
 function DomIntegCard() {
-  const [info, setInfo]           = useState<DomWebhookInfo | null>(null)
-  const [loading, setLoading]     = useState(true)
-  const [activating, setActivating] = useState(false)
-  const [deactivating, setDeactivating] = useState(false)
-  const [testing, setTesting]     = useState(false)
-  const [testResult, setTestResult] = useState<'ok' | 'error' | null>(null)
-  const [copied, setCopied]       = useState(false)
-  const [msg, setMsg]             = useState('')
-
-  // Seção de token colapsável
-  const [showTokenSection, setShowTokenSection] = useState(false)
-  const [token, setToken]         = useState('')
+  const [token, setToken]       = useState('')
   const [publicKey, setPublicKey] = useState('')
   const [showToken, setShowToken] = useState(false)
-  const [savingToken, setSavingToken] = useState(false)
+  const [saving, setSaving]     = useState(false)
+  const [status, setStatus]     = useState<'idle' | 'active' | 'error'>('idle')
+  const [msg, setMsg]           = useState('')
 
-  function flash(text: string) { setMsg(text); setTimeout(() => setMsg(''), 4000) }
-
-  async function loadInfo() {
-    setLoading(true)
-    try {
-      const res = await fetch('/api/dom/webhook')
-      if (res.ok) setInfo(await res.json())
-    } catch { /* ignore */ }
-    setLoading(false)
-  }
-
-  useEffect(() => { loadInfo() }, [])
-
-  async function handleActivate() {
-    setActivating(true)
-    try {
-      const res = await fetch('/api/dom/webhook', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+  useEffect(() => {
+    fetch('/api/agency/integrations')
+      .then(r => r.json())
+      .then(d => {
+        const dom = (d.integrations ?? []).find((i: { type: string; status: string }) => i.type === 'dom_pagamentos')
+        if (dom) setStatus(dom.status === 'active' ? 'active' : 'error')
       })
-      if (res.ok) { await loadInfo() }
-      else { const d = await res.json(); flash(d.error ?? 'Erro ao ativar') }
-    } catch { flash('Erro de conexão') }
-    setActivating(false)
-  }
+      .catch(() => {})
+  }, [])
 
-  async function handleDeactivate() {
-    if (!confirm('Desativar o webhook Dom Pagamentos? Eventos deixarão de ser recebidos.')) return
-    setDeactivating(true)
-    try {
-      await fetch('/api/dom/webhook', { method: 'DELETE' })
-      await loadInfo(); flash('Integração desativada.')
-    } catch { flash('Erro ao desativar') }
-    setDeactivating(false)
-  }
-
-  async function handleTest() {
-    if (!info?.webhook_url) return
-    setTesting(true); setTestResult(null)
-    try {
-      const res = await fetch(info.webhook_url, { method: 'GET' })
-      const d   = await res.json()
-      setTestResult(d.ok ? 'ok' : 'error')
-    } catch { setTestResult('error') }
-    setTesting(false)
-    setTimeout(() => setTestResult(null), 6000)
-  }
-
-  function handleCopy() {
-    if (!info?.webhook_url) return
-    navigator.clipboard.writeText(info.webhook_url)
-    setCopied(true); setTimeout(() => setCopied(false), 2000)
-  }
-
-  async function handleSaveToken() {
+  async function handleSave() {
     if (!token.trim()) return
-    setSavingToken(true)
+    setSaving(true); setMsg('')
     try {
-      const res = await fetch('/api/dom/webhook', {
+      const res = await fetch('/api/agency/integrations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: token.trim(), public_key: publicKey.trim() || undefined }),
+        body: JSON.stringify({
+          type: 'dom_pagamentos',
+          credentials: {
+            token:       token.trim(),
+            public_key:  publicKey.trim() || undefined,
+            environment: 'production',
+          },
+        }),
       })
-      if (res.ok) {
-        await loadInfo(); setToken(''); setPublicKey(''); setShowTokenSection(false)
-        flash('Token salvo! Histórico disponível na página Financeiro.')
-      } else { const d = await res.json(); flash(d.error ?? 'Erro ao salvar token') }
-    } catch { flash('Erro de conexão') }
-    setSavingToken(false)
+      const data = await res.json()
+      if (!res.ok) {
+        setStatus('error')
+        setMsg(data.error ?? 'Erro ao salvar')
+      } else {
+        setStatus('active')
+        setMsg('Conectado com sucesso!')
+        setToken(''); setPublicKey('')
+        setTimeout(() => setMsg(''), 3000)
+      }
+    } catch {
+      setStatus('error')
+      setMsg('Erro de conexão')
+    } finally {
+      setSaving(false)
+    }
   }
-
-  const isActive   = info?.active === true
-  const hasEvents  = Boolean(info?.last_event)
-  const cardStatus = loading ? 'disconnected' : isActive ? 'connected' : 'disconnected'
-
-  // Determina quais passos estão concluídos
-  const step1Done = isActive
-  const step2Done = isActive && hasEvents
-  const step3Done = isActive && info?.has_token === true
 
   return (
     <IntegCard icon={CreditCard} name="Dom Pagamentos" color="bg-violet-500/15 text-violet-400"
-      description="Receba eventos de pagamento em tempo real via webhook"
-      status={cardStatus}>
-      <div className="space-y-5 pt-1">
+      description="Histórico de transações e vendas via gateway Dom Pagamentos"
+      status={status === 'active' ? 'connected' : status === 'error' ? 'error' : 'disconnected'}>
+      <div className="space-y-3 pt-1">
 
-        {loading ? (
-          <div className="flex items-center gap-2 text-zinc-500 text-xs py-2">
-            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Carregando...
+        {/* Token */}
+        <div className="space-y-1.5">
+          <Label className="text-zinc-400 text-xs">Token de API</Label>
+          <div className="relative">
+            <Input
+              type={showToken ? 'text' : 'password'}
+              value={token}
+              onChange={e => setToken(e.target.value)}
+              placeholder={status === 'active' ? '••••••••••••• (já configurado)' : 'Token fornecido pelo suporte Dom'}
+              className={cn(inputCls, 'text-sm pr-10')}
+            />
+            <button type="button" onClick={() => setShowToken(v => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300">
+              {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
           </div>
-        ) : (
-          <div className="space-y-5">
+          <p className="text-zinc-600 text-xs">
+            Solicite ao suporte da Dom Pagamentos — tipo <span className="text-zinc-500">Checkout</span>.
+          </p>
+        </div>
 
-            {/* ═══════════════════════════════════════
-                PASSO 1 — Gerar URL de Webhook
-            ═══════════════════════════════════════ */}
-            <SetupStep step={1} title="Gerar sua URL de Webhook" done={step1Done}>
-              {!isActive ? (
-                <div className="space-y-2.5">
-                  <p className="text-zinc-500 text-xs leading-relaxed">
-                    Clique para gerar sua URL exclusiva. Cada agência tem uma URL única —
-                    nenhum token necessário para começar.
-                  </p>
-                  <Button onClick={handleActivate} disabled={activating} size="sm"
-                    className="bg-violet-600 hover:bg-violet-500 text-white gap-2">
-                    {activating
-                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Gerando...</>
-                      : <><Check className="w-3.5 h-3.5" /> Gerar URL de Webhook</>}
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {/* URL copiável */}
-                  <div className="flex items-center gap-2 bg-zinc-900/80 border border-zinc-700 rounded-lg px-3 py-2.5">
-                    <code className="text-violet-300 text-[11px] flex-1 break-all leading-relaxed">
-                      {info?.webhook_url}
-                    </code>
-                    <button onClick={handleCopy}
-                      className={cn('shrink-0 text-xs flex items-center gap-1 transition-colors whitespace-nowrap',
-                        copied ? 'text-emerald-400' : 'text-zinc-500 hover:text-zinc-300')}>
-                      {copied ? <><Check className="w-3 h-3" /> Copiado!</> : 'Copiar'}
-                    </button>
-                  </div>
-                  {/* Teste rápido */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Button variant="outline" size="sm" onClick={handleTest} disabled={testing}
-                      className="border-zinc-700/80 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 gap-1.5 text-xs h-7">
-                      {testing
-                        ? <><Loader2 className="w-3 h-3 animate-spin" /> Testando...</>
-                        : 'Testar endpoint'}
-                    </Button>
-                    {testResult === 'ok' && (
-                      <span className="text-emerald-400 text-xs flex items-center gap-1">
-                        <Check className="w-3.5 h-3.5" /> Ativo e respondendo
-                      </span>
-                    )}
-                    {testResult === 'error' && (
-                      <span className="text-red-400 text-xs flex items-center gap-1">
-                        <X className="w-3.5 h-3.5" /> Falha ao conectar
-                      </span>
-                    )}
-                    <button onClick={handleDeactivate} disabled={deactivating}
-                      className="text-xs text-zinc-700 hover:text-red-400 transition-colors ml-auto">
-                      {deactivating ? 'Desativando...' : 'Desativar'}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </SetupStep>
+        {/* Chave pública */}
+        <div className="space-y-1.5">
+          <Label className="text-zinc-400 text-xs">
+            Chave Pública <span className="text-zinc-600 font-normal">(opcional)</span>
+          </Label>
+          <Input
+            value={publicKey}
+            onChange={e => setPublicKey(e.target.value)}
+            placeholder={status === 'active' ? 'pk_••••••••••••• (já configurada)' : 'pk_xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'}
+            className={cn(inputCls, 'text-sm font-mono text-xs')}
+          />
+          <p className="text-zinc-600 text-xs">
+            Encontrada no painel Dom Pagamentos. Formato: <code className="text-zinc-500">pk_xxxxxxxx-...</code>
+          </p>
+        </div>
 
-            {/* Separador */}
-            {isActive && <div className="w-px h-4 bg-zinc-800 ml-3" />}
-
-            {/* ═══════════════════════════════════════
-                PASSO 2 — Configurar no painel Dom
-            ═══════════════════════════════════════ */}
-            {isActive && (
-              <SetupStep step={2} title="Configurar no painel Dom Pagamentos" done={step2Done}>
-                <div className="space-y-2">
-                  <ol className="text-zinc-500 text-xs space-y-1.5 leading-relaxed">
-                    <li className="flex gap-2">
-                      <span className="text-zinc-600 shrink-0">1.</span>
-                      Acesse o painel da Dom Pagamentos
-                    </li>
-                    <li className="flex gap-2">
-                      <span className="text-zinc-600 shrink-0">2.</span>
-                      Vá em <span className="text-zinc-300 font-medium">Configurações → Webhooks</span>
-                    </li>
-                    <li className="flex gap-2">
-                      <span className="text-zinc-600 shrink-0">3.</span>
-                      Cole a URL acima no campo de webhook
-                    </li>
-                    <li className="flex gap-2">
-                      <span className="text-zinc-600 shrink-0">4.</span>
-                      Selecione os eventos desejados (veja sugestão abaixo)
-                    </li>
-                    <li className="flex gap-2">
-                      <span className="text-zinc-600 shrink-0">5.</span>
-                      Salve — a partir de agora todos os eventos chegam aqui
-                    </li>
-                  </ol>
-
-                  {/* Eventos recomendados */}
-                  <div className="p-2.5 rounded-lg bg-zinc-800/60 border border-zinc-700/50 space-y-1.5">
-                    <p className="text-zinc-400 text-[11px] font-medium">Eventos recomendados:</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {[
-                        'CHARGE-APPROVED',
-                        'CHARGE-CHARGEBACK',
-                        'CHARGE-REFUND',
-                        'CHARGE-NOT_AUTHORIZED',
-                        'SIGNATURE-INVOICE-PAID',
-                        'SIGNATURE-INVOICE-FAILED',
-                        'SIGNATURE-CANCELLED',
-                      ].map(ev => (
-                        <span key={ev}
-                          className="text-[10px] font-mono bg-zinc-900 border border-zinc-700 text-zinc-400 px-1.5 py-0.5 rounded">
-                          {ev}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Status de recebimento */}
-                  <div className={cn('flex items-start gap-2.5 p-2.5 rounded-lg border text-xs',
-                    step2Done
-                      ? 'bg-emerald-500/5 border-emerald-500/20'
-                      : 'bg-zinc-800/30 border-zinc-700/50')}>
-                    {step2Done ? (
-                      <>
-                        <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 mt-0.5 animate-pulse" />
-                        <div>
-                          <p className="text-emerald-400 font-semibold">Recebendo eventos ✓</p>
-                          <p className="text-zinc-400 mt-0.5 text-[11px]">{info!.last_event!.message}</p>
-                          <p className="text-zinc-600 mt-0.5 text-[10px]">
-                            Último evento: {info!.last_event!.event} · {timeAgo(info!.last_event!.received_at)}
-                          </p>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="w-2 h-2 rounded-full bg-yellow-500/60 shrink-0 mt-0.5" />
-                        <p className="text-zinc-500">
-                          Aguardando primeiro evento. Após configurar o webhook no painel Dom,
-                          o próximo pagamento aparecerá aqui automaticamente.
-                        </p>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </SetupStep>
-            )}
-
-            {/* Separador */}
-            {isActive && <div className="w-px h-4 bg-zinc-800 ml-3" />}
-
-            {/* ═══════════════════════════════════════
-                PASSO 3 — Token API (opcional — histórico)
-            ═══════════════════════════════════════ */}
-            {isActive && (
-              <SetupStep step={3}
-                title={step3Done
-                  ? 'Token API configurado — histórico ativo'
-                  : 'Adicionar Token API (opcional — histórico)'}
-                done={step3Done}>
-                <div className="space-y-2.5">
-
-                  {/* Explicação do que é o token */}
-                  <div className="p-3 rounded-xl bg-violet-500/5 border border-violet-500/15 space-y-2">
-                    <div className="flex items-start gap-2">
-                      <div className="text-violet-400 text-xs font-bold shrink-0 mt-0.5">O que é?</div>
-                    </div>
-                    <p className="text-zinc-400 text-xs leading-relaxed">
-                      O webhook captura apenas eventos <strong className="text-zinc-300">a partir de agora</strong>.
-                      O Token API permite que o Zero Churn busque também o{' '}
-                      <strong className="text-zinc-300">histórico anterior</strong> de transações,
-                      exibindo tudo na página <strong className="text-zinc-300">Financeiro</strong>.
-                    </p>
-                    <div className="grid grid-cols-2 gap-2 text-[11px]">
-                      <div className="p-2 rounded-lg bg-zinc-900/60 border border-zinc-800">
-                        <p className="text-zinc-400 font-medium mb-0.5">Sem token</p>
-                        <p className="text-zinc-600">Apenas eventos futuros (tempo real)</p>
-                      </div>
-                      <div className="p-2 rounded-lg bg-zinc-900/60 border border-zinc-800">
-                        <p className="text-violet-400 font-medium mb-0.5">Com token</p>
-                        <p className="text-zinc-600">Histórico completo + tempo real</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Como obter o token */}
-                  <button onClick={() => setShowTokenSection(v => !v)}
-                    className="text-xs text-violet-400/80 hover:text-violet-300 flex items-center gap-1.5 transition-colors">
-                    <Plus className={cn('w-3.5 h-3.5 transition-transform duration-200',
-                      showTokenSection && 'rotate-45')} />
-                    {step3Done ? 'Atualizar token' : 'Como obter e configurar o token'}
-                  </button>
-
-                  {showTokenSection && (
-                    <div className="space-y-3 pt-1">
-                      {/* Passo a passo para obter o token */}
-                      <div className="p-3 rounded-xl bg-zinc-800/50 border border-zinc-700/50 space-y-2">
-                        <p className="text-zinc-300 text-xs font-semibold">Como obter o Token:</p>
-                        <ol className="text-zinc-500 text-xs space-y-1.5 leading-relaxed">
-                          <li className="flex gap-2">
-                            <span className="text-zinc-600 shrink-0">1.</span>
-                            Entre em contato com o suporte da Dom Pagamentos
-                          </li>
-                          <li className="flex gap-2">
-                            <span className="text-zinc-600 shrink-0">2.</span>
-                            Solicite o <span className="text-zinc-300 font-medium">Token de API</span> (Bearer token)
-                            para integração via REST
-                          </li>
-                          <li className="flex gap-2">
-                            <span className="text-zinc-600 shrink-0">3.</span>
-                            O suporte enviará uma string — cole-a no campo abaixo
-                          </li>
-                          <li className="flex gap-2">
-                            <span className="text-zinc-600 shrink-0">4.</span>
-                            O histórico aparecerá automaticamente na página{' '}
-                            <span className="text-zinc-300 font-medium">Financeiro</span>
-                          </li>
-                        </ol>
-                      </div>
-
-                      {/* Campos: Token + Chave pública */}
-                      <div className="space-y-3">
-                        {/* Token */}
-                        <div className="space-y-1.5">
-                          <Label className="text-zinc-400 text-xs">Token de API <span className="text-red-400">*</span></Label>
-                          <div className="relative">
-                            <Input
-                              type={showToken ? 'text' : 'password'}
-                              value={token}
-                              onChange={e => setToken(e.target.value)}
-                              placeholder={step3Done ? '••••••••• (já configurado)' : 'Cole o token aqui'}
-                              className={cn(inputCls, 'text-sm pr-10')}
-                            />
-                            <button type="button" onClick={() => setShowToken(v => !v)}
-                              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300">
-                              {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Chave pública */}
-                        <div className="space-y-1.5">
-                          <Label className="text-zinc-400 text-xs">
-                            Chave Pública{' '}
-                            <span className="text-zinc-600 font-normal">(opcional)</span>
-                          </Label>
-                          <Input
-                            value={publicKey}
-                            onChange={e => setPublicKey(e.target.value)}
-                            placeholder={info?.has_token ? 'pk_•••••••••• (já configurada)' : 'pk_xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'}
-                            className={cn(inputCls, 'text-sm font-mono text-xs')}
-                          />
-                          <p className="text-zinc-600 text-[11px]">
-                            Encontrada no painel Dom Pagamentos. Formato: <code className="text-zinc-500">pk_xxxxxxxx-...</code>
-                          </p>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          <Button size="sm" onClick={handleSaveToken}
-                            disabled={!token.trim() || savingToken}
-                            className="bg-violet-600 hover:bg-violet-500 text-white">
-                            {savingToken
-                              ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> Salvando...</>
-                              : step3Done ? 'Atualizar credenciais' : 'Salvar credenciais'}
-                          </Button>
-                          <p className="text-zinc-600 text-[11px]">
-                            Salvo criptografado — nunca exposto.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </SetupStep>
-            )}
-
-          </div>
-        )}
-
-        {/* Feedback global */}
         {msg && (
-          <p className="text-xs px-3 py-2 rounded-lg text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
+          <p className={cn('text-xs px-3 py-2 rounded-lg border', status === 'active'
+            ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+            : 'text-red-400 bg-red-500/10 border-red-500/20')}>
             {msg}
           </p>
         )}
+
+        <Button onClick={handleSave} disabled={!token.trim() || saving} size="sm"
+          className="bg-violet-600 hover:bg-violet-500 text-white gap-2">
+          {saving
+            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Salvando...</>
+            : <><Check className="w-3.5 h-3.5" /> {status === 'active' ? 'Atualizar credenciais' : 'Conectar Dom Pagamentos'}</>}
+        </Button>
       </div>
     </IntegCard>
   )
