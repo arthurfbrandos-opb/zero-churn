@@ -173,9 +173,14 @@ create index if not exists idx_form_submissions_client on form_submissions(clien
 create index if not exists idx_action_items_client     on action_items(client_id, is_done);
 
 -- FUNCAO HELPER: get_agency_id()
+-- SECURITY DEFINER: roda como dono da funcao, bypassa RLS ao ler agency_users
+-- Sem isso, haveria dependencia circular: agency_users RLS chama get_agency_id()
+-- que tenta ler agency_users (com RLS) -> loop infinito -> zero resultados
 create or replace function get_agency_id()
 returns uuid
 language sql stable
+security definer
+set search_path = public
 as $$
   select agency_id
   from agency_users
@@ -206,9 +211,10 @@ create policy "Editar propria agencia"
   using (id = get_agency_id());
 
 -- RLS POLICIES: agency_users
+-- Usa user_id direto (nao chama get_agency_id() para evitar loop circular)
 create policy "Ver membros da agencia"
   on agency_users for select
-  using (agency_id = get_agency_id());
+  using (user_id = auth.uid());
 
 create policy "Inserir agency_users"
   on agency_users for insert
