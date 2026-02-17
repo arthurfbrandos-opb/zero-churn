@@ -37,10 +37,16 @@ export default function CadastroPage() {
         body: JSON.stringify({ email, password, agencyName, ownerName }),
       })
 
+      // Trata resposta não-JSON (ex: erro 500 do Vercel retornando HTML)
+      const contentType = res.headers.get('content-type') ?? ''
+      if (!contentType.includes('application/json')) {
+        setError(`Erro do servidor (HTTP ${res.status}). Verifique os logs da Vercel.`)
+        return
+      }
+
       const data = await res.json()
 
       if (!res.ok) {
-        // Mostra a mensagem real do servidor para facilitar debug
         setError(data.error ?? `Erro ${res.status} ao criar conta.`)
         return
       }
@@ -50,7 +56,6 @@ export default function CadastroPage() {
       const { error: loginError } = await supabase.auth.signInWithPassword({ email, password })
 
       if (loginError) {
-        // Conta criada mas login falhou — redireciona pro login
         setSuccess(true)
         setTimeout(() => router.push('/login'), 2000)
         return
@@ -59,8 +64,9 @@ export default function CadastroPage() {
       router.push('/dashboard')
       router.refresh()
 
-    } catch {
-      setError('Erro inesperado. Tente novamente.')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setError('Erro: ' + msg)
     } finally {
       setLoading(false)
     }
