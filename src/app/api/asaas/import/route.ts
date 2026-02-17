@@ -30,7 +30,8 @@ interface IncomingCustomer {
   complement:       string | null
   province:         string | null   // bairro
   postalCode:       string | null
-  city:             string | null
+  city:             string | null   // ID numérico — não usar
+  cityName:         string | null   // nome legível — usar este
   state:            string | null
 }
 
@@ -140,9 +141,17 @@ export async function POST(req: NextRequest) {
           ? c.additionalEmails.split(',')[0].trim() || null
           : null) ?? email
 
-        // Endereço: Asaas → fallback Receita Federal
-        const cepRaw  = (c.postalCode ?? '').replace(/\D/g, '')
-        const cep     = cepRaw.length === 8 ? `${cepRaw.slice(0,5)}-${cepRaw.slice(5)}` : (enriched?.cep ?? null)
+        // Endereço: Asaas tem prioridade, BrasilAPI preenche o que faltar
+        const cepRaw    = (c.postalCode ?? '').replace(/\D/g, '')
+        const cepFmt    = cepRaw.length === 8
+          ? `${cepRaw.slice(0,5)}-${cepRaw.slice(5)}`
+          : (enriched?.cep ?? null)
+        const logradouro = c.address      || enriched?.logradouro || null
+        const numero     = c.addressNumber || enriched?.numero     || null
+        const complement = c.complement   || enriched?.complemento || null
+        const bairro     = c.province     || enriched?.bairro     || null
+        const cidade     = c.cityName     || enriched?.cidade     || null   // cityName é o nome legível
+        const estado     = c.state        || enriched?.estado     || null
 
         // Cria o cliente
         const { data: newClient, error: cErr } = await supabase
@@ -157,6 +166,13 @@ export async function POST(req: NextRequest) {
             email,
             telefone,
             email_financeiro: emailFinanceiro,
+            cep:              cepFmt,
+            logradouro,
+            numero,
+            complemento:      complement,
+            bairro,
+            cidade,
+            estado,
             client_type:      'mrr',
             mrr_value:        fin.mrrValue,
             payment_status:   fin.paymentStatus,

@@ -353,7 +353,7 @@ function TabVisaoGeral({ client }: { client: Client }) {
 // TAB 2 — CADASTRO
 // ─────────────────────────────────────────────────────────────────
 function TabCadastro({ client }: { client: Client }) {
-  const raw = client as unknown as Record<string, unknown>
+  const c = client as unknown as Record<string, unknown>  // acesso aos campos de endereço
   const clientType = client.clientType ?? 'mrr'
   const mrrVal = client.mrrValue ?? client.contractValue
   const tcvVal = client.tcvValue ?? client.totalProjectValue
@@ -385,7 +385,7 @@ function TabCadastro({ client }: { client: Client }) {
     </Card>
   )
 
-  const hasAddress = !!(raw.logradouro || raw.cep || raw.cidade)
+  const hasAddress = !!(c.logradouro || c.cep || c.cidade)
 
   return (
     <div className="space-y-4">
@@ -403,13 +403,13 @@ function TabCadastro({ client }: { client: Client }) {
 
       {hasAddress && (
         <S title="Endereço">
-          <F label="CEP"         value={raw.cep         ? String(raw.cep)          : null} />
-          <F label="Estado"      value={raw.estado      ? String(raw.estado)       : null} />
-          <F label="Logradouro"  value={raw.logradouro  ? String(raw.logradouro)   : null} full />
-          <F label="Número"      value={raw.numero      ? String(raw.numero)       : null} />
-          <F label="Complemento" value={raw.complemento ? String(raw.complemento)  : null} />
-          <F label="Bairro"      value={raw.bairro      ? String(raw.bairro)       : null} />
-          <F label="Cidade"      value={raw.cidade      ? String(raw.cidade)       : null} />
+          <F label="CEP"         value={c.cep         ? String(c.cep)         : null} />
+          <F label="Estado"      value={c.estado      ? String(c.estado)      : null} />
+          <F label="Logradouro"  value={c.logradouro  ? String(c.logradouro)  : null} full />
+          <F label="Número"      value={c.numero      ? String(c.numero)      : null} />
+          <F label="Complemento" value={c.complemento ? String(c.complemento) : null} />
+          <F label="Bairro"      value={c.bairro      ? String(c.bairro)      : null} />
+          <F label="Cidade"      value={c.cidade      ? String(c.cidade)      : null} />
         </S>
       )}
 

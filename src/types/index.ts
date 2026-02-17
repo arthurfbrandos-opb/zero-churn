@@ -133,8 +133,16 @@ export interface Client {
   projectDeadlineDays?: number
   projectStartDate?: string
 
-  // Endereço
+  // Endereço (objeto aninhado legado)
   address?: Address
+  // Endereço (campos flat — vindos do banco diretamente)
+  cep?: string
+  logradouro?: string
+  numero?: string
+  complemento?: string
+  bairro?: string
+  cidade?: string
+  estado?: string
 
   // Contexto
   whatsappGroupId?: string

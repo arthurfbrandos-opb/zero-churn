@@ -2,6 +2,7 @@
 -- Zero Churn — Migrations pendentes (seguro rodar tudo de uma vez)
 -- Todas usam IF NOT EXISTS / IF EXISTS — idempotentes.
 -- Copie e cole no Supabase SQL Editor → Run
+-- Última atualização: migration 005 (endereço)
 -- ============================================================
 
 -- Migration 002: campos de contato na tabela clients
@@ -25,3 +26,13 @@ alter table client_integrations
 create unique index if not exists client_integrations_unique_customer
   on client_integrations (client_id, type, (credentials->>'customer_id'))
   where credentials is not null and credentials->>'customer_id' is not null;
+
+-- Migration 005: campos de endereço na tabela clients
+alter table clients
+  add column if not exists cep         text,
+  add column if not exists logradouro  text,
+  add column if not exists numero      text,
+  add column if not exists complemento text,
+  add column if not exists bairro      text,
+  add column if not exists cidade      text,
+  add column if not exists estado      text;

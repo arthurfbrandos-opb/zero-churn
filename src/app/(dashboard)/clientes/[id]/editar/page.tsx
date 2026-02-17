@@ -37,7 +37,8 @@ interface AsaasCustomerBasic {
   complement:       string | null
   province:         string | null
   postalCode:       string | null
-  city:             string | null
+  city:             string | null   // ID numérico — não usar
+  cityName:         string | null   // nome legível — usar este
   state:            string | null
 }
 
@@ -875,7 +876,7 @@ export default function EditarClientePage() {
       numero:         c.addressNumber  ?? '',
       complemento:    c.complement     ?? '',
       bairro:         c.province       ?? '',
-      cidade:         c.city           ?? '',
+      cidade:         c.cityName        ?? '',
       estado:         c.state          ?? '',
     }))
 
@@ -989,6 +990,13 @@ export default function EditarClientePage() {
         email:             form.email || null,
         telefone:          form.telefone || null,
         email_financeiro:  form.emailFinanceiro || null,
+        cep:               form.cep || null,
+        logradouro:        form.logradouro || null,
+        numero:            form.numero || null,
+        complemento:       form.complemento || null,
+        bairro:            form.bairro || null,
+        cidade:            form.cidade || null,
+        estado:            form.estado || null,
         client_type:       form.clientType,
         mrr_value:         form.clientType === 'mrr' ? parseFloat(form.contractValue.replace(',', '.') || '0') : null,
         tcv_value:         form.clientType === 'tcv' ? parseFloat(form.totalProjectValue.replace(',', '.') || '0') : null,

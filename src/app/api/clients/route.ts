@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
     const {
       name, nome_resumido, razao_social, cnpj, segment,
       nome_decisor, email, telefone, email_financeiro,
+      cep, logradouro, numero, complemento, bairro, cidade, estado,
       client_type, mrr_value, tcv_value,
       contract_start, contract_end,
       whatsapp_group_id, observations, payment_status,
@@ -70,6 +71,7 @@ export async function POST(request: NextRequest) {
         agency_id: agencyUser.agency_id,
         name, nome_resumido, razao_social, cnpj, segment,
         nome_decisor, email, telefone, email_financeiro,
+        cep, logradouro, numero, complemento, bairro, cidade, estado,
         client_type, mrr_value, tcv_value,
         contract_start, contract_end,
         whatsapp_group_id, observations,

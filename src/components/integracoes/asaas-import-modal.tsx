@@ -22,8 +22,8 @@ interface AsaasCustomer {
   complement:       string | null
   province:         string | null
   postalCode:       string | null
-  city:             string | null
-  cityName:         string | null
+  city:             string | null   // ID numérico — não usar
+  cityName:         string | null   // nome legível — usar este
   state:            string | null
 }
 

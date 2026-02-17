@@ -45,7 +45,8 @@ export interface AsaasCustomer {
   complement:       string | null
   province:         string | null  // bairro no Asaas
   postalCode:       string | null
-  city:             string | null
+  city:             string | null   // ID numérico da cidade — NÃO usar
+  cityName:         string | null   // nome legível — usar este
   state:            string | null
   externalReference: string | null
   notificationDisabled: boolean
