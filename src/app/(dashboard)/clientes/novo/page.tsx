@@ -787,12 +787,13 @@ export default function NovoClientePage() {
         return
       }
 
-      const clientData = await res.json()
+      const clientData  = await res.json()
       const newClientId = clientData.client?.id
 
       // Se o usuário vinculou/criou um customer no Asaas, registra a integração
+      let asaasSyncFailed = false
       if (newClientId && asaasLinked) {
-        await fetch(`/api/asaas/sync/${newClientId}`, {
+        const syncRes = await fetch(`/api/asaas/sync/${newClientId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -800,9 +801,20 @@ export default function NovoClientePage() {
             customer_name:     asaasLinked.name,
           }),
         })
+        if (!syncRes.ok) asaasSyncFailed = true
       }
 
-      router.push('/clientes')
+      // Redireciona para o perfil do cliente recém-criado
+      // Se sync falhou, abre direto no step de integrações do editar para o usuário reconfigurar
+      if (newClientId) {
+        if (asaasSyncFailed) {
+          router.push(`/clientes/${newClientId}/editar?step=3&warn=asaas_sync`)
+        } else {
+          router.push(`/clientes/${newClientId}`)
+        }
+      } else {
+        router.push('/clientes')
+      }
     } catch (err) {
       alert('Erro inesperado: ' + (err instanceof Error ? err.message : String(err)))
     } finally {

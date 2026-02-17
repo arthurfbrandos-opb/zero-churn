@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { X, CreditCard, CheckCircle2, ExternalLink, Copy, Check } from 'lucide-react'
+import { X, CreditCard, CheckCircle2, ExternalLink, Copy, Check, AlertCircle, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 type BillingType = 'BOLETO' | 'PIX' | 'CREDIT_CARD'
@@ -29,25 +29,36 @@ const CYCLE_LABELS: Record<Cycle, string> = {
   YEARLY:       'Anual',
 }
 
+// Cartão em assinatura exige cadastro do cartão no Asaas antes
+const CREDIT_CARD_SUBSCRIPTION_NOTE = 'Para assinatura em cartão, o cliente precisa cadastrar o cartão diretamente no Asaas antes da primeira cobrança.'
+const CREDIT_CARD_SINGLE_NOTE       = 'O cliente receberá um link de pagamento para inserir os dados do cartão.'
+
 export function AsaasCobrancaModal({ customerId, customerName, clientType, defaultValue, onClose }: Props) {
-  const [mode, setMode]         = useState<Mode>(clientType === 'mrr' ? 'recorrente' : 'unica')
-  const [billing, setBilling]   = useState<BillingType>('PIX')
-  const [value, setValue]       = useState(defaultValue ? String(defaultValue) : '')
-  const [dueDate, setDueDate]   = useState(() => {
+  const [mode, setMode]       = useState<Mode>(clientType === 'mrr' ? 'recorrente' : 'unica')
+  const [billing, setBilling] = useState<BillingType>('PIX')
+  const [value, setValue]     = useState(defaultValue ? String(defaultValue) : '')
+  const [dueDate, setDueDate] = useState(() => {
     const d = new Date(); d.setDate(d.getDate() + 5)
     return d.toISOString().slice(0, 10)
   })
-  const [cycle, setCycle]       = useState<Cycle>('MONTHLY')
-  const [description, setDesc]  = useState('')
-  const [loading, setLoading]   = useState(false)
-  const [error, setError]       = useState<string | null>(null)
-  const [result, setResult]     = useState<{ url?: string | null; id: string } | null>(null)
-  const [copied, setCopied]     = useState(false)
+  const [cycle, setCycle]     = useState<Cycle>('MONTHLY')
+  const [description, setDesc] = useState('')
+  const [loading, setLoading]  = useState(false)
+  const [error, setError]      = useState<string | null>(null)
+  const [result, setResult]    = useState<{ url?: string | null; id: string; isCreditCard?: boolean } | null>(null)
+  const [copied, setCopied]    = useState(false)
+
+  // Fix #3 — data mínima = hoje
+  const today = new Date().toISOString().slice(0, 10)
 
   const parsedValue = parseFloat(value.replace(',', '.')) || 0
 
+  const isCreditCard           = billing === 'CREDIT_CARD'
+  const isCreditCardSub        = isCreditCard && mode === 'recorrente'
+
   async function handleSubmit() {
     if (!parsedValue || parsedValue <= 0) { setError('Informe um valor válido'); return }
+    if (dueDate < today)                  { setError('A data de vencimento não pode ser no passado'); return }
     setLoading(true); setError(null)
 
     try {
@@ -56,16 +67,16 @@ export function AsaasCobrancaModal({ customerId, customerName, clientType, defau
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            customer: customerId,
+            customer:    customerId,
             billingType: billing,
-            value: parsedValue,
+            value:       parsedValue,
             dueDate,
             description: description || undefined,
           }),
         })
         const d = await res.json()
         if (!res.ok) { setError(d.error ?? 'Erro ao criar cobrança'); return }
-        setResult({ id: d.payment.id, url: d.payment.invoiceUrl ?? d.payment.bankSlipUrl })
+        setResult({ id: d.payment.id, url: d.payment.invoiceUrl ?? d.payment.bankSlipUrl, isCreditCard })
       } else {
         const res = await fetch('/api/asaas/subscriptions', {
           method: 'POST',
@@ -81,7 +92,7 @@ export function AsaasCobrancaModal({ customerId, customerName, clientType, defau
         })
         const d = await res.json()
         if (!res.ok) { setError(d.error ?? 'Erro ao criar assinatura'); return }
-        setResult({ id: d.subscription.id, url: null })
+        setResult({ id: d.subscription.id, url: null, isCreditCard })
       }
     } finally {
       setLoading(false)
@@ -93,7 +104,7 @@ export function AsaasCobrancaModal({ customerId, customerName, clientType, defau
     setCopied(true); setTimeout(() => setCopied(false), 2000)
   }
 
-  // ─── Sucesso ───────────────────────────────────────────────────
+  // ─── Tela de Sucesso ──────────────────────────────────────────
   if (result) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
@@ -106,13 +117,18 @@ export function AsaasCobrancaModal({ customerId, customerName, clientType, defau
               {mode === 'unica' ? 'Cobrança criada!' : 'Assinatura criada!'}
             </p>
             <p className="text-zinc-500 text-sm mt-1">
-              {customerName} — R$ {parsedValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              {customerName} · R$ {parsedValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </p>
           </div>
 
+          {/* Link de pagamento — boleto/pix/cartão único */}
           {result.url && (
-            <div className="space-y-2">
-              <p className="text-zinc-400 text-sm">Link de pagamento:</p>
+            <div className="space-y-2 text-left">
+              <p className="text-zinc-400 text-xs font-medium">
+                {result.isCreditCard
+                  ? 'Link para o cliente inserir os dados do cartão:'
+                  : 'Link de pagamento:'}
+              </p>
               <div className="flex items-center gap-2">
                 <input readOnly value={result.url}
                   className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-300 text-xs truncate" />
@@ -129,10 +145,20 @@ export function AsaasCobrancaModal({ customerId, customerName, clientType, defau
             </div>
           )}
 
+          {/* Assinatura criada — sem link direto */}
           {!result.url && mode === 'recorrente' && (
-            <p className="text-zinc-500 text-sm">
-              A assinatura foi criada. O cliente receberá cobranças automaticamente conforme o ciclo configurado.
-            </p>
+            <div className="space-y-2">
+              {result.isCreditCard ? (
+                <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2.5 text-left">
+                  <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <p className="text-amber-300 text-xs">{CREDIT_CARD_SUBSCRIPTION_NOTE}</p>
+                </div>
+              ) : (
+                <p className="text-zinc-500 text-sm">
+                  A assinatura foi criada. O cliente receberá cobranças automáticas conforme o ciclo configurado.
+                </p>
+              )}
+            </div>
           )}
 
           <Button onClick={onClose} className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200">
@@ -143,7 +169,7 @@ export function AsaasCobrancaModal({ customerId, customerName, clientType, defau
     )
   }
 
-  // ─── Formulário ────────────────────────────────────────────────
+  // ─── Formulário ───────────────────────────────────────────────
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[90vh]">
@@ -167,7 +193,7 @@ export function AsaasCobrancaModal({ customerId, customerName, clientType, defau
         {/* Body */}
         <div className="p-5 overflow-y-auto space-y-5">
 
-          {/* Tipo */}
+          {/* Tipo de cobrança */}
           <div>
             <p className="text-zinc-400 text-xs font-medium mb-2">Tipo de cobrança</p>
             <div className="grid grid-cols-2 gap-2">
@@ -188,7 +214,7 @@ export function AsaasCobrancaModal({ customerId, customerName, clientType, defau
           <div>
             <p className="text-zinc-400 text-xs font-medium mb-2">Forma de pagamento</p>
             <div className="grid grid-cols-3 gap-2">
-              {((['PIX', 'BOLETO', 'CREDIT_CARD'] as BillingType[])).map(b => (
+              {(['PIX', 'BOLETO', 'CREDIT_CARD'] as BillingType[]).map(b => (
                 <button key={b} onClick={() => setBilling(b)}
                   className={`py-2 rounded-lg border text-xs font-medium transition-colors ${
                     billing === b
@@ -199,6 +225,16 @@ export function AsaasCobrancaModal({ customerId, customerName, clientType, defau
                 </button>
               ))}
             </div>
+
+            {/* Nota contextual para cartão */}
+            {isCreditCard && (
+              <div className="flex items-start gap-2 mt-2 bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-3 py-2">
+                <Info className="w-3.5 h-3.5 text-zinc-500 shrink-0 mt-0.5" />
+                <p className="text-zinc-500 text-xs">
+                  {isCreditCardSub ? CREDIT_CARD_SUBSCRIPTION_NOTE : CREDIT_CARD_SINGLE_NOTE}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Valor */}
@@ -206,6 +242,8 @@ export function AsaasCobrancaModal({ customerId, customerName, clientType, defau
             <p className="text-zinc-400 text-xs font-medium mb-2">Valor (R$)</p>
             <input
               type="number"
+              min="0.01"
+              step="0.01"
               value={value}
               onChange={e => setValue(e.target.value)}
               placeholder="0,00"
@@ -213,13 +251,14 @@ export function AsaasCobrancaModal({ customerId, customerName, clientType, defau
             />
           </div>
 
-          {/* Data */}
+          {/* Data — Fix #3: min = hoje */}
           <div>
             <p className="text-zinc-400 text-xs font-medium mb-2">
               {mode === 'unica' ? 'Data de vencimento' : 'Primeiro vencimento'}
             </p>
             <input
               type="date"
+              min={today}
               value={dueDate}
               onChange={e => setDueDate(e.target.value)}
               className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm focus:outline-none focus:border-blue-500"
@@ -247,7 +286,9 @@ export function AsaasCobrancaModal({ customerId, customerName, clientType, defau
 
           {/* Descrição */}
           <div>
-            <p className="text-zinc-400 text-xs font-medium mb-2">Descrição <span className="text-zinc-600">(opcional)</span></p>
+            <p className="text-zinc-400 text-xs font-medium mb-2">
+              Descrição <span className="text-zinc-600">(opcional)</span>
+            </p>
             <input
               value={description}
               onChange={e => setDesc(e.target.value)}
@@ -256,7 +297,12 @@ export function AsaasCobrancaModal({ customerId, customerName, clientType, defau
             />
           </div>
 
-          {error && <p className="text-red-400 text-sm">{error}</p>}
+          {error && (
+            <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+              <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+              <p className="text-red-300 text-sm">{error}</p>
+            </div>
+          )}
         </div>
 
         {/* Footer */}

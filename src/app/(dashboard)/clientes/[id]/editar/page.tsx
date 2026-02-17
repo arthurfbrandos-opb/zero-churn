@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft, ArrowRight, Check, Loader2, Plus, Trash2,
@@ -547,8 +547,13 @@ function IntegracoesStep({ clientId, clientType, defaultValue }: { clientId: str
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 <button
-                  onClick={() => setCobrancaTarget({ id: int.credentials?.customer_id ?? '', name: int.credentials?.customer_name ?? int.label ?? '' })}
-                  className="text-blue-500 hover:text-blue-300 transition-colors p-1" title="Criar cobrança">
+                  onClick={() => {
+                    const cid = int.credentials?.customer_id
+                    if (!cid) return // guard: sem customer_id não abre o modal
+                    setCobrancaTarget({ id: cid, name: int.credentials?.customer_name ?? int.label ?? cid })
+                  }}
+                  className={`transition-colors p-1 ${int.credentials?.customer_id ? 'text-blue-500 hover:text-blue-300' : 'text-zinc-700 cursor-not-allowed'}`}
+                  title={int.credentials?.customer_id ? 'Criar cobrança' : 'customer_id não disponível'}>
                   <CreditCard className="w-3.5 h-3.5" />
                 </button>
                 <button
@@ -818,12 +823,15 @@ function WhatsAppStep({
 // ── Página de EDIÇÃO ──────────────────────────────────────────────
 export default function EditarClientePage() {
   const router = useRouter()
-  const params = useParams()
+  const params       = useParams()
+  const searchParams = useSearchParams()
+  const warnAsaas    = searchParams.get('warn') === 'asaas_sync'
+  const initialStep  = Number(searchParams.get('step') ?? 0)
   const clientId = params.id as string
 
   const { client, loading: loadingClient } = useClient(clientId)
 
-  const [step, setStep] = useState(0)
+  const [step, setStep] = useState(initialStep)
   const [form, setForm] = useState<FormData>(INITIAL)
   const [formReady, setFormReady] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -1112,6 +1120,20 @@ export default function EditarClientePage() {
       />
 
       <div className="p-4 lg:p-6 max-w-2xl mx-auto space-y-6">
+
+        {/* Banner: sync Asaas falhou ao criar cliente */}
+        {warnAsaas && (
+          <div className="flex items-start gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-amber-300 text-sm font-medium">Integração Asaas não foi salva</p>
+              <p className="text-zinc-400 text-xs mt-0.5">
+                O cliente foi criado com sucesso, mas o vínculo com o Asaas falhou.
+                Use o botão abaixo para vincular manualmente.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Steps indicator */}
         <div className="flex items-center gap-0">
