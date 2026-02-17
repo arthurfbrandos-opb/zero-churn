@@ -1500,35 +1500,36 @@ export default function NovoClientePage() {
                 {!asaasLinked ? (
                   <div className="space-y-3">
                     {asaasError && (
-                      <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                      <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2.5">
                         <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
                         <p className="text-red-300 text-xs">{asaasError}</p>
                       </div>
                     )}
-                    <p className="text-zinc-400 text-sm">Este cliente ainda não está vinculado ao Asaas. Escolha uma opção:</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <Button variant="outline" onClick={handleCreateInAsaas} disabled={creatingAsaas}
-                        className="border-blue-700/40 text-blue-400 hover:bg-blue-500/10 hover:text-blue-300 gap-2 h-auto py-3 flex-col items-start">
-                        <div className="flex items-center gap-2">
-                          {creatingAsaas ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                          <span className="font-medium">Criar no Asaas</span>
+                      {/* Criar no Asaas */}
+                      <button onClick={handleCreateInAsaas} disabled={creatingAsaas}
+                        className="flex items-start gap-3 p-4 rounded-xl border border-blue-700/40 bg-blue-500/5 hover:bg-blue-500/10 transition-colors text-left disabled:opacity-50">
+                        <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                          {creatingAsaas ? <Loader2 className="w-4 h-4 animate-spin text-blue-400" /> : <Plus className="w-4 h-4 text-blue-400" />}
                         </div>
-                        <span className="text-xs text-zinc-500 font-normal text-left">
-                          Cria um novo customer usando os dados preenchidos acima
-                        </span>
-                      </Button>
-                      <Button variant="outline" onClick={openLinkSearch}
-                        className="border-zinc-700 text-zinc-400 hover:text-white gap-2 h-auto py-3 flex-col items-start">
-                        <div className="flex items-center gap-2">
-                          <Search className="w-4 h-4" />
-                          <span className="font-medium">Vincular existente</span>
+                        <div>
+                          <p className="text-blue-300 text-sm font-medium">Criar no Asaas</p>
+                          <p className="text-zinc-500 text-xs mt-0.5 leading-relaxed">Cria um novo customer com os dados preenchidos</p>
                         </div>
-                        <span className="text-xs text-zinc-500 font-normal text-left">
-                          Selecione um customer que já existe na sua conta Asaas
-                        </span>
-                      </Button>
+                      </button>
+                      {/* Vincular existente */}
+                      <button onClick={openLinkSearch}
+                        className="flex items-start gap-3 p-4 rounded-xl border border-zinc-700 bg-zinc-800/40 hover:bg-zinc-800 transition-colors text-left">
+                        <div className="w-8 h-8 rounded-lg bg-zinc-700 flex items-center justify-center shrink-0 mt-0.5">
+                          <Search className="w-4 h-4 text-zinc-400" />
+                        </div>
+                        <div>
+                          <p className="text-zinc-300 text-sm font-medium">Vincular existente</p>
+                          <p className="text-zinc-500 text-xs mt-0.5 leading-relaxed">Selecione um customer já existente no Asaas</p>
+                        </div>
+                      </button>
                     </div>
-                    <p className="text-zinc-600 text-xs text-center">Você também pode configurar integrações depois no perfil do cliente</p>
+                    <p className="text-zinc-600 text-xs text-center">Também é possível configurar integrações depois no perfil do cliente</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
