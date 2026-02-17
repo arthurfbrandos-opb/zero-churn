@@ -942,6 +942,7 @@ function DomIntegCard() {
   // Seção de token colapsável
   const [showTokenSection, setShowTokenSection] = useState(false)
   const [token, setToken]         = useState('')
+  const [publicKey, setPublicKey] = useState('')
   const [showToken, setShowToken] = useState(false)
   const [savingToken, setSavingToken] = useState(false)
 
@@ -1005,10 +1006,10 @@ function DomIntegCard() {
       const res = await fetch('/api/dom/webhook', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: token.trim() }),
+        body: JSON.stringify({ token: token.trim(), public_key: publicKey.trim() || undefined }),
       })
       if (res.ok) {
-        await loadInfo(); setToken(''); setShowTokenSection(false)
+        await loadInfo(); setToken(''); setPublicKey(''); setShowTokenSection(false)
         flash('Token salvo! Histórico disponível na página Financeiro.')
       } else { const d = await res.json(); flash(d.error ?? 'Erro ao salvar token') }
     } catch { flash('Erro de conexão') }
@@ -1249,11 +1250,12 @@ function DomIntegCard() {
                         </ol>
                       </div>
 
-                      {/* Campo do token */}
-                      <div className="space-y-1.5">
-                        <Label className="text-zinc-400 text-xs">Token de API</Label>
-                        <div className="flex gap-2">
-                          <div className="relative flex-1">
+                      {/* Campos: Token + Chave pública */}
+                      <div className="space-y-3">
+                        {/* Token */}
+                        <div className="space-y-1.5">
+                          <Label className="text-zinc-400 text-xs">Token de API <span className="text-red-400">*</span></Label>
+                          <div className="relative">
                             <Input
                               type={showToken ? 'text' : 'password'}
                               value={token}
@@ -1266,17 +1268,37 @@ function DomIntegCard() {
                               {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                             </button>
                           </div>
+                        </div>
+
+                        {/* Chave pública */}
+                        <div className="space-y-1.5">
+                          <Label className="text-zinc-400 text-xs">
+                            Chave Pública{' '}
+                            <span className="text-zinc-600 font-normal">(opcional)</span>
+                          </Label>
+                          <Input
+                            value={publicKey}
+                            onChange={e => setPublicKey(e.target.value)}
+                            placeholder={info?.has_token ? 'pk_•••••••••• (já configurada)' : 'pk_xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'}
+                            className={cn(inputCls, 'text-sm font-mono text-xs')}
+                          />
+                          <p className="text-zinc-600 text-[11px]">
+                            Encontrada no painel Dom Pagamentos. Formato: <code className="text-zinc-500">pk_xxxxxxxx-...</code>
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-3">
                           <Button size="sm" onClick={handleSaveToken}
                             disabled={!token.trim() || savingToken}
-                            className="bg-violet-600 hover:bg-violet-500 text-white shrink-0">
+                            className="bg-violet-600 hover:bg-violet-500 text-white">
                             {savingToken
-                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              : step3Done ? 'Atualizar' : 'Salvar token'}
+                              ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> Salvando...</>
+                              : step3Done ? 'Atualizar credenciais' : 'Salvar credenciais'}
                           </Button>
+                          <p className="text-zinc-600 text-[11px]">
+                            Salvo criptografado — nunca exposto.
+                          </p>
                         </div>
-                        <p className="text-zinc-600 text-[11px]">
-                          O token é salvo criptografado e nunca exposto na interface.
-                        </p>
                       </div>
                     </div>
                   )}
