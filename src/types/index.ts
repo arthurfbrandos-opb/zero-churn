@@ -103,55 +103,58 @@ export interface Installment {
 
 export interface Client {
   id: string
-  agencyId: string
+  agencyId?: string
 
   // Identificação
-  razaoSocial: string
-  nomeResumido: string        // usado em todo o sistema
-  name: string                // alias de nomeResumido (compatibilidade)
-  cnpjCpf: string
-  nomeDecisor: string
-  telefone: string
-  email: string
+  razaoSocial?: string
+  nomeResumido?: string
+  name: string
+  cnpjCpf?: string
+  cnpj?: string
+  nomeDecisor?: string
+  telefone?: string
+  email?: string
   emailFinanceiro?: string
-  segment: string
-
-  // Endereço de cobrança
-  address?: Address
+  segment?: string
 
   // Tipo de contrato
   clientType: ClientType
-  serviceSold: string
+  serviceSold?: string
 
   // MRR
-  contractValue: number
-  contractStartDate: string
-  contractEndDate: string
-  hasImplementationFee?: boolean
-  implementationFeeValue?: number
-  implementationFeeDate?: string
+  contractValue?: number
+  mrrValue?: number
+  contractStartDate?: string
+  contractEndDate?: string
 
   // TCV
   totalProjectValue?: number
+  tcvValue?: number
   projectDeadlineDays?: number
   projectStartDate?: string
-  hasInstallments?: boolean
-  installmentsType?: 'equal' | 'custom'
-  installments?: Installment[]
 
-  // Contexto & Briefing (alimenta IA + equipe operacional)
-  nichoEspecifico?: string        // descrição mais detalhada do nicho
-  resumoReuniao?: string          // o que foi discutido no fechamento
-  expectativasCliente?: string    // o que o cliente disse que espera
-  principaisDores?: string        // problemas que motivaram a contratação
-  notes?: string                  // observações adicionais da equipe
-  paymentStatus?: PaymentStatus   // status do pagamento mais recente
+  // Endereço
+  address?: Address
 
-  // Status do cliente
-  status?: ClientStatus           // active (default) | inactive
-  churnRecord?: ChurnRecord       // preenchido ao inativar
+  // Contexto
+  whatsappGroupId?: string
+  observations?: string
+  notes?: string
 
+  // Financeiro
+  paymentStatus?: PaymentStatus
+
+  // Status
+  status?: ClientStatus
+  churnRecord?: ChurnRecord
+
+  // Timestamps
   createdAt: string
+
+  // Relações carregadas junto ao cliente
+  integrations:        Integration[]
+  healthScore?:        HealthScore
+  lastFormSubmission?: FormSubmission
 }
 
 export interface Integration {
@@ -165,10 +168,11 @@ export interface Integration {
 
 export interface FormSubmission {
   id: string
-  clientId: string
-  formLinkToken: string
+  clientId?: string
+  formLinkToken?: string
   sentAt: string
   respondedAt?: string
+  status?: 'responded' | 'pending' | 'expired'
   resultScore?: number
   npsScore?: number
   comment?: string
@@ -183,21 +187,27 @@ export interface PillarScore {
 }
 
 export interface HealthScore {
-  id: string
-  clientId: string
-  calculatedAt: string
+  id?: string
+  clientId?: string
+  calculatedAt?: string
+  analyzedAt?: string          // alias do banco
   scoreTotal: number
-  pillars: {
+  scoreFinanceiro?: number
+  scoreProximidade?: number
+  scoreResultado?: number
+  scoreNps?: number
+  pillars?: {
     financial: PillarScore
     proximity: PillarScore
     result: PillarScore
     nps: PillarScore
   }
   churnRisk: ChurnRisk
-  criticalFlags: string[]
-  diagnosis: string
-  actionPlan: ActionItem[]
-  triggeredBy: TriggeredBy
+  criticalFlags?: string[]
+  flags?: string[]             // alias do banco
+  diagnosis?: string
+  actionPlan?: ActionItem[]
+  triggeredBy?: TriggeredBy
 }
 
 export interface ActionItem {
@@ -219,8 +229,5 @@ export interface Alert {
   createdAt: string
 }
 
-export interface ClientWithScore extends Client {
-  healthScore?: HealthScore
-  integrations: Integration[]
-  lastFormSubmission?: FormSubmission
-}
+// Alias mantido por compatibilidade — Client já inclui todos esses campos
+export type ClientWithScore = Client

@@ -543,7 +543,7 @@ export function getUnreadAlertsCount(): number {
 export function getTotalRevenueAtRisk(): number {
   return mockClients
     .filter((c) => c.healthScore?.churnRisk === 'high' || c.healthScore?.churnRisk === 'medium')
-    .reduce((sum, c) => sum + c.contractValue, 0)
+    .reduce((sum, c) => sum + (c.contractValue ?? c.mrrValue ?? 0), 0)
 }
 
 export function getAverageHealthScore(): number {
@@ -557,7 +557,7 @@ export function getNewTCVClients(days = 30) {
   const now = new Date()
   return mockClients.filter((c) => {
     if (c.clientType !== 'tcv') return false
-    const start = new Date(c.projectStartDate ?? c.contractStartDate)
+    const start = new Date(c.projectStartDate ?? c.contractStartDate ?? c.createdAt)
     const diff = Math.ceil((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
     return diff <= days
   })
@@ -574,7 +574,7 @@ export function getMonthlyBillingForecast() {
   // TCV novo: projetos que assinaram neste mês (faturamento antecipado recebido)
   const newTCVThisMonth = mockClients.filter((c) => {
     if (c.clientType !== 'tcv') return false
-    const start = new Date(c.projectStartDate ?? c.contractStartDate)
+    const start = new Date(c.projectStartDate ?? c.contractStartDate ?? c.createdAt)
     return start.getMonth() === currentMonth && start.getFullYear() === currentYear
   })
   const tcvForecast = newTCVThisMonth.reduce((sum, c) => sum + (c.totalProjectValue ?? 0), 0)
@@ -591,20 +591,20 @@ export function getMonthlyBillingForecast() {
 export function getMRRSafe(): number {
   return mockClients
     .filter((c) => c.clientType === 'mrr' && c.healthScore?.churnRisk === 'low')
-    .reduce((sum, c) => sum + c.contractValue, 0)
+    .reduce((sum, c) => sum + (c.contractValue ?? c.mrrValue ?? 0), 0)
 }
 
 export function getMRRAtRisk(): number {
   return mockClients
     .filter((c) => c.clientType === 'mrr' && (c.healthScore?.churnRisk === 'high' || c.healthScore?.churnRisk === 'medium'))
-    .reduce((sum, c) => sum + c.contractValue, 0)
+    .reduce((sum, c) => sum + (c.contractValue ?? c.mrrValue ?? 0), 0)
 }
 
 export function getClientsRenewingSoon(days = 30) {
   const now = new Date()
   return mockClients.filter((c) => {
     if (c.clientType !== 'mrr') return false
-    const end = new Date(c.contractEndDate)
+    const end = new Date(c.contractEndDate ?? "2099-12-31")
     const diff = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
     return diff > 0 && diff <= days
   })
@@ -614,7 +614,7 @@ export function getTCVExpiringSoon(days = 15) {
   const now = new Date()
   return mockClients.filter((c) => {
     if (c.clientType !== 'tcv') return false
-    const end = new Date(c.contractEndDate)
+    const end = new Date(c.contractEndDate ?? "2099-12-31")
     const diff = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
     return diff > 0 && diff <= days
   })
@@ -661,7 +661,7 @@ export function getTCVClients() {
 }
 
 export function getTotalMRR(): number {
-  return getMRRClients().reduce((sum, c) => sum + c.contractValue, 0)
+  return getMRRClients().reduce((sum, c) => sum + (c.contractValue ?? c.mrrValue ?? 0), 0)
 }
 
 export function getTotalTCVInExecution(): number {
@@ -686,7 +686,7 @@ export function getTCVProgressPercent(client: { projectStartDate?: string; proje
 
 export function getActiveClientsCount(): number {
   const now = new Date()
-  return mockClients.filter((c) => new Date(c.contractEndDate) > now).length
+  return mockClients.filter((c) => new Date(c.contractEndDate ?? "2099-12-31") > now).length
 }
 
 export function getLastMonthAvgChurn(): number {
@@ -711,9 +711,9 @@ export function getRevenueByRisk() {
   const revenue = { high: 0, medium: 0, low: 0 }
   mockClients.forEach((c) => {
     const risk = c.healthScore?.churnRisk
-    if (risk === 'high') revenue.high += c.contractValue
-    else if (risk === 'medium') revenue.medium += c.contractValue
-    else if (risk === 'low') revenue.low += c.contractValue
+    if (risk === 'high') revenue.high += (c.contractValue ?? c.mrrValue ?? c.tcvValue ?? 0)
+    else if (risk === 'medium') revenue.medium += (c.contractValue ?? c.mrrValue ?? c.tcvValue ?? 0)
+    else if (risk === 'low') revenue.low += (c.contractValue ?? c.mrrValue ?? c.tcvValue ?? 0)
   })
   return revenue
 }
@@ -726,7 +726,7 @@ export function getClientSummary() {
   const in45Days = new Date(now.getTime() + 45 * 24 * 60 * 60 * 1000)
   const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
 
-  const ativos = mockClients.filter(c => new Date(c.contractEndDate) > now).length
+  const ativos = mockClients.filter(c => new Date(c.contractEndDate ?? "2099-12-31") > now).length
   const novos = mockClients.filter(c => new Date(c.createdAt) >= thirtyDaysAgo).length
   const mrr = mockClients.filter(c => c.clientType === 'mrr').length
   const tcv = mockClients.filter(c => c.clientType === 'tcv').length
@@ -734,14 +734,14 @@ export function getClientSummary() {
   // MRR renovando nos próximos 45 dias
   const renovacao = mockClients.filter(c => {
     if (c.clientType !== 'mrr') return false
-    const end = new Date(c.contractEndDate)
+    const end = new Date(c.contractEndDate ?? "2099-12-31")
     return end > now && end <= in45Days
   }).length
 
   // TCV encerrando nos próximos 30 dias
   const tcvEncerrando = mockClients.filter(c => {
     if (c.clientType !== 'tcv') return false
-    const end = new Date(c.contractEndDate)
+    const end = new Date(c.contractEndDate ?? "2099-12-31")
     return end > now && end <= in30Days
   }).length
 
@@ -798,7 +798,7 @@ export function getPaymentStatusSummary() {
   const inadimplente = mockClients.filter(c => c.paymentStatus === 'inadimplente')
 
   const mrrValue = (list: typeof mockClients) =>
-    list.filter(c => c.clientType === 'mrr').reduce((s, c) => s + c.contractValue, 0)
+    list.filter(c => c.clientType === 'mrr').reduce((s, c) => s + (c.contractValue ?? c.mrrValue ?? 0), 0)
 
   return {
     emDia:        { count: emDia.length,        value: mrrValue(emDia)        },

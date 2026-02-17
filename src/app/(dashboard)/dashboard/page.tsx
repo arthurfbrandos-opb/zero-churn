@@ -1,10 +1,12 @@
+'use client'
+
 import Link from 'next/link'
 import {
   ChevronRight, Clock, TrendingDown, TrendingUp, Minus,
   RefreshCw, Layers, AlertTriangle, Calendar, Plug,
   ClipboardList, BarChart2, ShieldCheck, ArrowRight,
   CreditCard, CheckCircle2, AlertCircle, XCircle,
-  MessageSquare, ThumbsUp, ThumbsDown, Meh,
+  MessageSquare, ThumbsUp, ThumbsDown, Meh, Loader2,
 } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
@@ -14,13 +16,13 @@ import { RiskBadge } from '@/components/dashboard/risk-badge'
 import { ScoreGauge } from '@/components/dashboard/score-gauge'
 import { ChurnSparkline } from '@/components/dashboard/churn-sparkline'
 import { IntegrationStatusIcon } from '@/components/integracoes/integration-status-icon'
+import { getNpsClassification } from '@/lib/nps-utils'
+import { useClients } from '@/hooks/use-clients'
 import {
-  getClientsSortedByRisk,
+  sortClientsByRisk,
   getAverageHealthScore,
   getRevenueByRisk,
   getRiskCounts,
-  getLastMonthAvgChurn,
-  getLast3MonthsAvgChurn,
   getMRRClients,
   getTCVClients,
   getTotalMRR,
@@ -35,10 +37,8 @@ import {
   getClientsWithoutRecentNPS,
   getNpsDistribution,
   getPaymentStatusSummary,
-  mockChurnHistory,
-  mockAlerts,
-} from '@/lib/mock-data'
-import { getNpsClassification } from '@/lib/nps-utils'
+} from '@/lib/client-stats'
+import { mockChurnHistory } from '@/lib/mock-data'
 import { ChurnRisk } from '@/types'
 import { cn } from '@/lib/utils'
 
@@ -62,32 +62,54 @@ function getDaysToRenew(endDate: string): number {
 }
 
 export default function DashboardPage() {
-  const clients          = getClientsSortedByRisk()
-  const avgScore         = getAverageHealthScore()
-  const riskCounts       = getRiskCounts()
-  const revenueByRisk    = getRevenueByRisk()
-  const churnLastMonth   = getLastMonthAvgChurn()
-  const churnLast3Months = getLast3MonthsAvgChurn()
-  const churnDelta       = churnLastMonth - churnLast3Months
-  const mrrClients       = getMRRClients()
-  const tcvClients       = getTCVClients()
-  const totalMRR         = getTotalMRR()
-  const totalTCV         = getTotalTCVInExecution()
-  const mrrAtRisk        = getMRRAtRisk()
-  const newTCVClients    = getNewTCVClients(30)
-  const billing          = getMonthlyBillingForecast()
+  const { clients: allClients, loading, error } = useClients()
+
+  // Filtra só ativos para a maioria dos cálculos
+  const clients          = sortClientsByRisk(allClients.filter(c => c.status !== 'inactive'))
+  const avgScore         = getAverageHealthScore(clients)
+  const riskCounts       = getRiskCounts(clients)
+  const revenueByRisk    = getRevenueByRisk(clients)
+  const churnLastMonth   = 0
+  const churnLast3Months = 0
+  const churnDelta       = 0
+  const mrrClients       = getMRRClients(clients)
+  const tcvClients       = getTCVClients(clients)
+  const totalMRR         = getTotalMRR(clients)
+  const totalTCV         = getTotalTCVInExecution(clients)
+  const mrrAtRisk        = getMRRAtRisk(clients)
+  const newTCVClients    = getNewTCVClients(clients, 30)
+  const billing          = getMonthlyBillingForecast(clients)
   const totalWithScore   = clients.filter((c) => c.healthScore).length
-  const unreadAlerts     = mockAlerts.filter((a) => !a.isRead).length
-  const npsDist          = getNpsDistribution()
-  const payments         = getPaymentStatusSummary()
+  const unreadAlerts     = 0
+  const npsDist          = getNpsDistribution(clients)
+  const payments         = getPaymentStatusSummary(clients)
 
   // Radar da Operação
   const highRiskClients   = clients.filter((c) => c.healthScore?.churnRisk === 'high')
-  const renewingSoon      = getClientsRenewingSoon(30)
-  const tcvExpiring       = getTCVExpiringSoon(15)
-  const integrationErrors = getClientsWithIntegrationErrors()
-  const pendingForms      = getClientsWithPendingForms()
-  const withoutNPS        = getClientsWithoutRecentNPS()
+  const renewingSoon      = getClientsRenewingSoon(clients, 30)
+  const tcvExpiring       = getTCVExpiringSoon(clients, 15)
+  const integrationErrors = getClientsWithIntegrationErrors(clients)
+  const pendingForms      = getClientsWithPendingForms(clients)
+  const withoutNPS        = getClientsWithoutRecentNPS(clients)
+
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-center space-y-3">
+        <Loader2 className="w-8 h-8 text-emerald-500 animate-spin mx-auto" />
+        <p className="text-zinc-500 text-sm">Carregando dashboard...</p>
+      </div>
+    </div>
+  )
+
+  if (error) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-center space-y-3">
+        <AlertCircle className="w-8 h-8 text-red-400 mx-auto" />
+        <p className="text-zinc-300 font-medium">Erro ao carregar dados</p>
+        <p className="text-zinc-500 text-sm">{error}</p>
+      </div>
+    </div>
+  )
 
   const radarItems = [
     highRiskClients.length > 0 && {
@@ -114,14 +136,14 @@ export default function DashboardPage() {
     renewingSoon.length > 0 && {
       priority: 2, color: 'yellow', icon: Calendar,
       label: `${renewingSoon.length} renovação${renewingSoon.length > 1 ? 'ões' : ''} nos próximos 30 dias`,
-      sub: renewingSoon.map((c) => `${c.name} (${getDaysToRenew(c.contractEndDate)}d)`).join(' · '),
-      value: formatCurrency(renewingSoon.reduce((s, c) => s + c.contractValue, 0)) + '/mês',
+      sub: renewingSoon.map((c) => `${c.name} (${getDaysToRenew(c.contractEndDate ?? "")}d)`).join(' · '),
+      value: formatCurrency(renewingSoon.reduce((s, c) => s + (c.contractValue ?? 0), 0)) + '/mês',
       href: '/clientes',
     },
     tcvExpiring.length > 0 && {
       priority: 2, color: 'blue', icon: Layers,
       label: `${tcvExpiring.length} projeto${tcvExpiring.length > 1 ? 's' : ''} TCV encerrando em 15 dias`,
-      sub: tcvExpiring.map((c) => `${c.name} (${getDaysToRenew(c.contractEndDate)}d)`).join(' · '),
+      sub: tcvExpiring.map((c) => `${c.name} (${getDaysToRenew(c.contractEndDate ?? "")}d)`).join(' · '),
       value: 'Momento de propor renovação ou upgrade',
       href: '/clientes',
     },
@@ -249,16 +271,16 @@ export default function DashboardPage() {
 
               <div className="pl-5">
                 <p className="text-zinc-500 text-xs capitalize">
-                  Faturamento previsto — {billing.currentMonthLabel}
+                  Faturamento previsto — {new Date().toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
                 </p>
                 <div className="flex items-baseline gap-3 mt-0.5">
                   <p className="text-emerald-400 text-xl font-bold leading-tight">
                     {formatCurrency(billing.total)}
                   </p>
                   <div className="flex items-center gap-3 text-xs text-zinc-500">
-                    <span>MRR <span className="text-zinc-300 font-semibold">{formatCurrency(billing.mrrForecast)}</span></span>
-                    {billing.tcvForecast > 0 && (
-                      <span>+ TCV <span className="text-blue-400 font-semibold">{formatCurrency(billing.tcvForecast)}</span></span>
+                    <span>MRR <span className="text-zinc-300 font-semibold">{formatCurrency(billing.total)}</span></span>
+                    {false && (
+                      <span>+ TCV <span className="text-blue-400 font-semibold">{formatCurrency(0)}</span></span>
                     )}
                   </div>
                 </div>
@@ -609,7 +631,7 @@ export default function DashboardPage() {
 
           <div className="space-y-2">
             {clients.map((client) => {
-              const daysToRenew   = getDaysToRenew(client.contractEndDate)
+              const daysToRenew   = getDaysToRenew(client.contractEndDate ?? "")
               const isObservacao  = !client.healthScore
               const score         = client.healthScore?.scoreTotal
               const risk: ChurnRisk = client.healthScore?.churnRisk ?? 'observacao'
@@ -667,7 +689,7 @@ export default function DashboardPage() {
                           <div className="flex items-center gap-2 text-zinc-500 text-xs flex-wrap">
                             <span>{client.segment}</span>
                             <span>·</span>
-                            <span>{getTimeAsClient(client.contractStartDate)}</span>
+                            <span>{getTimeAsClient(client.contractStartDate ?? client.createdAt)}</span>
                             {client.clientType === 'tcv' && (
                               <>
                                 <span>·</span>
@@ -691,7 +713,7 @@ export default function DashboardPage() {
                         <div className="flex flex-col items-end gap-2 shrink-0">
                           {client.clientType === 'mrr' ? (
                             <p className="text-zinc-300 text-sm font-semibold">
-                              {formatCurrency(client.contractValue)}
+                              {formatCurrency(client.contractValue ?? 0)}
                               <span className="text-zinc-500 font-normal text-xs">/mês</span>
                             </p>
                           ) : (

@@ -6,7 +6,7 @@ import {
   MessageCircle, CreditCard, Building2, BarChart2,
   ChevronRight, Clock, Plus, Search, Filter,
   Users, Sparkles, RefreshCw, TrendingUp, AlertTriangle, Timer,
-  CheckCircle2, AlertCircle, XCircle, X, Send, UserMinus,
+  CheckCircle2, AlertCircle, XCircle, X, Send, UserMinus, Loader2,
 } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
@@ -17,7 +17,8 @@ import { RiskBadge } from '@/components/dashboard/risk-badge'
 import { ScoreGauge } from '@/components/dashboard/score-gauge'
 import { NpsSendModal } from '@/components/dashboard/nps-send-modal'
 import { ChurnModal } from '@/components/dashboard/churn-modal'
-import { getClientsSortedByRisk, getClientSummary } from '@/lib/mock-data'
+import { useClients } from '@/hooks/use-clients'
+import { sortClientsByRisk } from '@/lib/client-stats'
 import { getNpsClassification, isInObservation } from '@/lib/nps-utils'
 import { CHURN_CATEGORIES } from '@/components/dashboard/churn-modal'
 import { Integration, ChurnRisk, ClientType, PaymentStatus, ChurnRecord } from '@/types'
@@ -145,8 +146,8 @@ function FilterPill({ active, onClick, children, color }: {
 
 // ── Página ────────────────────────────────────────────────────────
 export default function ClientesPage() {
-  const allClients = getClientsSortedByRisk()
-  const summary = getClientSummary()
+  const { clients: rawClients, loading } = useClients()
+  const allClients = sortClientsByRisk(rawClients)
 
   const [search, setSearch] = useState('')
   const [riskFilter, setRiskFilter] = useState<RiskFilter>('all')
@@ -181,7 +182,7 @@ export default function ClientesPage() {
         if (
           !(c.nomeResumido ?? c.name).toLowerCase().includes(q) &&
           !c.razaoSocial?.toLowerCase().includes(q) &&
-          !c.segment.toLowerCase().includes(q) &&
+          !c.segment?.toLowerCase().includes(q) &&
           !c.nomeDecisor?.toLowerCase().includes(q)
         ) return false
       }
@@ -190,10 +191,40 @@ export default function ClientesPage() {
   }, [allClients, riskFilter, typeFilter, paymentFilter, statusFilter, search, inactiveMap])
 
   const inactiveCount = allClients.filter(c => !!inactiveMap[c.id]).length
+  const activeClients = allClients.filter(c => !inactiveMap[c.id])
+
+  const now = new Date()
+  const summary = {
+    ativos:        activeClients.length,
+    novos:         activeClients.filter(c => {
+                     const d = Math.floor((now.getTime() - new Date(c.createdAt).getTime()) / 86400000)
+                     return d <= 30
+                   }).length,
+    mrr:           activeClients.filter(c => c.clientType === 'mrr').length,
+    tcv:           activeClients.filter(c => c.clientType === 'tcv').length,
+    renovacao:     activeClients.filter(c => {
+                     if (!c.contractEndDate) return false
+                     const d = Math.ceil((new Date(c.contractEndDate).getTime() - now.getTime()) / 86400000)
+                     return d >= 0 && d <= 45
+                   }).length,
+    tcvEncerrando: activeClients.filter(c => {
+                     if (c.clientType !== 'tcv' || !c.contractEndDate) return false
+                     const d = Math.ceil((new Date(c.contractEndDate).getTime() - now.getTime()) / 86400000)
+                     return d >= 0 && d <= 30
+                   }).length,
+    emRisco:       activeClients.filter(c => c.healthScore?.churnRisk === 'high').length,
+    observacoes:   activeClients.filter(c => !c.healthScore).length,
+  }
 
   function clearFilters() {
     setSearch(''); setRiskFilter('all'); setTypeFilter('all'); setPaymentFilter('all'); setStatusFilter('active')
   }
+
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <Loader2 className="w-7 h-7 text-emerald-500 animate-spin" />
+    </div>
+  )
 
   return (
     <div className="min-h-screen">
@@ -360,7 +391,7 @@ export default function ClientesPage() {
         ) : (
           <div className="space-y-3">
             {filtered.map((client) => {
-              const daysToEnd = getDaysToEnd(client.contractEndDate)
+              const daysToEnd = getDaysToEnd(client.contractEndDate ?? "")
               const risk = client.healthScore?.churnRisk ?? 'observacao'
               const score = client.healthScore?.scoreTotal
               const isObservacao = !client.healthScore
@@ -460,7 +491,7 @@ export default function ClientesPage() {
                         <div className="text-right">
                           {client.clientType === 'mrr' ? (
                             <>
-                              <p className="text-zinc-200 text-sm font-bold">{formatCurrency(client.contractValue)}</p>
+                              <p className="text-zinc-200 text-sm font-bold">{formatCurrency(client.contractValue ?? 0)}</p>
                               <p className="text-zinc-500 text-xs">/mês</p>
                             </>
                           ) : (

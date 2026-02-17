@@ -205,13 +205,13 @@ function TabVisaoGeral({ client }: { client: NonNullable<ReturnType<typeof getCl
         <Card className="bg-zinc-900 border-zinc-800 md:col-span-2">
           <CardContent className="p-4 space-y-3">
             <p className="text-zinc-400 text-xs font-semibold uppercase tracking-wider">Sinais de alerta</p>
-            {hs.criticalFlags.length === 0 ? (
+            {(hs.criticalFlags ?? hs.flags ?? []).length === 0 ? (
               <div className="flex items-center gap-2 text-emerald-400 text-sm">
                 <Shield className="w-4 h-4" /> Nenhum sinal crítico detectado
               </div>
             ) : (
               <div className="space-y-2">
-                {hs.criticalFlags.map((flag, i) => (
+                {(hs.criticalFlags ?? hs.flags ?? []).map((flag, i) => (
                   <div key={i} className="flex items-start gap-2.5 bg-red-500/5 border border-red-500/15 rounded-lg px-3 py-2">
                     <AlertTriangle className="w-3.5 h-3.5 text-red-400 mt-0.5 shrink-0" />
                     <span className="text-zinc-300 text-sm">{flag}</span>
@@ -225,15 +225,15 @@ function TabVisaoGeral({ client }: { client: NonNullable<ReturnType<typeof getCl
               <div>
                 <p className="text-zinc-600 text-xs">Receita mensal</p>
                 <p className="text-zinc-200 text-sm font-semibold">
-                  {client.clientType === 'mrr' ? fmt(client.contractValue) + '/mês' : fmt(client.totalProjectValue ?? 0) + ' total'}
+                  {client.clientType === 'mrr' ? fmt(client.contractValue ?? 0) + '/mês' : fmt(client.totalProjectValue ?? 0) + ' total'}
                 </p>
               </div>
               <div>
                 <p className="text-zinc-600 text-xs">
                   {client.clientType === 'mrr' ? 'Renova em' : 'Entrega em'}
                 </p>
-                <p className={cn('text-sm font-semibold', daysTo(client.contractEndDate) <= 20 ? 'text-red-400' : 'text-zinc-200')}>
-                  {daysTo(client.contractEndDate)} dias
+                <p className={cn('text-sm font-semibold', daysTo(client.contractEndDate ?? "") <= 20 ? 'text-red-400' : 'text-zinc-200')}>
+                  {daysTo(client.contractEndDate ?? "")} dias
                 </p>
               </div>
             </div>
@@ -244,8 +244,10 @@ function TabVisaoGeral({ client }: { client: NonNullable<ReturnType<typeof getCl
       {/* 4 Pilares */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {PILLARS.map(({ key, label, icon: Icon, color, weight }) => {
-          const pillar = hs.pillars[key]
+          const pillar = hs.pillars?.[key]
           const c = colorMap[color]
+          const pillarScore = pillar?.score ?? 0
+          const pillarContrib = pillar?.contribution ?? 0
           return (
             <Card key={key} className={cn('border', c.border, 'bg-zinc-900')}>
               <CardContent className="p-4 space-y-3">
@@ -254,17 +256,17 @@ function TabVisaoGeral({ client }: { client: NonNullable<ReturnType<typeof getCl
                     <Icon className={cn('w-4 h-4', c.text)} />
                   </div>
                   <div className="flex items-center gap-1">
-                    <TrendIcon trend={pillar.trend} />
+                    <TrendIcon trend={pillar?.trend ?? 'stable'} />
                     <Badge variant="outline" className="text-zinc-500 border-zinc-700 text-xs">{weight}</Badge>
                   </div>
                 </div>
                 <div>
                   <p className="text-zinc-400 text-xs">{label}</p>
-                  <p className={cn('text-2xl font-bold', c.text)}>{pillar.score}</p>
-                  <p className="text-zinc-600 text-xs">contribuição: {pillar.contribution.toFixed(1)} pts</p>
+                  <p className={cn('text-2xl font-bold', c.text)}>{pillarScore}</p>
+                  <p className="text-zinc-600 text-xs">contribuição: {pillarContrib.toFixed(1)} pts</p>
                 </div>
                 <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                  <div className={cn('h-full rounded-full', c.bar)} style={{ width: `${pillar.score}%` }} />
+                  <div className={cn('h-full rounded-full', c.bar)} style={{ width: `${pillarScore}%` }} />
                 </div>
               </CardContent>
             </Card>
@@ -593,7 +595,7 @@ function ClientePerfilInner() {
     )
   }
 
-  const daysToEnd = daysTo(client.contractEndDate)
+  const daysToEnd = daysTo(client.contractEndDate ?? "")
   const risk = client.healthScore?.churnRisk ?? 'observacao'
 
   function handleInactivate(record: ChurnRecord) {
@@ -736,7 +738,7 @@ function ClientePerfilInner() {
                 </span>
                 <span>·</span>
                 <span className="text-zinc-400 font-medium">
-                  {client.clientType === 'mrr' ? fmt(client.contractValue) + '/mês' : fmt(client.totalProjectValue ?? 0) + ' total'}
+                  {client.clientType === 'mrr' ? fmt(client.contractValue ?? 0) + '/mês' : fmt(client.totalProjectValue ?? 0) + ' total'}
                 </span>
               </div>
             </div>
