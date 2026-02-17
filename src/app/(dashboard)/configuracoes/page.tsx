@@ -883,12 +883,17 @@ function AsaasIntegCard() {
 }
 
 function DomIntegCard() {
-  const [token, setToken]       = useState('')
+  const [token, setToken]         = useState('')
   const [publicKey, setPublicKey] = useState('')
   const [showToken, setShowToken] = useState(false)
-  const [saving, setSaving]     = useState(false)
-  const [status, setStatus]     = useState<'idle' | 'active' | 'error'>('idle')
-  const [msg, setMsg]           = useState('')
+  const [saving, setSaving]       = useState(false)
+  const [status, setStatus]       = useState<'idle' | 'active' | 'error'>('idle')
+  const [msg, setMsg]             = useState('')
+  const [testing, setTesting]     = useState(false)
+  const [testResult, setTestResult] = useState<{
+    ok: boolean; message?: string; error?: string
+    transactions_found?: number; period?: string
+  } | null>(null)
 
   useEffect(() => {
     fetch('/api/agency/integrations')
@@ -902,7 +907,7 @@ function DomIntegCard() {
 
   async function handleSave() {
     if (!token.trim()) return
-    setSaving(true); setMsg('')
+    setSaving(true); setMsg(''); setTestResult(null)
     try {
       const res = await fetch('/api/agency/integrations', {
         method: 'POST',
@@ -922,15 +927,31 @@ function DomIntegCard() {
         setMsg(data.error ?? 'Erro ao salvar')
       } else {
         setStatus('active')
-        setMsg('Conectado com sucesso!')
+        setMsg('Salvo! Clique em "Testar conexão" para confirmar.')
         setToken(''); setPublicKey('')
-        setTimeout(() => setMsg(''), 3000)
       }
     } catch {
       setStatus('error')
       setMsg('Erro de conexão')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleTest() {
+    setTesting(true); setTestResult(null)
+    try {
+      const res = await fetch('/api/dom/test')
+      const data = await res.json()
+      setTestResult(data)
+      // Se funcionou, garante status verde
+      if (data.ok) setStatus('active')
+      else setStatus('error')
+    } catch {
+      setTestResult({ ok: false, error: 'Erro de rede ao testar.' })
+      setStatus('error')
+    } finally {
+      setTesting(false)
     }
   }
 
@@ -977,20 +998,65 @@ function DomIntegCard() {
           </p>
         </div>
 
+        {/* Feedback de salvar */}
         {msg && (
-          <p className={cn('text-xs px-3 py-2 rounded-lg border', status === 'active'
-            ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
-            : 'text-red-400 bg-red-500/10 border-red-500/20')}>
+          <p className={cn('text-xs px-3 py-2 rounded-lg border',
+            status === 'active'
+              ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+              : 'text-red-400 bg-red-500/10 border-red-500/20')}>
             {msg}
           </p>
         )}
 
-        <Button onClick={handleSave} disabled={!token.trim() || saving} size="sm"
-          className="bg-violet-600 hover:bg-violet-500 text-white gap-2">
-          {saving
-            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Salvando...</>
-            : <><Check className="w-3.5 h-3.5" /> {status === 'active' ? 'Atualizar credenciais' : 'Conectar Dom Pagamentos'}</>}
-        </Button>
+        {/* Resultado do teste */}
+        {testResult && (
+          <div className={cn('p-3 rounded-xl border text-xs space-y-1',
+            testResult.ok
+              ? 'bg-emerald-500/8 border-emerald-500/25'
+              : 'bg-red-500/8 border-red-500/25')}>
+            <div className="flex items-center gap-2">
+              {testResult.ok
+                ? <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                : <X     className="w-3.5 h-3.5 text-red-400 shrink-0" />}
+              <span className={testResult.ok ? 'text-emerald-400 font-semibold' : 'text-red-400 font-semibold'}>
+                {testResult.ok ? 'Conexão OK — Dom Pagamentos funcionando!' : 'Falha na conexão'}
+              </span>
+            </div>
+            {testResult.ok && testResult.transactions_found !== undefined && (
+              <p className="text-zinc-400 pl-5">
+                {testResult.transactions_found > 0
+                  ? `${testResult.transactions_found} transação(ões) encontrada(s) nos últimos 30 dias`
+                  : 'Nenhuma transação nos últimos 30 dias — mas a conexão está ativa'}
+                {testResult.period && (
+                  <span className="text-zinc-600"> · {testResult.period}</span>
+                )}
+              </p>
+            )}
+            {!testResult.ok && testResult.error && (
+              <p className="text-red-300/80 pl-5">{testResult.error}</p>
+            )}
+          </div>
+        )}
+
+        {/* Botões */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button onClick={handleSave} disabled={!token.trim() || saving} size="sm"
+            className="bg-violet-600 hover:bg-violet-500 text-white gap-2">
+            {saving
+              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Salvando...</>
+              : <><Check className="w-3.5 h-3.5" /> {status === 'active' ? 'Atualizar' : 'Conectar Dom Pagamentos'}</>}
+          </Button>
+
+          {/* Testar — só aparece quando tem credenciais salvas */}
+          {status === 'active' && (
+            <Button variant="outline" size="sm" onClick={handleTest} disabled={testing}
+              className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 gap-2">
+              {testing
+                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Testando...</>
+                : 'Testar conexão'}
+            </Button>
+          )}
+        </div>
       </div>
     </IntegCard>
   )
