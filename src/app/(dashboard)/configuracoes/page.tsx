@@ -882,6 +882,149 @@ function AsaasIntegCard() {
   )
 }
 
+function DomIntegCard() {
+  const [token, setToken]           = useState('')
+  const [publicKey, setPublicKey]   = useState('')
+  const [webhookCode, setWebhookCode] = useState('')
+  const [showToken, setShowToken]   = useState(false)
+  const [saving, setSaving]         = useState(false)
+  const [status, setStatus]         = useState<'idle' | 'active' | 'error'>('idle')
+  const [msg, setMsg]               = useState('')
+
+  const WEBHOOK_URL = `${typeof window !== 'undefined' ? window.location.origin : 'https://zero-churn.vercel.app'}/api/webhooks/dom`
+
+  useEffect(() => {
+    fetch('/api/agency/integrations')
+      .then(r => r.json())
+      .then(d => {
+        const dom = (d.integrations ?? []).find((i: { type: string; status: string }) => i.type === 'dom_pagamentos')
+        if (dom) setStatus(dom.status === 'active' ? 'active' : 'error')
+      })
+      .catch(() => {})
+  }, [])
+
+  async function handleSave() {
+    if (!token.trim()) return
+    setSaving(true); setMsg('')
+    try {
+      const res = await fetch('/api/agency/integrations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'dom_pagamentos',
+          credentials: {
+            token:        token.trim(),
+            public_key:   publicKey.trim() || undefined,
+            webhook_code: webhookCode.trim() || undefined,
+            environment:  'production',
+          },
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setStatus('error')
+        setMsg(data.error ?? 'Erro ao salvar')
+      } else {
+        setStatus('active')
+        setMsg('Conectado com sucesso!')
+        setToken(''); setPublicKey(''); setWebhookCode('')
+        setTimeout(() => setMsg(''), 3000)
+      }
+    } catch {
+      setStatus('error')
+      setMsg('Erro de conexão')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <IntegCard icon={CreditCard} name="Dom Pagamentos" color="bg-violet-500/15 text-violet-400"
+      description="Gateway de cobranças — transações, assinaturas e eventos em tempo real"
+      status={status === 'active' ? 'connected' : status === 'error' ? 'error' : 'disconnected'}>
+      <div className="space-y-4 pt-1">
+
+        {/* Token Bearer */}
+        <div className="space-y-1.5">
+          <Label className="text-zinc-400 text-xs">Token de autenticação</Label>
+          <p className="text-zinc-600 text-xs">Solicite ao suporte da Dom Pagamentos. Usado como Bearer token na API.</p>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Input
+                type={showToken ? 'text' : 'password'}
+                value={token}
+                onChange={e => setToken(e.target.value)}
+                placeholder={status === 'active' ? '••••••••••• (já configurado)' : 'Token fornecido pelo suporte Dom'}
+                className={cn(inputCls, 'text-sm pr-10')}
+              />
+              <button type="button" onClick={() => setShowToken(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300">
+                {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Chave pública */}
+        <div className="space-y-1.5">
+          <Label className="text-zinc-400 text-xs">Chave pública <span className="text-zinc-600">(opcional)</span></Label>
+          <Input
+            value={publicKey}
+            onChange={e => setPublicKey(e.target.value)}
+            placeholder="pk_xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+            className={cn(inputCls, 'text-sm font-mono text-xs')}
+          />
+        </div>
+
+        {/* Webhook */}
+        <div className="space-y-2 p-3 rounded-xl bg-zinc-800/50 border border-zinc-700/50">
+          <div className="flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-violet-400" />
+            <p className="text-zinc-300 text-xs font-semibold">Configuração do Webhook</p>
+          </div>
+          <p className="text-zinc-500 text-xs">
+            No painel da Dom Pagamentos, cadastre esta URL como webhook e escolha os eventos desejados
+            (recomendado: CHARGE-APPROVED, CHARGE-CHARGEBACK, SIGNATURE-INVOICE-PAID, SIGNATURE-INVOICE-FAILED).
+          </p>
+          <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2">
+            <code className="text-violet-300 text-xs flex-1 break-all">{WEBHOOK_URL}</code>
+            <button
+              onClick={() => navigator.clipboard.writeText(WEBHOOK_URL)}
+              className="text-zinc-500 hover:text-zinc-300 shrink-0 text-xs">
+              Copiar
+            </button>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-zinc-400 text-xs">Código do Webhook <span className="text-zinc-600">(opcional — para verificação)</span></Label>
+            <Input
+              value={webhookCode}
+              onChange={e => setWebhookCode(e.target.value)}
+              placeholder="Código gerado no painel Dom"
+              className={cn(inputCls, 'text-sm')}
+            />
+            <p className="text-zinc-600 text-xs">Se informado, o Zero Churn valida que os eventos vêm da Dom Pagamentos.</p>
+          </div>
+        </div>
+
+        {msg && (
+          <p className={cn('text-xs px-3 py-2 rounded-lg', status === 'active'
+            ? 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20'
+            : 'text-red-400 bg-red-500/10 border border-red-500/20')}>
+            {msg}
+          </p>
+        )}
+
+        <Button onClick={handleSave} disabled={!token.trim() || saving} size="sm"
+          className="bg-violet-600 hover:bg-violet-500 text-white gap-2">
+          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+          {saving ? 'Salvando...' : status === 'active' ? 'Atualizar token' : 'Conectar Dom Pagamentos'}
+        </Button>
+      </div>
+    </IntegCard>
+  )
+}
+
 function IntegracoesSection() {
   return (
     <div className="space-y-4">
@@ -896,11 +1039,8 @@ function IntegracoesSection() {
         <p className="text-zinc-600 text-xs pt-1">Em breve — Sprint 2</p>
       </IntegCard>
 
-      {/* Dom Pagamentos — em breve */}
-      <IntegCard icon={CreditCard} name="Dom Pagamentos" color="bg-violet-500/15 text-violet-400"
-        description="Gateway alternativo de cobranças" status="coming">
-        <p className="text-zinc-600 text-xs pt-1">Em breve — Sprint 2</p>
-      </IntegCard>
+      {/* Dom Pagamentos — funcional */}
+      <DomIntegCard />
     </div>
   )
 }

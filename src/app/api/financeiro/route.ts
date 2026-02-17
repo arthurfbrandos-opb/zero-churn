@@ -1,19 +1,13 @@
 /**
  * GET /api/financeiro?mes=2026-02
  *
- * Agrega dados financeiros de TODOS os clientes da agência.
- * Fonte atual: Asaas. Dom Pagamentos será adicionado como segunda fonte.
- *
- * Estratégia:
- *  1. Pega a API key Asaas da agência (agency_integrations — criptografado, sem label)
- *  2. Pega todos os client_integrations tipo 'asaas' da agência (credentials é JSONB, não criptografado)
- *  3. Para cada cliente/customer_id, busca pagamentos no Asaas
- *  4. Detecta recebimentos sem identificação (customers não cadastrados)
+ * Agrega dados financeiros de TODOS os clientes — Asaas + Dom Pagamentos.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/supabase/encryption'
 import { AsaasPayment, AsaasListResponse } from '@/lib/asaas/client'
+import { fetchAllTransactions, DomCredentials, domAmountToReal } from '@/lib/dom/client'
 
 const BASE_URL = process.env.ASAAS_API_URL ?? 'https://api.asaas.com/v3'
 
@@ -274,6 +268,70 @@ export async function GET(request: NextRequest) {
       else if (STATUS_ATRASO.has(c.status))   g.emAtraso += c.valor
     }
 
+    // ── Dom Pagamentos ────────────────────────────────────────────
+    const { data: domInteg } = await supabase
+      .from('agency_integrations')
+      .select('encrypted_key, status')
+      .eq('type', 'dom_pagamentos')
+      .maybeSingle()
+
+    const fontes: string[] = ['Asaas']
+
+    if (domInteg?.encrypted_key && domInteg.status === 'active') {
+      try {
+        const domCreds = await decrypt<DomCredentials>(domInteg.encrypted_key)
+        const domTxs   = await fetchAllTransactions(domCreds, dataInicio, dataFim)
+        fontes.push('Dom Pagamentos')
+
+        const { data: clientesDom } = await supabase
+          .from('clients').select('id, name, nome_resumido, cnpj')
+
+        const cnpjMap = new Map(
+          (clientesDom ?? [])
+            .filter(c => c.cnpj)
+            .map(c => [c.cnpj!.replace(/\D/g, ''), c])
+        )
+
+        const domStatusMap: Record<string, string> = {
+          APPROVED: 'RECEIVED', PENDING: 'PENDING', OVERDUE: 'OVERDUE',
+          REFUND: 'REFUNDED', CHARGEBACK: 'CHARGEBACK_REQUESTED',
+          EXPIRE: 'REFUNDED', NOT_AUTHORIZED: 'PENDING', REJECTED_ANTIFRAUD: 'PENDING',
+        }
+
+        for (const tx of domTxs) {
+          const valor  = domAmountToReal(tx.amount)
+          const doc    = tx.customer?.document?.replace(/\D/g, '')
+          const cli    = doc ? cnpjMap.get(doc) : null
+          const status = domStatusMap[tx.status] ?? 'PENDING'
+
+          const cobranca = {
+            id:         `dom_${tx.id}`,
+            clientId:   cli?.id ?? '',
+            clientName: cli ? (cli.nome_resumido ?? cli.name) : (tx.customer?.name ?? '— Sem identificação —'),
+            valor,
+            vencimento: tx.due_date ?? tx.created_at?.slice(0, 10) ?? dataInicio,
+            pagamento:  tx.paid_at?.slice(0, 10) ?? null,
+            status, tipo: tx.payment_method, descricao: tx.description ?? null,
+            invoiceUrl: tx.invoice_url ?? tx.boleto_url ?? null,
+            fonte: 'dom', contaLabel: 'Dom Pagamentos',
+          }
+
+          const key = cli?.id ?? `__dom_${tx.id}`
+          if (!porCliente.has(key)) {
+            porCliente.set(key, {
+              clientId: cli?.id ?? '', clientName: cobranca.clientName,
+              recebido: 0, previsto: 0, emAtraso: 0, cobranças: [],
+            })
+          }
+          const g = porCliente.get(key)!
+          g.cobranças.push(cobranca)
+          if (STATUS_RECEBIDO.has(status))      { g.recebido += valor; resumo.recebido += valor }
+          else if (STATUS_PREVISTO.has(status)) { g.previsto += valor; resumo.previsto += valor }
+          else if (STATUS_ATRASO.has(status))   { g.emAtraso += valor; resumo.emAtraso += valor }
+        }
+      } catch { /* Dom com erro — não trava o Asaas */ }
+    }
+
     const cobrancasPorCliente = [...porCliente.values()].sort((a, b) => {
       if (a.emAtraso > 0 && b.emAtraso === 0) return -1
       if (b.emAtraso > 0 && a.emAtraso === 0) return  1
@@ -284,8 +342,8 @@ export async function GET(request: NextRequest) {
       resumo,
       cobrancasPorCliente,
       semIdentificacao,
-      periodo:          { inicio: dataInicio, fim: dataFim, mes },
-      fontes:           ['Asaas'],
+      periodo: { inicio: dataInicio, fim: dataFim, mes },
+      fontes,
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
