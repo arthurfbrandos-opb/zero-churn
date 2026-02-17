@@ -173,18 +173,50 @@ export async function GET(request: NextRequest) {
     }))
 
     // ── 5. Detecta recebimentos sem identificação ─────────────────
-    let semIdentificacao: CobrancaItem[] = []
+    // Agrupa por customer Asaas e busca detalhes do customer
+    type CustomerSemIdent = {
+      customerId:  string
+      customerName: string
+      cpfCnpj:     string | null
+      email:       string | null
+      totalValor:  number
+      pagamentos:  CobrancaItem[]
+    }
+
+    let semIdentificacao: CustomerSemIdent[] = []
     try {
       const allReceived = await asaasGet<AsaasListResponse<AsaasPayment>>(
         `/payments?paymentDate[ge]=${dataInicio}&paymentDate[le]=${dataFim}&status=RECEIVED,CONFIRMED,RECEIVED_IN_CASH&limit=100`,
         apiKey
       )
-      semIdentificacao = allReceived.data
-        .filter(p => !customerIdsConhecidos.has(p.customer))
-        .map(p => ({
+
+      // Filtra apenas os sem cadastro e agrupa por customer
+      const semIdentMap = new Map<string, { payments: AsaasPayment[] }>()
+      for (const p of allReceived.data) {
+        if (!customerIdsConhecidos.has(p.customer)) {
+          if (!semIdentMap.has(p.customer)) semIdentMap.set(p.customer, { payments: [] })
+          semIdentMap.get(p.customer)!.payments.push(p)
+        }
+      }
+
+      // Busca detalhes de cada customer em paralelo (máx 10 para não sobrecarregar)
+      const customerIds = [...semIdentMap.keys()].slice(0, 20)
+      const customerDetails = await Promise.all(
+        customerIds.map(async id => {
+          try {
+            return await asaasGet<{ id: string; name: string; cpfCnpj: string | null; email: string | null }>(
+              `/customers/${id}`, apiKey
+            )
+          } catch { return { id, name: 'Desconhecido', cpfCnpj: null, email: null } }
+        })
+      )
+
+      semIdentificacao = customerDetails.map(c => {
+        const group = semIdentMap.get(c.id)!
+        const pagamentos = group.payments.map(p => ({
           id:         p.id,
           clientId:   '',
-          clientName: '— Sem identificação —',
+          clientName: c.name,
           valor:      p.value,
           vencimento: p.dueDate,
           pagamento:  p.paymentDate ?? null,
@@ -195,6 +227,15 @@ export async function GET(request: NextRequest) {
           fonte:      'asaas',
           contaLabel: 'Asaas',
         }))
+        return {
+          customerId:   c.id,
+          customerName: c.name,
+          cpfCnpj:      c.cpfCnpj ?? null,
+          email:        c.email ?? null,
+          totalValor:   pagamentos.reduce((s, p) => s + p.valor, 0),
+          pagamentos,
+        }
+      })
     } catch { /* ignora */ }
 
     // ── 6. Resumo e agrupamento por cliente ───────────────────────
@@ -211,7 +252,7 @@ export async function GET(request: NextRequest) {
       },
       { recebido: 0, previsto: 0, emAtraso: 0, semIdentificacao: 0 }
     )
-    resumo.semIdentificacao = semIdentificacao.reduce((s, c) => s + c.valor, 0)
+    resumo.semIdentificacao = semIdentificacao.reduce((s, c) => s + c.totalValor, 0)
 
     type ClienteGroup = {
       clientId: string; clientName: string
@@ -242,7 +283,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       resumo,
       cobrancasPorCliente,
-      semIdentificacao: semIdentificacao.slice(0, 50),
+      semIdentificacao,
       periodo:          { inicio: dataInicio, fim: dataFim, mes },
       fontes:           ['Asaas'],
     })
