@@ -880,6 +880,10 @@ export default function EditarClientePage() {
       bairro:           client.bairro         ?? '',
       cidade:           client.cidade         ?? '',
       estado:           client.estado         ?? '',
+      // Produto / Serviço
+      serviceId:             client.serviceId             ?? '',
+      entregaveisIncluidos:  client.entregaveisIncluidos  ?? [],
+      bonusIncluidos:        client.bonusIncluidos         ?? [],
       // Contrato
       clientType:        client.clientType    ?? 'mrr',
       contractValue:     String(client.mrrValue ?? client.contractValue ?? ''),
@@ -1046,6 +1050,9 @@ export default function EditarClientePage() {
         bairro:            form.bairro || null,
         cidade:            form.cidade || null,
         estado:            form.estado || null,
+        service_id:            form.serviceId            || null,
+        entregaveis_incluidos: form.entregaveisIncluidos,
+        bonus_incluidos:       form.bonusIncluidos,
         client_type:       form.clientType,
         mrr_value:         form.clientType === 'mrr' ? parseMoney(form.contractValue) : null,
         tcv_value:         form.clientType === 'tcv' ? parseMoney(form.totalProjectValue) : null,

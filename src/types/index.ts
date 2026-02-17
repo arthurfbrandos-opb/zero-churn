@@ -126,6 +126,10 @@ export interface Client {
   mrrValue?: number
   contractStartDate?: string
   contractEndDate?: string
+  // Produto / Serviço contratado
+  serviceId?: string
+  entregaveisIncluidos?: string[]
+  bonusIncluidos?: string[]
 
   // TCV
   totalProjectValue?: number

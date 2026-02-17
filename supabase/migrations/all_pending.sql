@@ -41,3 +41,9 @@ alter table clients
 CREATE UNIQUE INDEX IF NOT EXISTS clients_agency_cnpj_unique
   ON clients (agency_id, cnpj)
   WHERE cnpj IS NOT NULL AND cnpj != '';
+
+-- Migration 007: produto/serviço contratado
+alter table clients
+  add column if not exists service_id           text,
+  add column if not exists entregaveis_incluidos jsonb default '[]'::jsonb,
+  add column if not exists bonus_incluidos       jsonb default '[]'::jsonb;

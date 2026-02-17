@@ -26,6 +26,7 @@ import { useClient } from '@/hooks/use-client'
 import { Loader2 } from 'lucide-react'
 import { AsaasLinkModal } from '@/components/integracoes/asaas-link-modal'
 import { cn } from '@/lib/utils'
+import { mockServices } from '@/lib/mock-data'
 
 // ── Helpers ───────────────────────────────────────────────────────
 function fmt(v: number) {
@@ -353,8 +354,11 @@ function TabVisaoGeral({ client }: { client: Client }) {
 // TAB 2 — CADASTRO
 // ─────────────────────────────────────────────────────────────────
 function TabCadastro({ client }: { client: Client }) {
-  const c = client as unknown as Record<string, unknown>  // acesso aos campos de endereço
-  const clientType = client.clientType ?? 'mrr'
+  const c = client as unknown as Record<string, unknown>
+  const clientType  = client.clientType ?? 'mrr'
+  const service     = mockServices.find(s => s.id === client.serviceId)
+  const entregaveis = service?.entregaveis.filter(e => (client.entregaveisIncluidos ?? []).includes(e.id)) ?? []
+  const bonus       = service?.bonus?.filter(b => (client.bonusIncluidos ?? []).includes(b.id)) ?? []
   const mrrVal = client.mrrValue ?? client.contractValue
   const tcvVal = client.tcvValue ?? client.totalProjectValue
 
@@ -415,11 +419,42 @@ function TabCadastro({ client }: { client: Client }) {
 
       <S title="Contrato">
         <F label="Tipo" value={clientType === 'mrr' ? 'MRR — Recorrente mensal' : 'TCV — Projeto com valor fixo'} />
+        {service && <F label="Produto / Serviço" value={service.name} />}
         <F label="Início do contrato" value={fmtDate(client.contractStartDate)} />
-        {clientType === 'mrr' && <F label="Mensalidade (MRR)"        value={fmtMoney(mrrVal)} />}
-        {clientType === 'tcv' && <F label="Valor total do projeto"    value={fmtMoney(tcvVal)} />}
+        {clientType === 'mrr' && <F label="Mensalidade (MRR)"     value={fmtMoney(mrrVal)} />}
+        {clientType === 'tcv' && <F label="Valor total do projeto" value={fmtMoney(tcvVal)} />}
         <F label="Cadastrado em" value={fmtDate(client.createdAt)} />
       </S>
+
+      {/* Entregáveis */}
+      {entregaveis.length > 0 && (
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-5 space-y-3">
+            <h3 className="text-zinc-200 font-semibold text-sm">Entregáveis do contrato</h3>
+            <ul className="space-y-1.5">
+              {entregaveis.map(e => (
+                <li key={e.id} className="flex items-start gap-2 text-sm text-zinc-300">
+                  <span className="text-emerald-400 mt-0.5">✓</span>
+                  <span>{e.name}</span>
+                </li>
+              ))}
+            </ul>
+            {bonus.length > 0 && (
+              <>
+                <h4 className="text-zinc-400 text-xs font-medium pt-2">Bônus incluídos</h4>
+                <ul className="space-y-1">
+                  {bonus.map(b => (
+                    <li key={b.id} className="flex items-start gap-2 text-sm text-zinc-400">
+                      <span className="text-yellow-400 mt-0.5">★</span>
+                      <span>{b.name}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {client.observations && (
         <Card className="bg-zinc-900 border-zinc-800">

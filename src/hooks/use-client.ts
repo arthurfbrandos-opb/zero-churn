@@ -77,6 +77,10 @@ function mapDbClient(row: Record<string, unknown>): Client {
     contractEndDate:   row.contract_end       ? String(row.contract_end)       : undefined,
     whatsappGroupId:   row.whatsapp_group_id  ? String(row.whatsapp_group_id)  : undefined,
     observations:      row.observations       ? String(row.observations)       : undefined,
+    // Produto / Serviço contratado
+    serviceId:              row.service_id              ? String(row.service_id)   : undefined,
+    entregaveisIncluidos:   Array.isArray(row.entregaveis_incluidos) ? (row.entregaveis_incluidos as string[]) : [],
+    bonusIncluidos:         Array.isArray(row.bonus_incluidos)       ? (row.bonus_incluidos as string[])       : [],
     // Endereço
     cep:               row.cep         ? String(row.cep)         : undefined,
     logradouro:        row.logradouro  ? String(row.logradouro)  : undefined,
