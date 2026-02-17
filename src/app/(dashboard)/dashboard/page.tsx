@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import {
   ChevronRight, Clock, TrendingDown, TrendingUp, Minus,
@@ -9,6 +10,7 @@ import {
   MessageSquare, ThumbsUp, ThumbsDown, Meh, Loader2,
   Users, Plus,
 } from 'lucide-react'
+import { AsaasImportModal } from '@/components/integracoes/asaas-import-modal'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -63,7 +65,8 @@ function getDaysToRenew(endDate: string): number {
 }
 
 export default function DashboardPage() {
-  const { clients: allClients, loading, error } = useClients()
+  const { clients: allClients, loading, error, refetch } = useClients()
+  const [showAsaasImport, setShowAsaasImport] = useState(false)
 
   // Filtra só ativos para a maioria dos cálculos
   const clients          = sortClientsByRisk(allClients.filter(c => c.status !== 'inactive'))
@@ -124,15 +127,29 @@ export default function DashboardPage() {
         <p className="text-zinc-400 text-base max-w-sm mb-8">
           Cadastre seu primeiro cliente e comece a monitorar a saúde da sua carteira.
         </p>
-        <Link href="/clientes/novo">
-          <Button className="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold px-6 py-2.5 text-base gap-2">
-            <Plus className="w-5 h-5" />
-            Cadastrar primeiro cliente
+        <div className="flex flex-col sm:flex-row gap-3">
+          <Button
+            onClick={() => setShowAsaasImport(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2.5 text-base gap-2">
+            <CreditCard className="w-5 h-5" />
+            Importar do Asaas
           </Button>
-        </Link>
+          <Link href="/clientes/novo">
+            <Button variant="outline" className="border-zinc-700 text-zinc-300 hover:text-white font-semibold px-6 py-2.5 text-base gap-2 w-full">
+              <Plus className="w-5 h-5" />
+              Cadastrar manualmente
+            </Button>
+          </Link>
+        </div>
         <p className="text-zinc-600 text-sm mt-4">
-          Leva menos de 2 minutos
+          Importe do Asaas ou cadastre manualmente
         </p>
+        {showAsaasImport && (
+          <AsaasImportModal
+            onSuccess={(count) => { setShowAsaasImport(false); if (count > 0) refetch() }}
+            onClose={() => setShowAsaasImport(false)}
+          />
+        )}
       </div>
     </div>
   )

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -21,17 +21,15 @@ import { mockServices } from '@/lib/mock-data'
 import { ServiceItem } from '@/types'
 import { cn } from '@/lib/utils'
 
-// ── Mock de clientes Asaas / Dom (MVP simulado) ──────────────────
-const MOCK_ASAAS_CLIENTS = [
-  { id: 'a1', razaoSocial: 'Clínica Estética Bella Forma Ltda.', nomeResumido: 'Bella Forma', cnpjCpf: '12.345.678/0001-90', email: 'ana@bellaforma.com.br', telefone: '(11) 99001-2345' },
-  { id: 'a2', razaoSocial: 'Pizzaria Don Giovanni Ltda.', nomeResumido: 'Don Giovanni', cnpjCpf: '22.111.333/0001-44', email: 'contato@dongiovanni.com.br', telefone: '(11) 98888-7766' },
-  { id: 'a3', razaoSocial: 'Advocacia Barros & Associados', nomeResumido: 'Barros Adv.', cnpjCpf: '09.876.543/0001-11', email: 'adm@barrosadv.com.br', telefone: '(11) 97777-5544' },
-]
-
-const MOCK_DOM_CLIENTS = [
-  { id: 'd1', razaoSocial: 'Consultório Dra. Carla Mendes', nomeResumido: 'Dra. Carla', cnpjCpf: '123.456.789-09', email: 'carla@dracarlamendes.com.br', telefone: '(11) 96666-3322' },
-  { id: 'd2', razaoSocial: 'Distribuidora Pinheiro ME', nomeResumido: 'Pinheiro Dist.', cnpjCpf: '33.444.555/0001-77', email: 'pinheiro@distribuidora.com.br', telefone: '(11) 95555-1100' },
-]
+// ── Tipos para import do Asaas ────────────────────────────────────
+interface AsaasCustomerBasic {
+  id: string
+  name: string
+  cpfCnpj: string | null
+  email: string | null
+  mobilePhone: string | null
+  phone: string | null
+}
 
 // ── Tipos internos do formulário ─────────────────────────────────
 interface Parcela { id: string; vencimento: string; valor: string }
@@ -194,29 +192,61 @@ type ImportSource = 'asaas' | 'dom'
 
 interface ImportModalProps {
   source: ImportSource
-  onSelect: (client: typeof MOCK_ASAAS_CLIENTS[0]) => void
+  onSelect: (client: AsaasCustomerBasic) => void
   onClose: () => void
 }
 
 function ImportModal({ source, onSelect, onClose }: ImportModalProps) {
-  const [search, setSearch] = useState('')
-  const clients = source === 'asaas' ? MOCK_ASAAS_CLIENTS : MOCK_DOM_CLIENTS
-  const filtered = clients.filter(c =>
-    c.razaoSocial.toLowerCase().includes(search.toLowerCase()) ||
-    c.nomeResumido.toLowerCase().includes(search.toLowerCase()) ||
-    c.cnpjCpf.includes(search)
-  )
+  const [search, setSearch]     = useState('')
+  const [loading, setLoading]   = useState(source === 'asaas')
+  const [customers, setCustomers] = useState<AsaasCustomerBasic[]>([])
+  const [error, setError]       = useState<string | null>(null)
+
+  // Busca customers reais do Asaas ao abrir
+  useEffect(() => {
+    if (source !== 'asaas') return
+    fetch('/api/asaas/customers')
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) throw new Error(d.error)
+        setCustomers(d.customers ?? [])
+      })
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false))
+  }, [source])
+
+  const filtered = customers.filter(c => {
+    if (!search.trim()) return true
+    const q = search.toLowerCase()
+    return (
+      c.name.toLowerCase().includes(q) ||
+      (c.cpfCnpj?.replace(/\D/g, '').includes(q.replace(/\D/g, '')) ?? false) ||
+      (c.email?.toLowerCase().includes(q) ?? false)
+    )
+  })
+
+  function fmtCnpj(v: string | null) {
+    if (!v) return ''
+    const d = v.replace(/\D/g, '')
+    if (d.length === 14) return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}`
+    return v
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-md shadow-2xl">
+      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[80vh]">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-zinc-800">
           <div className="flex items-center gap-2">
             <CreditCard className="w-4 h-4 text-blue-400" />
-            <p className="text-white font-semibold text-sm">
-              Importar do {source === 'asaas' ? 'Asaas' : 'Dom Pagamentos'}
-            </p>
+            <div>
+              <p className="text-white font-semibold text-sm">
+                Importar do {source === 'asaas' ? 'Asaas' : 'Dom Pagamentos'}
+              </p>
+              {!loading && !error && (
+                <p className="text-zinc-600 text-xs">{customers.length} clientes disponíveis</p>
+              )}
+            </div>
           </div>
           <button onClick={onClose} className="text-zinc-500 hover:text-white transition-colors">
             <X className="w-4 h-4" />
@@ -224,39 +254,53 @@ function ImportModal({ source, onSelect, onClose }: ImportModalProps) {
         </div>
 
         {/* Busca */}
-        <div className="p-4 border-b border-zinc-800">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-            <Input
-              autoFocus
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar por nome ou CNPJ..."
-              className={cn(inputCls, 'pl-9')}
-            />
+        {!loading && !error && (
+          <div className="p-4 border-b border-zinc-800">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+              <Input
+                autoFocus
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Buscar por nome ou CNPJ..."
+                className={cn(inputCls, 'pl-9')}
+              />
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Lista */}
-        <div className="max-h-72 overflow-y-auto p-3 space-y-2">
-          {filtered.length === 0 ? (
+        {/* Conteúdo */}
+        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 py-10 text-zinc-500">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span className="text-sm">Buscando clientes no Asaas...</span>
+            </div>
+          ) : error ? (
+            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-center">
+              <p className="text-red-400 text-sm">{error}</p>
+              <p className="text-zinc-600 text-xs mt-1">Configure o Asaas em Configurações → Integrações</p>
+            </div>
+          ) : filtered.length === 0 ? (
             <p className="text-zinc-500 text-sm text-center py-6">Nenhum cliente encontrado</p>
-          ) : filtered.map(c => (
-            <button
-              key={c.id}
-              onClick={() => { onSelect(c); onClose() }}
-              className="w-full text-left p-3 rounded-lg bg-zinc-800/50 hover:bg-zinc-700/60 border border-zinc-700/50 hover:border-zinc-600 transition-all"
-            >
-              <p className="text-zinc-200 text-sm font-medium">{c.nomeResumido}</p>
-              <p className="text-zinc-500 text-xs mt-0.5">{c.razaoSocial}</p>
-              <p className="text-zinc-600 text-xs">{c.cnpjCpf} · {c.email}</p>
-            </button>
-          ))}
+          ) : (
+            filtered.map(c => (
+              <button
+                key={c.id}
+                onClick={() => { onSelect(c); onClose() }}
+                className="w-full text-left p-3 rounded-lg bg-zinc-800/50 hover:bg-zinc-700/60 border border-zinc-700/50 hover:border-zinc-600 transition-all"
+              >
+                <p className="text-zinc-200 text-sm font-medium">{c.name}</p>
+                {c.cpfCnpj && <p className="text-zinc-500 text-xs mt-0.5">{fmtCnpj(c.cpfCnpj)}</p>}
+                {c.email && <p className="text-zinc-600 text-xs">{c.email}</p>}
+              </button>
+            ))
+          )}
         </div>
 
         <div className="p-4 border-t border-zinc-800">
           <p className="text-zinc-600 text-xs text-center">
-            Os dados do cliente serão pré-preenchidos. Revise antes de salvar.
+            Os dados serão pré-preenchidos no formulário. Revise antes de salvar.
           </p>
         </div>
       </div>
@@ -503,15 +547,19 @@ export default function NovoClientePage() {
     setForm(prev => ({ ...prev, [field]: value }))
   }, [])
 
-  // Importar cliente de Asaas/Dom
-  function handleImport(client: typeof MOCK_ASAAS_CLIENTS[0]) {
+  // Importar cliente de Asaas — pré-preenche o formulário
+  function handleImport(client: AsaasCustomerBasic) {
+    // Extrai primeiro nome curto (2 palavras) como nome resumido
+    const words = client.name.split(' ').filter(Boolean)
+    const nomeResumido = words.slice(0, 2).join(' ')
+
     setForm(prev => ({
       ...prev,
-      razaoSocial: client.razaoSocial,
-      nomeResumido: client.nomeResumido,
-      cnpjCpf: client.cnpjCpf,
-      email: client.email,
-      telefone: client.telefone,
+      razaoSocial:  client.name,
+      nomeResumido: nomeResumido,
+      cnpjCpf:      client.cpfCnpj  ?? '',
+      email:        client.email    ?? '',
+      telefone:     client.mobilePhone ?? client.phone ?? '',
     }))
   }
 
