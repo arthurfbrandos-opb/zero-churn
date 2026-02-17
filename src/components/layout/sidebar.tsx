@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Users, Bell, Settings,
-  Activity, Zap, Kanban, ChevronRight,
+  Activity, Zap, Kanban, ChevronRight, DollarSign,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -12,11 +12,12 @@ import { useAlertsCount } from '@/hooks/use-alerts-count'
 import { useAgency } from '@/hooks/use-agency'
 
 const mainNav = [
-  { href: '/dashboard',     label: 'Dashboard',    icon: LayoutDashboard },
-  { href: '/clientes',      label: 'Clientes',     icon: Users           },
-  { href: '/alertas',       label: 'Alertas',      icon: Bell            },
-  { href: '/operacional',   label: 'Operacional',  icon: Activity        },
-  { href: '/configuracoes', label: 'Configurações',icon: Settings        },
+  { href: '/dashboard',   label: 'Dashboard',    icon: LayoutDashboard },
+  { href: '/clientes',    label: 'Clientes',     icon: Users           },
+  { href: '/financeiro',  label: 'Financeiro',   icon: DollarSign      },
+  { href: '/alertas',     label: 'Alertas',      icon: Bell            },
+  { href: '/operacional', label: 'Operacional',  icon: Activity        },
+  { href: '/configuracoes', label: 'Configurações', icon: Settings     },
 ]
 
 export function Sidebar() {
@@ -24,7 +25,6 @@ export function Sidebar() {
   const unreadCount = useAlertsCount()
   const { agency, user } = useAgency()
 
-  // Iniciais do nome da agência para o avatar
   const initials = agency?.name
     ? agency.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
     : '?'

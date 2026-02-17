@@ -57,7 +57,8 @@ const TASKS: KanbanTask[] = [
   { id: 'S0-ED', sprint: 's0', status: 'done', type: 'paralelo',    title: 'Edição de cliente — /clientes/[id]/editar (reutiliza wizard de cadastro)', note: 'Botão já existe no perfil' },
   { id: 'S0-13', sprint: 's0', status: 'done', type: 'sequencial',  title: 'Estados vazios em todas as telas (sem clientes, sem alertas, sem formulários)' },
   { id: 'S0-15', sprint: 's0', status: 'done', type: 'sequencial',  title: 'Revisão geral — consistência visual + responsividade mobile' },
-  { id: 'S0-16', sprint: 's0', status: 'in_progress', type: 'sequencial', title: 'Deploy na Vercel + validação do link compartilhável', note: 'DoD do Sprint 0' },
+  { id: 'S0-16', sprint: 's0', status: 'done', type: 'sequencial', title: 'Deploy na Vercel + validação do link compartilhável', note: 'zero-churn.vercel.app no ar ✓' },
+  { id: 'S0-FIN', sprint: 's0', status: 'done', type: 'paralelo', title: 'Tela Financeiro — Contas a Receber com visão consolidada da carteira', note: 'Recebido, Previsto, Em atraso, Sem identificação', extra: true },
 
   // ── SPRINT 1 — FUNDAÇÃO TÉCNICA ───────────────────────────────
   { id: 'S1-01', sprint: 's1', status: 'done', type: 'bloqueante',  title: 'Schema Supabase completo com RLS (isolamento por agência)', note: '8 migrations aplicadas' },
@@ -79,8 +80,8 @@ const TASKS: KanbanTask[] = [
   // ── SPRINT 2 — INTEGRAÇÕES ────────────────────────────────────
   { id: 'S2-01', sprint: 's2', status: 'done', type: 'paralelo',    title: 'Asaas: autenticar + buscar cobranças, pagamentos, assinaturas', note: 'Import bulk/single, histórico financeiro, nova cobrança' },
   { id: 'S2-02', sprint: 's2', status: 'done', type: 'paralelo',    title: 'Asaas: validar credenciais ao salvar + criar/vincular customer' },
-  { id: 'S2-03', sprint: 's2', status: 'backlog', type: 'paralelo',  title: 'Dom Pagamentos: autenticar + buscar cobranças dos últimos 60 dias' },
-  { id: 'S2-04', sprint: 's2', status: 'backlog', type: 'paralelo',  title: 'Dom Pagamentos: validar credenciais ao salvar' },
+  { id: 'S2-03', sprint: 's2', status: 'in_progress', type: 'paralelo', title: 'Dom Pagamentos: autenticar + buscar cobranças (API client + credenciais no banco)' },
+  { id: 'S2-04', sprint: 's2', status: 'in_progress', type: 'paralelo', title: 'Dom Pagamentos: integrar na tela Financeiro ao lado do Asaas' },
   { id: 'S2-05', sprint: 's2', status: 'backlog', type: 'risco',     title: 'Evolution API: autenticar + buscar mensagens do grupo (60 dias)', note: 'Formato de retorno pode variar — mapear antes do sprint' },
   { id: 'S2-06', sprint: 's2', status: 'backlog', type: 'paralelo',  title: 'Evolution API: validar group_id ao salvar + confirmar acesso' },
   { id: 'S2-07', sprint: 's2', status: 'done', type: 'sequencial',   title: 'Tratamento de erros — integração falha não trava análise inteira', note: 'Asaas com fallback e mensagens amigáveis' },

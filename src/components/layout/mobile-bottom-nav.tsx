@@ -3,17 +3,17 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  LayoutDashboard, Users, Bell, Activity, Settings,
+  LayoutDashboard, Users, Bell, Activity, DollarSign,
 } from 'lucide-react'
 import { useAlertsCount } from '@/hooks/use-alerts-count'
 import { cn } from '@/lib/utils'
 
 const NAV = [
-  { href: '/dashboard',     label: 'Início',       icon: LayoutDashboard },
-  { href: '/clientes',      label: 'Clientes',     icon: Users           },
-  { href: '/alertas',       label: 'Alertas',      icon: Bell            },
-  { href: '/operacional',   label: 'Operacional',  icon: Activity        },
-  { href: '/configuracoes', label: 'Config',       icon: Settings        },
+  { href: '/dashboard',   label: 'Início',      icon: LayoutDashboard },
+  { href: '/clientes',    label: 'Clientes',    icon: Users           },
+  { href: '/financeiro',  label: 'Financeiro',  icon: DollarSign      },
+  { href: '/alertas',     label: 'Alertas',     icon: Bell            },
+  { href: '/operacional', label: 'Operacional', icon: Activity        },
 ]
 
 export function MobileBottomNav() {
@@ -27,7 +27,7 @@ export function MobileBottomNav() {
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-zinc-950 border-t border-zinc-800 safe-area-inset-bottom">
       <div className="flex items-stretch h-16">
         {NAV.map(({ href, label, icon: Icon }) => {
-          const active = isActive(href)
+          const active   = isActive(href)
           const isAlertas = href === '/alertas'
 
           return (
@@ -37,11 +37,9 @@ export function MobileBottomNav() {
                 active ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'
               )}
             >
-              {/* Indicador ativo */}
               {active && (
                 <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-emerald-500 rounded-full" />
               )}
-
               <div className="relative">
                 <Icon className={cn('w-5 h-5', active ? 'text-emerald-400' : '')} />
                 {isAlertas && unread > 0 && (
@@ -50,7 +48,6 @@ export function MobileBottomNav() {
                   </span>
                 )}
               </div>
-
               <span className={cn('text-[10px] font-medium leading-none',
                 active ? 'text-emerald-400' : '')}>
                 {label}
