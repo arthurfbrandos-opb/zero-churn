@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/supabase/encryption'
-import { getCustomerFinancialSummary } from '@/lib/asaas/client'
+import { getCustomerFinancialSummary, getCustomer } from '@/lib/asaas/client'
 
 type Params = { params: Promise<{ clientId: string }> }
 
@@ -137,8 +137,45 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       return NextResponse.json({ error: 'Integração não encontrada' }, { status: 404 })
     }
 
+    const customerId = int.credentials.customer_id
+
+    // Verifica se o customer ainda existe no Asaas
+    try {
+      await getCustomer(apiKey, customerId)
+    } catch (notFoundErr) {
+      const msg = notFoundErr instanceof Error ? notFoundErr.message : ''
+      if (msg.includes('404') || msg.toLowerCase().includes('not found')) {
+        // Customer deletado no Asaas → marca integração como erro + cria alerta
+        await supabase.from('client_integrations')
+          .update({ status: 'error', last_sync_at: new Date().toISOString() })
+          .eq('id', integrationId)
+
+        // Busca agency para criar alerta
+        const { data: agencyUser } = await supabase
+          .from('agency_users').select('agency_id').eq('user_id', user.id).single()
+
+        if (agencyUser) {
+          await supabase.from('alerts').insert({
+            agency_id: agencyUser.agency_id,
+            client_id: clientId,
+            type:      'integration_error',
+            severity:  'high',
+            message:   `Customer Asaas (${customerId}) não encontrado. O cliente pode ter sido excluído no Asaas. Verifique e desvincule ou re-vincule a conta.`,
+            is_read:   false,
+          })
+        }
+
+        return NextResponse.json({
+          success: false,
+          error:   'customer_not_found',
+          message: 'O customer não foi encontrado no Asaas. Pode ter sido excluído. A integração foi marcada com erro e um alerta foi criado.',
+        }, { status: 404 })
+      }
+      throw notFoundErr
+    }
+
     // Re-sincroniza status financeiro
-    const summary = await getCustomerFinancialSummary(apiKey, int.credentials.customer_id)
+    const summary = await getCustomerFinancialSummary(apiKey, customerId)
 
     await supabase.from('client_integrations')
       .update({ last_sync_at: new Date().toISOString(), status: 'connected' })

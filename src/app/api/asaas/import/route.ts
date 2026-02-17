@@ -115,6 +115,7 @@ export async function POST(req: NextRequest) {
       errors:       0,
       errorDetails: [] as string[],
       clientIds:    [] as string[],
+      skippedIds:   [] as string[], // IDs dos clientes que já existiam no ZC
     }
 
     for (let i = 0; i < incoming.length; i++) {
@@ -130,7 +131,7 @@ export async function POST(req: NextRequest) {
         if (cnpj) {
           const { data: existing } = await supabase
             .from('clients').select('id').eq('cnpj', cnpj).eq('agency_id', agencyId).maybeSingle()
-          if (existing) { results.skipped++; continue }
+          if (existing) { results.skipped++; results.skippedIds.push(existing.id); continue }
         }
 
         // Campos de contato
@@ -214,6 +215,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Cria alertas de "cadastro incompleto" para clientes importados ──
+    // Não-bloqueante: falha aqui não deve quebrar a resposta ao usuário
     if (results.clientIds.length > 0) {
       const alertRows = results.clientIds.map(clientId => ({
         agency_id: agencyId,
@@ -223,7 +225,8 @@ export async function POST(req: NextRequest) {
         message:   'Cliente importado do Asaas. Confirme e complete o cadastro: contrato, cobranças, WhatsApp e contexto.',
         is_read:   false,
       }))
-      await supabase.from('alerts').insert(alertRows).throwOnError()
+      const { error: alertErr } = await supabase.from('alerts').insert(alertRows)
+      if (alertErr) console.warn('[import] alert creation failed (non-blocking):', alertErr.message)
     }
 
     return NextResponse.json({
@@ -233,6 +236,7 @@ export async function POST(req: NextRequest) {
       errors:       results.errors,
       errorDetails: results.errorDetails,
       clientIds:    results.clientIds,
+      skippedIds:   results.skippedIds,
     })
 
   } catch (err) {

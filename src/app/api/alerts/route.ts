@@ -48,8 +48,14 @@ export async function PATCH(request: NextRequest) {
     const id = request.nextUrl.searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'id obrigatório' }, { status: 400 })
 
+    const { data: agencyUser } = await supabase
+      .from('agency_users').select('agency_id').eq('user_id', user.id).single()
+    if (!agencyUser) return NextResponse.json({ error: 'Agência não encontrada' }, { status: 404 })
+
+    // Atualiza apenas se o alerta pertence à agência do usuário (segurança)
     const { error: upErr } = await supabase
-      .from('alerts').update({ is_read: true }).eq('id', id)
+      .from('alerts').update({ is_read: true })
+      .eq('id', id).eq('agency_id', agencyUser.agency_id)
     if (upErr) throw upErr
 
     return NextResponse.json({ ok: true })

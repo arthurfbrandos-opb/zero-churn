@@ -134,12 +134,23 @@ export function AsaasImportModal({ mode = 'bulk', onSuccess, onClose }: Props) {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
 
-      const clientIds: string[] = data.clientIds ?? []
+      const clientIds: string[]  = data.clientIds  ?? []
+      const skippedIds: string[] = data.skippedIds ?? []
 
-      if (mode === 'single' && clientIds.length > 0) {
-        // Single: redireciona direto para o wizard de edição do cliente criado
-        onSuccess(data.created, clientIds)
-        router.push(`/clientes/${clientIds[0]}/editar`)
+      if (mode === 'single') {
+        if (clientIds.length > 0) {
+          // Novo cliente criado → wizard de edição
+          onSuccess(data.created, clientIds)
+          router.push(`/clientes/${clientIds[0]}/editar`)
+        } else if (skippedIds.length > 0) {
+          // Cliente já existia no ZC → abre o perfil
+          onSuccess(0, skippedIds)
+          router.push(`/clientes/${skippedIds[0]}/editar`)
+        } else {
+          // Erro sem cliente criado
+          setError('Não foi possível importar o cliente. Verifique e tente novamente.')
+          setImporting(false)
+        }
         return
       }
 

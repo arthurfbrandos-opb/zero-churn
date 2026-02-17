@@ -300,6 +300,10 @@ export interface UpdatePaymentInput {
   description?: string
 }
 
+export async function deleteCustomer(apiKey: string, customerId: string): Promise<{ deleted: boolean }> {
+  return asaasRequest<{ deleted: boolean }>(`/customers/${customerId}`, apiKey, { method: 'DELETE' })
+}
+
 export async function updatePayment(apiKey: string, paymentId: string, data: UpdatePaymentInput): Promise<AsaasCreatedPayment> {
   return asaasRequest<AsaasCreatedPayment>(`/payments/${paymentId}`, apiKey, {
     method: 'PUT',

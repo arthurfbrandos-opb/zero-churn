@@ -192,6 +192,7 @@ export interface Integration {
   status: IntegrationStatus
   lastSyncAt?: string
   metadata?: Record<string, string>  // groupId, customerId, accountId, etc.
+  credentials?: Record<string, unknown> // customer_id, customer_name, etc.
 }
 
 export interface FormSubmission {

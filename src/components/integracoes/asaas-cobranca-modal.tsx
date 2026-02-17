@@ -47,7 +47,7 @@ function parseMoney(str: string): number {
 
 function formatMoney(str: string): string {
   const n = parseMoney(str)
-  if (!n) return str
+  if (!n) return ''
   return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
@@ -155,8 +155,9 @@ export function AsaasCobrancaModal({
   }
 
   // Total
-  const total = installments.reduce((s, i) => s + parseMoney(i.value), 0)
-  const validCount = installments.filter(i => parseMoney(i.value) > 0 && i.dueDate).length
+  const total      = installments.reduce((s, i) => s + parseMoney(i.value), 0)
+  const pastCount  = installments.filter(i => i.dueDate && i.dueDate < today).length
+  const validCount = installments.filter(i => parseMoney(i.value) > 0 && i.dueDate && i.dueDate >= today).length
 
   // ── Submit ────────────────────────────────────────────────────
   const [loading, setLoad]   = useState(false)
@@ -472,6 +473,18 @@ export function AsaasCobrancaModal({
                           ))}
                         </div>
 
+                        {/* Aviso datas passadas */}
+                        {pastCount > 0 && (
+                          <div className="flex items-start gap-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-3 py-2">
+                            <AlertCircle className="w-3.5 h-3.5 text-yellow-400 shrink-0 mt-0.5" />
+                            <p className="text-yellow-300 text-xs leading-relaxed">
+                              {pastCount} lançamento{pastCount > 1 ? 's' : ''} com data no passado
+                              {pastCount > 1 ? ' serão ignorados' : ' será ignorado'} no envio.
+                              Corrija as datas ou remova as linhas.
+                            </p>
+                          </div>
+                        )}
+
                         {/* Adicionar linha + totais */}
                         <div className="flex items-center justify-between pt-1">
                           <button onClick={addInst}
@@ -480,9 +493,10 @@ export function AsaasCobrancaModal({
                           </button>
                           <div className="text-right">
                             <p className="text-zinc-500 text-xs">
-                              {installments.length} lançamento{installments.length !== 1 ? 's' : ''}
-                              {validCount < installments.length && (
-                                <span className="text-yellow-500 ml-1">· {installments.length - validCount} sem valor</span>
+                              {validCount} válido{validCount !== 1 ? 's' : ''}
+                              {pastCount > 0 && <span className="text-yellow-500 ml-1">· {pastCount} no passado</span>}
+                              {(installments.length - validCount - pastCount) > 0 && (
+                                <span className="text-red-500 ml-1">· {installments.length - validCount - pastCount} sem valor</span>
                               )}
                             </p>
                             {total > 0 && (

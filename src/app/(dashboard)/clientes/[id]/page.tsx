@@ -984,7 +984,7 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
     setLoadingAccounts(false)
   }
 
-  useState(() => { loadAccounts() })
+  useEffect(() => { loadAccounts() }, [])
 
   async function openSearch() {
     setShowSearch(true); setSearch(''); setLinkError(null)
@@ -1027,13 +1027,34 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
   }
 
   async function handleRemove(integId: string) {
+    const isLast = asaasAccounts.length === 1
+    if (isLast) {
+      const ok = window.confirm(
+        'Esta é a última conta Asaas vinculada. Ao desvincular, você perderá o acesso ao histórico financeiro deste cliente neste perfil. Deseja continuar?'
+      )
+      if (!ok) return
+    }
     setRemoving(integId)
-    await fetch(`/api/asaas/sync/${client.id}?integrationId=${integId}`, { method: 'DELETE' })
+    const res = await fetch(`/api/asaas/sync/${client.id}?integrationId=${integId}`, { method: 'DELETE' })
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      setLinkError(d.error ?? 'Erro ao desvincular')
+      setRemoving(null)
+      return
+    }
     loadAccounts(); refetch(); setRemoving(null)
   }
 
   async function handleSync(integId: string) {
-    await fetch(`/api/asaas/sync/${client.id}?integrationId=${integId}`, { method: 'PATCH' })
+    const res = await fetch(`/api/asaas/sync/${client.id}?integrationId=${integId}`, { method: 'PATCH' })
+    const d = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      setLinkError(
+        d.error === 'customer_not_found'
+          ? 'Customer não encontrado no Asaas. Pode ter sido excluído. Um alerta foi criado.'
+          : d.message ?? 'Erro ao sincronizar'
+      )
+    }
     loadAccounts()
   }
 
@@ -1399,23 +1420,39 @@ function ClientePerfilInner() {
   const [churnRecord, setChurnRecord]          = useState<ChurnRecord | undefined>(undefined)
   const [isInactive, setIsInactive]            = useState(false)
   const [showDeleteModal, setShowDeleteModal]  = useState(false)
+  const [deleteAsaas, setDeleteAsaas]          = useState(false)
   const [deleting, setDeleting]                = useState(false)
+  const [deleteError, setDeleteError]          = useState<string | null>(null)
 
   const { client, loading, error, refetch } = useClient(id)
 
   async function handleDelete() {
     setDeleting(true)
+    setDeleteError(null)
     try {
+      // 1. Se solicitado, tenta excluir cada customer Asaas vinculado
+      if (deleteAsaas && client?.integrations?.length) {
+        const asaasInteg = (client.integrations as Integration[]).filter(i => i.type === 'asaas')
+        await Promise.allSettled(
+          asaasInteg.map(async integ => {
+            const creds = integ.credentials as { customer_id?: string } | undefined
+            if (!creds?.customer_id) return
+            await fetch(`/api/asaas/customers?customerId=${creds.customer_id}`, { method: 'DELETE' })
+          })
+        )
+      }
+
+      // 2. Exclui o cliente no ZC
       const res = await fetch(`/api/clients/${id}`, { method: 'DELETE' })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
-        alert('Erro ao excluir: ' + (d.error ?? `HTTP ${res.status}`))
+        setDeleteError(d.error ?? `Erro HTTP ${res.status}`)
         setDeleting(false)
         return
       }
       router.push('/clientes')
     } catch (err) {
-      alert('Erro inesperado: ' + (err instanceof Error ? err.message : String(err)))
+      setDeleteError(err instanceof Error ? err.message : 'Erro inesperado')
       setDeleting(false)
     }
   }
@@ -1475,16 +1512,55 @@ function ClientePerfilInner() {
             </div>
             <p className="text-zinc-400 text-sm leading-relaxed">
               Esta ação é <span className="text-red-400 font-medium">irreversível</span>. Todo o histórico, health scores,
-              análises e integrações do cliente serão apagados permanentemente.
+              análises e integrações serão apagados permanentemente.
             </p>
+
+            {/* Opção Asaas — só mostra se tem integração vinculada */}
+            {client.integrations?.some(i => i.type === 'asaas') && (
+              <button
+                onClick={() => setDeleteAsaas(v => !v)}
+                className={cn(
+                  'w-full flex items-start gap-3 px-4 py-3 rounded-xl border text-left transition-all',
+                  deleteAsaas
+                    ? 'border-red-500/40 bg-red-500/8'
+                    : 'border-zinc-700 bg-zinc-800/40 hover:border-zinc-600'
+                )}
+              >
+                <div className={cn(
+                  'w-4 h-4 rounded border-2 mt-0.5 flex items-center justify-center shrink-0 transition-all',
+                  deleteAsaas ? 'border-red-500 bg-red-500' : 'border-zinc-600'
+                )}>
+                  {deleteAsaas && <Check className="w-2.5 h-2.5 text-white" />}
+                </div>
+                <div>
+                  <p className={cn('text-sm font-medium', deleteAsaas ? 'text-red-300' : 'text-zinc-300')}>
+                    Excluir também no Asaas
+                  </p>
+                  <p className="text-zinc-500 text-xs mt-0.5 leading-relaxed">
+                    Remove o customer da sua conta Asaas. Cobranças pagas não são afetadas.
+                  </p>
+                </div>
+              </button>
+            )}
+
+            {deleteError && (
+              <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                <p className="text-red-300 text-xs">{deleteError}</p>
+              </div>
+            )}
+
             <div className="flex items-center gap-3 pt-1">
               <Button variant="outline" size="sm" className="flex-1 border-zinc-700 text-zinc-400 hover:text-white"
-                onClick={() => setShowDeleteModal(false)} disabled={deleting}>
+                onClick={() => { setShowDeleteModal(false); setDeleteError(null); setDeleteAsaas(false) }}
+                disabled={deleting}>
                 Cancelar
               </Button>
               <Button size="sm" className="flex-1 bg-red-600 hover:bg-red-700 text-white gap-1.5"
                 onClick={handleDelete} disabled={deleting}>
-                {deleting ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Excluindo...</> : <><Trash2 className="w-3.5 h-3.5" /> Excluir</>}
+                {deleting
+                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Excluindo...</>
+                  : <><Trash2 className="w-3.5 h-3.5" /> Excluir</>}
               </Button>
             </div>
           </div>

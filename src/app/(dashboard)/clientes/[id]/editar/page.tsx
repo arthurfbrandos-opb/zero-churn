@@ -142,7 +142,7 @@ function parseMoney(v: string): number {
 
 function formatMoney(v: string): string {
   const n = parseMoney(v)
-  if (!n) return v
+  if (!n) return ''
   return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
@@ -151,7 +151,7 @@ function isValidDate(iso: string): boolean {
   const d = new Date(iso + 'T12:00:00')
   if (isNaN(d.getTime())) return false
   const y = d.getFullYear()
-  return y >= 2000 && y <= 2100
+  return y >= 1990 && y <= 2100
 }
 
 function maskCep(v: string) {

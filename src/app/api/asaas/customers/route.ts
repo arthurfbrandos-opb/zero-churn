@@ -3,9 +3,37 @@
  * Retorna todos os customers + quais estão ativos (pagamento nos últimos 90 dias)
  */
 import { NextResponse } from 'next/server'
+
+// DELETE /api/asaas/customers?customerId=xxx — exclui customer no Asaas
+export async function DELETE(request: NextRequest) {
+  try {
+    const customerId = request.nextUrl.searchParams.get('customerId')
+    if (!customerId) return NextResponse.json({ error: 'customerId obrigatório' }, { status: 400 })
+
+    const supabase = await createClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error || !user) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+
+    const { data: integ } = await supabase
+      .from('agency_integrations').select('encrypted_key, status').eq('type', 'asaas').single()
+    if (!integ?.encrypted_key || integ.status !== 'active')
+      return NextResponse.json({ error: 'Asaas não configurado' }, { status: 404 })
+
+    const { decrypt } = await import('@/lib/supabase/encryption')
+    const { api_key } = await decrypt<{ api_key: string }>(integ.encrypted_key)
+
+    const result = await deleteCustomer(api_key, customerId)
+    return NextResponse.json({ deleted: result.deleted ?? true })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[DELETE /api/asaas/customers]', msg)
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
+}
 import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/supabase/encryption'
-import { listCustomers, getActiveCustomerIds, createCustomer } from '@/lib/asaas/client'
+import { NextRequest } from 'next/server'
+import { listCustomers, getActiveCustomerIds, createCustomer, deleteCustomer } from '@/lib/asaas/client'
 
 // POST /api/asaas/customers — cria um novo customer no Asaas
 export async function POST(request: Request) {
