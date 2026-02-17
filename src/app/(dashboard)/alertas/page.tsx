@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import {
   Bell, BellOff, CheckCheck, Filter, ChevronRight,
@@ -23,13 +23,14 @@ type SeverityFilter = 'all' | 'high' | 'medium' | 'low'
 type ReadFilter     = 'all' | 'unread' | 'read'
 
 const ALERT_TYPE_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string }> = {
-  chargeback:       { label: 'Chargeback',         icon: CreditCard,   color: 'text-red-400 bg-red-500/10'     },
-  silence:          { label: 'Silêncio WhatsApp',  icon: MessageCircle,color: 'text-red-400 bg-red-500/10'     },
-  integration_error:{ label: 'Erro de Integração', icon: Plug,         color: 'text-orange-400 bg-orange-500/10'},
-  nps_drop:         { label: 'Queda de NPS',        icon: BarChart2,    color: 'text-yellow-400 bg-yellow-500/10'},
-  form_no_response: { label: 'Sem Resposta',        icon: ClipboardList,color: 'text-yellow-400 bg-yellow-500/10'},
-  score_drop:       { label: 'Queda de Score',      icon: AlertTriangle,color: 'text-orange-400 bg-orange-500/10'},
-  renewal_soon:     { label: 'Renovação Próxima',   icon: Zap,          color: 'text-blue-400 bg-blue-500/10'   },
+  chargeback:              { label: 'Chargeback',            icon: CreditCard,   color: 'text-red-400 bg-red-500/10'      },
+  silence:                 { label: 'Silêncio WhatsApp',     icon: MessageCircle,color: 'text-red-400 bg-red-500/10'      },
+  integration_error:       { label: 'Erro de Integração',    icon: Plug,         color: 'text-orange-400 bg-orange-500/10' },
+  nps_drop:                { label: 'Queda de NPS',          icon: BarChart2,    color: 'text-yellow-400 bg-yellow-500/10' },
+  form_no_response:        { label: 'Sem Resposta',          icon: ClipboardList,color: 'text-yellow-400 bg-yellow-500/10' },
+  score_drop:              { label: 'Queda de Score',        icon: AlertTriangle,color: 'text-orange-400 bg-orange-500/10' },
+  renewal_soon:            { label: 'Renovação Próxima',     icon: Zap,          color: 'text-blue-400 bg-blue-500/10'    },
+  registration_incomplete: { label: 'Cadastro Incompleto',   icon: ShieldCheck,  color: 'text-yellow-400 bg-yellow-500/10' },
 }
 
 const SEVERITY_CONFIG: Record<string, { label: string; dot: string; badge: string }> = {
@@ -53,7 +54,43 @@ function formatRelative(d: string) {
 
 export default function AlertasPage() {
   const [alerts, setAlerts] = useState<Alert[]>(mockAlerts)
+  const [loadingAlerts, setLoadingAlerts] = useState(true)
   const [severity, setSeverity] = useState<SeverityFilter>('all')
+
+  // Carrega alertas reais do banco + combina com mocks
+  useEffect(() => {
+    fetch('/api/alerts')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.alerts?.length) {
+          // Converte formato DB → formato Alert local
+          const dbAlerts: Alert[] = d.alerts.map((a: {
+            id: string; client_id: string | null; type: string; severity: string
+            message: string; is_read: boolean; created_at: string
+            clients?: { name: string; nome_resumido: string | null }
+          }) => ({
+            id:         a.id,
+            clientId:   a.client_id ?? '',
+            clientName: a.clients?.nome_resumido ?? a.clients?.name ?? 'Cliente',
+            type:       a.type,
+            severity:   a.severity as 'high' | 'medium' | 'low',
+            message:    a.message,
+            isRead:     a.is_read,
+            createdAt:  a.created_at,
+          }))
+          // DB alerts têm prioridade; mocks ficam como complemento de demo
+          setAlerts(prev => {
+            const dbIds = new Set(dbAlerts.map(a => a.id))
+            const filtered = prev.filter(a => !dbIds.has(a.id))
+            return [...dbAlerts, ...filtered]
+          })
+        }
+      })
+      .catch(() => {/* mocks permanecem */})
+      .finally(() => setLoadingAlerts(false))
+  }, [])
+
+  void loadingAlerts // evita lint warning
   const [readFilter, setReadFilter] = useState<ReadFilter>('all')
   const [search, setSearch] = useState('')
 

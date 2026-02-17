@@ -3,11 +3,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Search, Loader2, Check, CreditCard, X,
-  AlertTriangle, CheckSquare, Square, Download, Clock,
+  AlertTriangle, CheckSquare, Square, Download, Clock, UserPlus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { useRouter } from 'next/navigation'
 
 interface AsaasCustomer {
   id:               string
@@ -28,8 +29,11 @@ interface AsaasCustomer {
 }
 
 interface Props {
-  onSuccess: (count: number) => void
-  onClose: () => void
+  /** 'single' = seleciona 1 cliente → redireciona para wizard de edição
+   *  'bulk'   = multi-select → importa → cria alertas → aviso (default) */
+  mode?:     'single' | 'bulk'
+  onSuccess: (count: number, clientIds?: string[]) => void
+  onClose:   () => void
 }
 
 function fmtCnpj(v: string | null) {
@@ -40,7 +44,8 @@ function fmtCnpj(v: string | null) {
   return v
 }
 
-export function AsaasImportModal({ onSuccess, onClose }: Props) {
+export function AsaasImportModal({ mode = 'bulk', onSuccess, onClose }: Props) {
+  const router = useRouter()
   const [customers, setCustomers]     = useState<AsaasCustomer[]>([])
   const [activeIds, setActiveIds]     = useState<Set<string>>(new Set())
   const [totalAll, setTotalAll]       = useState(0)
@@ -90,6 +95,11 @@ export function AsaasImportModal({ onSuccess, onClose }: Props) {
   }, [customers, search, onlyActive, activeIds])
 
   function toggle(id: string) {
+    if (mode === 'single') {
+      // Single: substitui seleção (radio behavior) → importa imediatamente
+      setSelected(new Set([id]))
+      return
+    }
     setSelected(prev => {
       const next = new Set(prev)
       next.has(id) ? next.delete(id) : next.add(id)
@@ -115,7 +125,6 @@ export function AsaasImportModal({ onSuccess, onClose }: Props) {
     if (selected.size === 0) return
     setImporting(true)
     try {
-      // Manda os dados completos dos customers selecionados (evita re-fetch no servidor)
       const selectedCustomers = customers.filter(c => selected.has(c.id))
       const res = await fetch('/api/asaas/import', {
         method: 'POST',
@@ -124,6 +133,17 @@ export function AsaasImportModal({ onSuccess, onClose }: Props) {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
+
+      const clientIds: string[] = data.clientIds ?? []
+
+      if (mode === 'single' && clientIds.length > 0) {
+        // Single: redireciona direto para o wizard de edição do cliente criado
+        onSuccess(data.created, clientIds)
+        router.push(`/clientes/${clientIds[0]}/editar`)
+        return
+      }
+
+      // Bulk: mostra tela de sucesso com aviso de pendências
       setImportResult({
         created:      data.created ?? 0,
         skipped:      data.skipped ?? 0,
@@ -131,7 +151,7 @@ export function AsaasImportModal({ onSuccess, onClose }: Props) {
         errorDetails: data.errorDetails ?? [],
       })
       setDone(true)
-      setTimeout(() => onSuccess(data.created), 3000)
+      // Não redireciona automaticamente — deixa o usuário ver o aviso
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao importar')
       setImporting(false)
@@ -149,14 +169,18 @@ export function AsaasImportModal({ onSuccess, onClose }: Props) {
         <div className="flex items-center justify-between p-5 border-b border-zinc-800">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-blue-500/10 flex items-center justify-center">
-              <CreditCard className="w-5 h-5 text-blue-400" />
+              {mode === 'single' ? <UserPlus className="w-5 h-5 text-blue-400" /> : <CreditCard className="w-5 h-5 text-blue-400" />}
             </div>
             <div>
-              <p className="text-zinc-100 font-semibold">Importar clientes do Asaas</p>
+              <p className="text-zinc-100 font-semibold">
+                {mode === 'single' ? 'Selecionar cliente do Asaas' : 'Importar clientes do Asaas'}
+              </p>
               <p className="text-zinc-500 text-xs">
                 {loading
                   ? 'Carregando clientes...'
-                  : `${totalAll} clientes no total · ${activeCount} com pagamento nos últimos 90 dias`}
+                  : mode === 'single'
+                    ? `Selecione 1 cliente para preencher o cadastro`
+                    : `${totalAll} clientes no total · ${activeCount} com pagamento nos últimos 90 dias`}
               </p>
             </div>
           </div>
@@ -165,13 +189,13 @@ export function AsaasImportModal({ onSuccess, onClose }: Props) {
           </button>
         </div>
 
-        {/* Sucesso */}
+        {/* Sucesso (bulk) */}
         {done && importResult ? (
-          <div className="flex-1 flex flex-col items-center justify-center gap-4 p-8 text-center">
+          <div className="flex-1 flex flex-col items-center justify-center gap-5 p-8 text-center">
             <div className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center">
               <Check className="w-8 h-8 text-emerald-400" />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <p className="text-white font-semibold text-lg">Importação concluída!</p>
               <p className="text-zinc-400 text-sm">
                 <span className="text-emerald-400 font-semibold">{importResult.created} clientes</span> criados
@@ -185,7 +209,35 @@ export function AsaasImportModal({ onSuccess, onClose }: Props) {
                   ))}
                 </div>
               )}
-              <p className="text-zinc-600 text-xs mt-2">Redirecionando para sua carteira...</p>
+            </div>
+
+            {/* Aviso de cadastros pendentes */}
+            {importResult.created > 0 && (
+              <div className="w-full max-w-sm bg-yellow-500/10 border border-yellow-500/25 rounded-xl px-4 py-3 text-left space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-yellow-400 shrink-0" />
+                  <p className="text-yellow-300 text-sm font-medium">Cadastros incompletos</p>
+                </div>
+                <p className="text-zinc-400 text-xs leading-relaxed">
+                  {importResult.created === 1
+                    ? 'O cliente importado precisa ter o cadastro confirmado.'
+                    : `Os ${importResult.created} clientes importados precisam ter o cadastro confirmado.`}
+                  {' '}Acesse cada perfil e preencha: contrato, cobranças, WhatsApp e contexto.
+                </p>
+                <p className="text-zinc-500 text-xs">
+                  Alertas criados na aba <span className="text-yellow-400 font-medium">Alertas</span> para cada cliente.
+                </p>
+              </div>
+            )}
+
+            <div className="flex gap-3 w-full max-w-sm">
+              <Button variant="outline" onClick={onClose} className="flex-1 border-zinc-700 text-zinc-400 hover:text-white">
+                Fechar
+              </Button>
+              <Button onClick={() => { onSuccess(importResult.created); router.push('/clientes') }}
+                className="flex-1 bg-blue-600 hover:bg-blue-500 text-white">
+                Ver clientes
+              </Button>
             </div>
           </div>
         ) : (
@@ -206,17 +258,22 @@ export function AsaasImportModal({ onSuccess, onClose }: Props) {
               {/* Selecionar todos + filtro 90 dias */}
               {!loading && !error && (
                 <div className="flex items-center justify-between gap-3 flex-wrap">
-                  {/* Selecionar todos (da lista filtrada atual) */}
-                  <button
-                    onClick={toggleAll}
-                    className="flex items-center gap-2 text-zinc-400 hover:text-zinc-200 text-sm transition-colors"
-                  >
-                    {allFilteredSelected
-                      ? <CheckSquare className="w-4 h-4 text-blue-400" />
-                      : <Square className="w-4 h-4" />}
-                    {allFilteredSelected ? 'Desmarcar todos' : 'Selecionar todos'}
-                    <span className="text-zinc-600 text-xs">({filtered.length})</span>
-                  </button>
+                  {/* Selecionar todos (só no modo bulk) */}
+                  {mode === 'bulk' && (
+                    <button
+                      onClick={toggleAll}
+                      className="flex items-center gap-2 text-zinc-400 hover:text-zinc-200 text-sm transition-colors"
+                    >
+                      {allFilteredSelected
+                        ? <CheckSquare className="w-4 h-4 text-blue-400" />
+                        : <Square className="w-4 h-4" />}
+                      {allFilteredSelected ? 'Desmarcar todos' : 'Selecionar todos'}
+                      <span className="text-zinc-600 text-xs">({filtered.length})</span>
+                    </button>
+                  )}
+                  {mode === 'single' && (
+                    <p className="text-zinc-500 text-xs">Clique no cliente para selecioná-lo</p>
+                  )}
 
                   {/* Toggle: filtrar apenas ativos nos últimos 90 dias */}
                   <button
@@ -362,6 +419,10 @@ export function AsaasImportModal({ onSuccess, onClose }: Props) {
                 >
                   {importing ? (
                     <><Loader2 className="w-4 h-4 animate-spin" /> Importando...</>
+                  ) : mode === 'single' ? (
+                    <><UserPlus className="w-4 h-4" />
+                      {selected.size === 0 ? 'Selecione um cliente' : 'Importar e completar cadastro'}
+                    </>
                   ) : (
                     <><Download className="w-4 h-4" />
                       {selected.size === 0

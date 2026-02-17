@@ -21,6 +21,7 @@ import { mockServices } from '@/lib/mock-data'
 import { ServiceItem } from '@/types'
 import { cn } from '@/lib/utils'
 import { AsaasCobrancaModal } from '@/components/integracoes/asaas-cobranca-modal'
+import { AsaasImportModal } from '@/components/integracoes/asaas-import-modal'
 
 // ── Tipos para import do Asaas ────────────────────────────────────
 interface AsaasCustomerBasic {
@@ -897,10 +898,10 @@ export default function NovoClientePage() {
 
   return (
     <div className="min-h-screen">
-      {importModal && (
-        <ImportModal
-          source={importModal}
-          onSelect={handleImport}
+      {importModal === 'asaas' && (
+        <AsaasImportModal
+          mode="single"
+          onSuccess={() => { /* redirecionamento já feito no modal */ }}
           onClose={() => setImportModal(null)}
         />
       )}

@@ -114,6 +114,7 @@ export async function POST(req: NextRequest) {
       skipped:      0,
       errors:       0,
       errorDetails: [] as string[],
+      clientIds:    [] as string[],
     }
 
     for (let i = 0; i < incoming.length; i++) {
@@ -187,6 +188,7 @@ export async function POST(req: NextRequest) {
         }
 
         results.created++
+        results.clientIds.push(newClient.id)
 
         // Vincula integração Asaas (falha não cancela o cliente)
         try {
@@ -211,12 +213,26 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ── Cria alertas de "cadastro incompleto" para clientes importados ──
+    if (results.clientIds.length > 0) {
+      const alertRows = results.clientIds.map(clientId => ({
+        agency_id: agencyId,
+        client_id: clientId,
+        type:      'registration_incomplete',
+        severity:  'medium',
+        message:   'Cliente importado do Asaas. Confirme e complete o cadastro: contrato, cobranças, WhatsApp e contexto.',
+        is_read:   false,
+      }))
+      await supabase.from('alerts').insert(alertRows).throwOnError()
+    }
+
     return NextResponse.json({
       success:      true,
       created:      results.created,
       skipped:      results.skipped,
       errors:       results.errors,
       errorDetails: results.errorDetails,
+      clientIds:    results.clientIds,
     })
 
   } catch (err) {
