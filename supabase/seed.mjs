@@ -191,7 +191,7 @@ async function seed() {
         score_nps: c.score.nps,
         churn_risk: c.score.risk,
         diagnosis: c.score.diagnosis,
-        flags: JSON.stringify(c.score.flags),
+        flags: c.score.flags,  // array direto — jsonb nao precisa de JSON.stringify
         triggered_by: 'scheduled',
         analyzed_at: daysAgo(7),
       })

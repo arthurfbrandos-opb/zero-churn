@@ -31,7 +31,11 @@ function mapDbClient(row: Record<string, unknown>): Client {
     scoreNps:         hs.score_nps         != null ? Number(hs.score_nps)         : undefined,
     churnRisk:        (hs.churn_risk ?? 'low') as 'low' | 'medium' | 'high',
     diagnosis:        hs.diagnosis ? String(hs.diagnosis) : undefined,
-    flags:            (hs.flags as string[]) ?? [],
+    flags:            Array.isArray(hs.flags)
+                        ? (hs.flags as string[])
+                        : typeof hs.flags === 'string'
+                          ? (() => { try { return JSON.parse(hs.flags as string) } catch { return [] } })()
+                          : [],
     analyzedAt:       String(hs.analyzed_at).slice(0, 10),
   } : undefined
 
