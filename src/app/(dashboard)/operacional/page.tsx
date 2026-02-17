@@ -13,7 +13,8 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { IntegrationStatusIcon } from '@/components/integracoes/integration-status-icon'
-import { getClientsSortedByRisk } from '@/lib/mock-data'
+import { useClients } from '@/hooks/use-clients'
+import { sortClientsByRisk } from '@/lib/client-stats'
 import { cn } from '@/lib/utils'
 
 // ── Mock data operacional ─────────────────────────────────────────
@@ -63,7 +64,8 @@ const INT_LABEL: Record<string, string> = {
 }
 
 export default function OperacionalPage() {
-  const clients = getClientsSortedByRisk()
+  const { clients: rawClients } = useClients()
+  const clients = sortClientsByRisk(rawClients.filter(c => c.status !== 'inactive'))
 
   const integrationTypes = ['whatsapp', 'asaas', 'dom_pagamentos', 'meta_ads', 'google_ads']
 

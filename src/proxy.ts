@@ -4,12 +4,11 @@ import { NextResponse, type NextRequest } from 'next/server'
 // Rotas que não precisam de autenticação
 const PUBLIC_ROUTES = ['/login', '/cadastro', '/recuperar-senha']
 const PUBLIC_PREFIXES = [
-  '/f/',          // formulário público /f/[token]
-  '/api/auth/',   // rotas de auth (signup, logout) não exigem sessão
-  '/api/debug',   // diagnóstico temporário
+  '/f/',         // formulário público /f/[token]
+  '/api/auth/',  // rotas de auth (signup, logout) não exigem sessão
 ]
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Rotas públicas — passa direto
@@ -43,7 +42,7 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Verifica sessão atual (não usar getUser() em middleware — usa getSession())
+  // Verifica sessão atual
   const { data: { session } } = await supabase.auth.getSession()
 
   // Não autenticado → redireciona para login
@@ -59,7 +58,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Aplica middleware a todas as rotas exceto arquivos estáticos
+    // Aplica proxy a todas as rotas exceto arquivos estáticos
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

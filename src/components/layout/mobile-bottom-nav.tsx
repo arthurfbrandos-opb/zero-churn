@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Users, Bell, Activity, Settings,
 } from 'lucide-react'
-import { getUnreadAlertsCount } from '@/lib/mock-data'
+import { useAlertsCount } from '@/hooks/use-alerts-count'
 import { cn } from '@/lib/utils'
 
 const NAV = [
@@ -18,7 +18,7 @@ const NAV = [
 
 export function MobileBottomNav() {
   const pathname = usePathname()
-  const unread   = getUnreadAlertsCount()
+  const unread   = useAlertsCount()
 
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(href + '/')

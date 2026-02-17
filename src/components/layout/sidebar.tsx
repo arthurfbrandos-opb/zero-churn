@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { getUnreadAlertsCount } from '@/lib/mock-data'
+import { useAlertsCount } from '@/hooks/use-alerts-count'
 import { useAgency } from '@/hooks/use-agency'
 
 const mainNav = [
@@ -21,7 +21,7 @@ const mainNav = [
 
 export function Sidebar() {
   const pathname    = usePathname()
-  const unreadCount = getUnreadAlertsCount()
+  const unreadCount = useAlertsCount()
   const { agency, user } = useAgency()
 
   // Iniciais do nome da agência para o avatar

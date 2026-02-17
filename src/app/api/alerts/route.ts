@@ -15,8 +15,20 @@ export async function GET(request: NextRequest) {
       .from('agency_users').select('agency_id').eq('user_id', user.id).single()
     if (!agencyUser) return NextResponse.json({ alerts: [] })
 
-    const limit  = parseInt(request.nextUrl.searchParams.get('limit') ?? '100')
-    const unread = request.nextUrl.searchParams.get('unread') === 'true'
+    const limit      = parseInt(request.nextUrl.searchParams.get('limit') ?? '100')
+    const unreadOnly = request.nextUrl.searchParams.get('unread') === 'true'
+    const countOnly  = request.nextUrl.searchParams.get('unread') === '1'
+
+    // Modo contagem — retorna só o número de não lidos (para o badge)
+    if (countOnly) {
+      const { count, error: cErr } = await supabase
+        .from('alerts')
+        .select('id', { count: 'exact', head: true })
+        .eq('agency_id', agencyUser.agency_id)
+        .eq('is_read', false)
+      if (cErr) throw cErr
+      return NextResponse.json({ unread_count: count ?? 0 })
+    }
 
     let q = supabase
       .from('alerts')
@@ -27,7 +39,7 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
       .limit(limit)
 
-    if (unread) q = q.eq('is_read', false)
+    if (unreadOnly) q = q.eq('is_read', false)
 
     const { data, error: qErr } = await q
     if (qErr) throw qErr

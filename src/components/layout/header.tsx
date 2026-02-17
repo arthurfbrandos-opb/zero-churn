@@ -4,7 +4,7 @@ import { Bell, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { getUnreadAlertsCount } from '@/lib/mock-data'
+import { useAlertsCount } from '@/hooks/use-alerts-count'
 import { createClient } from '@/lib/supabase/client'
 
 interface HeaderProps {
@@ -14,7 +14,7 @@ interface HeaderProps {
 }
 
 export function Header({ title, description, action }: HeaderProps) {
-  const unreadCount = getUnreadAlertsCount()
+  const unreadCount = useAlertsCount()
   const router = useRouter()
 
   async function handleLogout() {
