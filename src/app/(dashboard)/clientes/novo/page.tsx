@@ -1447,6 +1447,8 @@ export default function NovoClientePage() {
                     ? parseMoney(form.contractValue) || undefined
                     : parseMoney(form.totalProjectValue) || undefined
                 }
+                contractMonths={parseInt(form.contractMonths) || undefined}
+                contractStartDate={form.contractStartDate || undefined}
                 onClose={() => setShowCobranca(false)}
               />
             )}

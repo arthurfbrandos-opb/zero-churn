@@ -273,6 +273,7 @@ export interface CreateSubscriptionInput {
   billingType:  BillingType
   value:        number
   nextDueDate:  string        // 'YYYY-MM-DD' — próximo vencimento
+  endDate?:     string        // 'YYYY-MM-DD' — fim da assinatura (início + meses do contrato)
   cycle:        SubscriptionCycle
   description?: string
 }

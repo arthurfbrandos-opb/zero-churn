@@ -49,11 +49,11 @@ export async function POST(request: NextRequest) {
     const creds  = await decrypt<{ api_key: string }>(integration.encrypted_key)
     const body   = await request.json()
 
-    const { customer, billingType, value, nextDueDate, cycle, description } = body
+    const { customer, billingType, value, nextDueDate, endDate, cycle, description } = body
     if (!customer || !billingType || !value || !nextDueDate || !cycle)
       return NextResponse.json({ error: 'Campos obrigatórios: customer, billingType, value, nextDueDate, cycle' }, { status: 400 })
 
-    const subscription = await createSubscription(creds.api_key, { customer, billingType, value, nextDueDate, cycle, description })
+    const subscription = await createSubscription(creds.api_key, { customer, billingType, value, nextDueDate, endDate, cycle, description })
     return NextResponse.json({ subscription })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

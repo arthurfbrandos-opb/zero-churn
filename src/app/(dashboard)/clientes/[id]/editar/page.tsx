@@ -349,7 +349,10 @@ interface LinkedIntegration {
   last_sync_at: string | null
 }
 
-function IntegracoesStep({ clientId, clientType, defaultValue }: { clientId: string; clientType?: string; defaultValue?: number }) {
+function IntegracoesStep({ clientId, clientType, defaultValue, contractMonths, contractStartDate }: {
+  clientId: string; clientType?: string; defaultValue?: number
+  contractMonths?: number; contractStartDate?: string
+}) {
   const [asaasIntegrations, setAsaasIntegrations] = useState<LinkedIntegration[]>([])
   const [loading, setLoading]   = useState(true)
   const [showLinkModal, setShowLinkModal] = useState<'asaas' | 'dom' | null>(null)
@@ -431,6 +434,8 @@ function IntegracoesStep({ clientId, clientType, defaultValue }: { clientId: str
           customerName={cobrancaTarget.name}
           clientType={(clientType ?? 'mrr') as 'mrr' | 'tcv'}
           defaultValue={defaultValue}
+          contractMonths={contractMonths}
+          contractStartDate={contractStartDate}
           onClose={() => setCobrancaTarget(null)}
         />
       )}
@@ -1633,6 +1638,8 @@ export default function EditarClientePage() {
                 ? parseMoney(form.contractValue) || undefined
                 : parseMoney(form.totalProjectValue) || undefined
             }
+            contractMonths={parseInt(form.contractMonths) || undefined}
+            contractStartDate={form.contractStartDate || undefined}
           />
         )}
 
