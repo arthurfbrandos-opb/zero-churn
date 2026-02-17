@@ -40,7 +40,8 @@ function daysTo(d: string) {
 }
 
 const TABS = [
-  { id: 'visao-geral',  label: 'Visão Geral',  icon: Activity },
+  { id: 'visao-geral',  label: 'Visão Geral',  icon: Activity  },
+  { id: 'cadastro',     label: 'Cadastro',     icon: Building2 },
   { id: 'integracoes',  label: 'Integrações',  icon: Plug      },
   { id: 'formularios',  label: 'Formulários',  icon: FileText  },
   { id: 'historico',    label: 'Histórico',    icon: History   },
@@ -349,7 +350,113 @@ function TabVisaoGeral({ client }: { client: Client }) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// TAB 2 — INTEGRAÇÕES
+// TAB 2 — CADASTRO
+// ─────────────────────────────────────────────────────────────────
+function TabCadastro({ client }: { client: Client }) {
+  const raw = client as unknown as Record<string, unknown>
+  const clientType = client.clientType ?? 'mrr'
+  const mrrVal = client.mrrValue ?? client.contractValue
+  const tcvVal = client.tcvValue ?? client.totalProjectValue
+
+  const fmtCnpj = (v?: string) => {
+    if (!v) return null
+    const d = v.replace(/\D/g, '')
+    if (d.length === 14) return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}`
+    if (d.length === 11) return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6,9)}-${d.slice(9)}`
+    return v
+  }
+  const fmtDate  = (v?: string) => v ? new Date(v + 'T00:00:00').toLocaleDateString('pt-BR') : null
+  const fmtMoney = (v?: number) => v != null ? v.toLocaleString('pt-BR', { style:'currency', currency:'BRL' }) : null
+
+  const F = ({ label, value, full }: { label: string; value?: string | null; full?: boolean }) => (
+    <div className={full ? 'sm:col-span-2' : ''}>
+      <p className="text-zinc-500 text-xs mb-1">{label}</p>
+      {value ? <p className="text-zinc-200 text-sm break-all">{value}</p>
+             : <p className="text-zinc-600 text-sm italic">Não informado</p>}
+    </div>
+  )
+
+  const S = ({ title, children }: { title: string; children: React.ReactNode }) => (
+    <Card className="bg-zinc-900 border-zinc-800">
+      <CardContent className="p-5 space-y-4">
+        <h3 className="text-zinc-200 font-semibold text-sm">{title}</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{children}</div>
+      </CardContent>
+    </Card>
+  )
+
+  const hasAddress = !!(raw.logradouro || raw.cep || raw.cidade)
+
+  return (
+    <div className="space-y-4">
+
+      <S title="Identificação da empresa">
+        <F label="Razão Social"      value={client.razaoSocial || client.name} full />
+        <F label="Nome Resumido"     value={client.nomeResumido} />
+        <F label="CNPJ / CPF"        value={fmtCnpj(client.cnpj ?? client.cnpjCpf)} />
+        <F label="Segmento"          value={client.segment} />
+        <F label="Nome do Decisor"   value={client.nomeDecisor} />
+        <F label="Telefone"          value={client.telefone} />
+        <F label="E-mail"            value={client.email} />
+        <F label="E-mail Financeiro" value={client.emailFinanceiro} />
+      </S>
+
+      {hasAddress && (
+        <S title="Endereço">
+          <F label="CEP"         value={raw.cep         ? String(raw.cep)          : null} />
+          <F label="Estado"      value={raw.estado      ? String(raw.estado)       : null} />
+          <F label="Logradouro"  value={raw.logradouro  ? String(raw.logradouro)   : null} full />
+          <F label="Número"      value={raw.numero      ? String(raw.numero)       : null} />
+          <F label="Complemento" value={raw.complemento ? String(raw.complemento)  : null} />
+          <F label="Bairro"      value={raw.bairro      ? String(raw.bairro)       : null} />
+          <F label="Cidade"      value={raw.cidade      ? String(raw.cidade)       : null} />
+        </S>
+      )}
+
+      <S title="Contrato">
+        <F label="Tipo" value={clientType === 'mrr' ? 'MRR — Recorrente mensal' : 'TCV — Projeto com valor fixo'} />
+        <F label="Início do contrato" value={fmtDate(client.contractStartDate)} />
+        {clientType === 'mrr' && <F label="Mensalidade (MRR)"        value={fmtMoney(mrrVal)} />}
+        {clientType === 'tcv' && <F label="Valor total do projeto"    value={fmtMoney(tcvVal)} />}
+        <F label="Cadastrado em" value={fmtDate(client.createdAt)} />
+      </S>
+
+      {client.observations && (
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-5 space-y-2">
+            <h3 className="text-zinc-200 font-semibold text-sm">Observações</h3>
+            <p className="text-zinc-400 text-sm leading-relaxed whitespace-pre-wrap">{client.observations}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="flex items-center gap-3 pt-1">
+        <Link href={`/clientes/${client.id}/editar`}>
+          <Button size="sm" variant="outline" className="border-zinc-700 text-zinc-400 hover:text-white gap-1.5 text-xs">
+            <FileText className="w-3.5 h-3.5" /> Editar cadastro
+          </Button>
+        </Link>
+        {client.email && (
+          <a href={`mailto:${client.email}`}>
+            <Button size="sm" variant="outline" className="border-zinc-700 text-zinc-400 hover:text-white gap-1.5 text-xs">
+              <Mail className="w-3.5 h-3.5" /> Enviar e-mail
+            </Button>
+          </a>
+        )}
+        {client.telefone && (
+          <a href={`https://wa.me/55${client.telefone.replace(/\D/g,'')}`} target="_blank" rel="noreferrer">
+            <Button size="sm" variant="outline" className="border-emerald-700/40 text-emerald-400 hover:bg-emerald-500/10 gap-1.5 text-xs">
+              <Phone className="w-3.5 h-3.5" /> WhatsApp
+            </Button>
+          </a>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────
+// TAB 3 — INTEGRAÇÕES
 // ─────────────────────────────────────────────────────────────────
 function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => void }) {
   const [asaasModal, setAsaasModal] = useState(false)
@@ -856,9 +963,10 @@ function ClientePerfilInner() {
       {/* Conteúdo da tab */}
       <div className="p-4 lg:p-6 max-w-4xl">
         {activeTab === 'visao-geral' && <TabVisaoGeral client={client} />}
+        {activeTab === 'cadastro'    && <TabCadastro client={client} />}
         {activeTab === 'integracoes' && <TabIntegracoes client={client} refetch={refetch} />}
         {activeTab === 'formularios' && <TabFormularios clientId={client.id} client={client} />}
-        {activeTab === 'historico' && <TabHistorico clientId={client.id} />}
+        {activeTab === 'historico'   && <TabHistorico clientId={client.id} />}
       </div>
     </div>
   )
