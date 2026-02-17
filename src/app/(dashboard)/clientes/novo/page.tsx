@@ -585,9 +585,41 @@ export default function NovoClientePage() {
 
   async function handleSubmit() {
     setSaving(true)
-    await new Promise(r => setTimeout(r, 1200))
-    setSaving(false)
-    router.push('/clientes')
+    try {
+      const body = {
+        name:              form.razaoSocial || form.nomeResumido,
+        nome_resumido:     form.nomeResumido,
+        razao_social:      form.razaoSocial,
+        cnpj:              form.cnpjCpf,
+        segment:           form.segment,
+        client_type:       form.clientType,
+        mrr_value:         form.clientType === 'mrr' ? parseFloat(form.contractValue.replace(',', '.') || '0') : null,
+        tcv_value:         form.clientType === 'tcv' ? parseFloat(form.totalProjectValue.replace(',', '.') || '0') : null,
+        contract_start:    form.contractStartDate || new Date().toISOString().slice(0, 10),
+        contract_end:      null,
+        whatsapp_group_id: form.whatsappGroupLink || null,
+        observations:      form.notes || null,
+        payment_status:    'em_dia',
+      }
+
+      const res = await fetch('/api/clients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        alert('Erro ao salvar: ' + (data.error ?? `HTTP ${res.status}`))
+        return
+      }
+
+      router.push('/clientes')
+    } catch (err) {
+      alert('Erro inesperado: ' + (err instanceof Error ? err.message : String(err)))
+    } finally {
+      setSaving(false)
+    }
   }
 
   const canNext = [

@@ -18,11 +18,12 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScoreGauge } from '@/components/dashboard/score-gauge'
 import { RiskBadge } from '@/components/dashboard/risk-badge'
-import { getClientById, getFormsByClientId, getAlertsByClientId } from '@/lib/mock-data'
-import { ActionItem, Integration, Trend, PaymentStatus, ChurnRecord } from '@/types'
+import { Client, ActionItem, Integration, Trend, PaymentStatus, ChurnRecord } from '@/types'
 import { useAnalysisCredits } from '@/hooks/use-analysis-credits'
-import { getNpsClassification } from '@/lib/nps-utils'
+import { getNpsClassification, isInObservation } from '@/lib/nps-utils'
 import { ChurnModal, CHURN_CATEGORIES } from '@/components/dashboard/churn-modal'
+import { useClient } from '@/hooks/use-client'
+import { Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -66,7 +67,7 @@ function TrendIcon({ trend }: { trend: Trend }) {
 // ─────────────────────────────────────────────────────────────────
 // TAB 1 — VISÃO GERAL
 // ─────────────────────────────────────────────────────────────────
-function TabVisaoGeral({ client }: { client: NonNullable<ReturnType<typeof getClientById>> }) {
+function TabVisaoGeral({ client }: { client: Client }) {
   const hs = client.healthScore
   const [actions, setActions] = useState<ActionItem[]>(hs?.actionPlan ?? [])
   const [runningAnalysis, setRunningAnalysis] = useState(false)
@@ -431,8 +432,10 @@ function TabIntegracoes({ integrations }: { integrations: Integration[] }) {
 // ─────────────────────────────────────────────────────────────────
 // TAB 3 — FORMULÁRIOS
 // ─────────────────────────────────────────────────────────────────
-function TabFormularios({ clientId }: { clientId: string }) {
-  const forms = getFormsByClientId(clientId)
+function TabFormularios({ clientId, client }: { clientId: string; client: Client }) {
+  // Usa o último formulário disponível no cliente (vindo do hook)
+  const lastForm = client.lastFormSubmission
+  const forms = lastForm ? [lastForm] : []
   const responded = forms.filter(f => f.respondedAt)
   const responseRate = forms.length ? Math.round((responded.length / forms.length) * 100) : 0
 
@@ -531,7 +534,7 @@ function TabFormularios({ clientId }: { clientId: string }) {
 // TAB 4 — HISTÓRICO
 // ─────────────────────────────────────────────────────────────────
 function TabHistorico({ clientId }: { clientId: string }) {
-  const alerts = getAlertsByClientId(clientId)
+  const alerts: unknown[] = [] // será conectado via API na Sprint 2
 
   const MOCK_EVENTS = [
     { id: 'ev1', date: '2026-02-05', icon: RefreshCw, color: 'text-violet-400 bg-violet-500/15', title: 'Análise automática executada', sub: 'Score: 32 · Risco: Alto' },
@@ -582,18 +585,22 @@ function ClientePerfilInner() {
   const [churnRecord, setChurnRecord]      = useState<ChurnRecord | undefined>(undefined)
   const [isInactive, setIsInactive]        = useState(false)
 
-  const client = getClientById(id)
+  const { client, loading, error } = useClient(id)
 
-  if (!client) {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-zinc-500">
-        <div className="text-center space-y-2">
-          <p className="text-lg font-medium text-zinc-300">Cliente não encontrado</p>
-          <Link href="/clientes" className="text-emerald-400 text-sm hover:underline">← Voltar para clientes</Link>
-        </div>
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <Loader2 className="w-7 h-7 text-emerald-500 animate-spin" />
+    </div>
+  )
+
+  if (error || !client) return (
+    <div className="min-h-screen flex items-center justify-center text-zinc-500">
+      <div className="text-center space-y-2">
+        <p className="text-lg font-medium text-zinc-300">{error ?? 'Cliente não encontrado'}</p>
+        <Link href="/clientes" className="text-emerald-400 text-sm hover:underline">← Voltar para clientes</Link>
       </div>
-    )
-  }
+    </div>
+  )
 
   const daysToEnd = daysTo(client.contractEndDate ?? "")
   const risk = client.healthScore?.churnRisk ?? 'observacao'
@@ -777,7 +784,7 @@ function ClientePerfilInner() {
       <div className="p-4 lg:p-6 max-w-4xl">
         {activeTab === 'visao-geral' && <TabVisaoGeral client={client} />}
         {activeTab === 'integracoes' && <TabIntegracoes integrations={client.integrations} />}
-        {activeTab === 'formularios' && <TabFormularios clientId={client.id} />}
+        {activeTab === 'formularios' && <TabFormularios clientId={client.id} client={client} />}
         {activeTab === 'historico' && <TabHistorico clientId={client.id} />}
       </div>
     </div>

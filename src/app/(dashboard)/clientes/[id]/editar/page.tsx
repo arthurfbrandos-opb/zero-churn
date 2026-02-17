@@ -6,7 +6,7 @@ import Link from 'next/link'
 import {
   ArrowLeft, Save, Trash2, AlertTriangle, Check,
   Building2, FileText, MessageCircle, ChevronLeft, ChevronRight,
-  User, Phone, Mail, MapPin, Calendar, DollarSign,
+  User, Phone, Mail, MapPin, Calendar, DollarSign, Loader2,
 } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
@@ -14,7 +14,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { getClientById, mockServices } from '@/lib/mock-data'
+import { mockServices } from '@/lib/mock-data'
+import { useClient } from '@/hooks/use-client'
 import { cn } from '@/lib/utils'
 
 // ─────────────────────────────────────────────────────────────────
@@ -28,64 +29,133 @@ const STEPS = [
 export default function EditarClientePage() {
   const params = useParams()
   const router = useRouter()
-  const client = getClientById(params.id as string)
+  const clientId = params.id as string
 
-  const [step, setStep] = useState(0)
-  const [saved, setSaved] = useState(false)
+  const { client, loading: loadingClient } = useClient(clientId)
+
+  const [step, setStep]                   = useState(0)
+  const [saving, setSaving]               = useState(false)
+  const [saved, setSaved]                 = useState(false)
+  const [deleting, setDeleting]           = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
-  // ── Form state — pré-preenchido com dados do cliente ──────────
-
   const [form, setForm] = useState({
-    // Step 0 — Identificação
-    name:         client?.name ?? '',
-    nomeResumido: client?.nomeResumido ?? '',
-    nomeDecisor:  client?.nomeDecisor ?? '',
-    segment:      client?.segment ?? '',
-    email:        '',
-    phone:        '',
-    cnpj:         '',
-    // Step 1 — Contrato
-    serviceName:  client?.serviceSold ?? '',
-    clientType:   client?.clientType ?? 'mrr',
-    contractValue: String(client?.contractValue ?? ''),
-    totalProjectValue: String(client?.totalProjectValue ?? ''),
-    contractStartDate: client?.contractStartDate ?? '',
-    contractEndDate:   client?.contractEndDate ?? '',
-    paymentDay:   '',
-    // Step 2 — Contexto
-    resumoReuniao:        (client as any)?.resumoReuniao ?? '',
-    expectativasCliente:  (client as any)?.expectativasCliente ?? '',
-    principaisDores:      (client as any)?.principaisDores ?? '',
-    notes:                client?.notes ?? '',
+    name:              '',
+    nomeResumido:      '',
+    nomeDecisor:       '',
+    segment:           '',
+    email:             '',
+    phone:             '',
+    cnpj:              '',
+    serviceName:       '',
+    clientType:        'mrr' as 'mrr' | 'tcv',
+    contractValue:     '',
+    totalProjectValue: '',
+    contractStartDate: '',
+    contractEndDate:   '',
+    paymentDay:        '',
+    resumoReuniao:     '',
+    expectativasCliente: '',
+    principaisDores:   '',
+    notes:             '',
   })
+
+  // Preenche form quando o cliente carrega
+  const [formLoaded, setFormLoaded] = useState(false)
+  if (client && !formLoaded) {
+    setFormLoaded(true)
+    setForm({
+      name:              client.name              ?? '',
+      nomeResumido:      client.nomeResumido      ?? '',
+      nomeDecisor:       client.nomeDecisor       ?? '',
+      segment:           client.segment           ?? '',
+      email:             client.email             ?? '',
+      phone:             client.telefone          ?? '',
+      cnpj:              client.cnpj ?? client.cnpjCpf ?? '',
+      serviceName:       client.serviceSold       ?? '',
+      clientType:        client.clientType        ?? 'mrr',
+      contractValue:     String(client.mrrValue   ?? client.contractValue ?? ''),
+      totalProjectValue: String(client.tcvValue   ?? client.totalProjectValue ?? ''),
+      contractStartDate: client.contractStartDate ?? '',
+      contractEndDate:   client.contractEndDate   ?? '',
+      paymentDay:        '',
+      resumoReuniao:     '',
+      expectativasCliente: '',
+      principaisDores:   '',
+      notes:             client.observations      ?? '',
+    })
+  }
 
   function set(key: keyof typeof form, val: string) {
     setForm(prev => ({ ...prev, [key]: val }))
   }
 
-  if (!client) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-zinc-400">Cliente não encontrado.</p>
-          <Link href="/clientes">
-            <Button variant="ghost" className="mt-3 text-zinc-500">← Voltar para clientes</Button>
-          </Link>
-        </div>
+  if (loadingClient) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <Loader2 className="w-7 h-7 text-emerald-500 animate-spin" />
+    </div>
+  )
+
+  if (!client) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-center">
+        <p className="text-zinc-400">Cliente não encontrado.</p>
+        <Link href="/clientes">
+          <Button variant="ghost" className="mt-3 text-zinc-500">← Voltar para clientes</Button>
+        </Link>
       </div>
-    )
+    </div>
+  )
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      const body = {
+        name:           form.name || form.nomeResumido,
+        nome_resumido:  form.nomeResumido,
+        cnpj:           form.cnpj,
+        segment:        form.segment,
+        client_type:    form.clientType,
+        mrr_value:      form.clientType === 'mrr' ? parseFloat(form.contractValue || '0') : null,
+        tcv_value:      form.clientType === 'tcv' ? parseFloat(form.totalProjectValue || '0') : null,
+        contract_start: form.contractStartDate || null,
+        contract_end:   form.contractEndDate   || null,
+        observations:   form.notes             || null,
+      }
+      const res = await fetch(`/api/clients/${clientId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        alert('Erro ao salvar: ' + (d.error ?? `HTTP ${res.status}`))
+        return
+      }
+      setSaved(true)
+      setTimeout(() => router.push(`/clientes/${clientId}`), 1200)
+    } catch (err) {
+      alert('Erro inesperado: ' + (err instanceof Error ? err.message : String(err)))
+    } finally {
+      setSaving(false)
+    }
   }
 
-  function handleSave() {
-    // Simula salvamento
-    setSaved(true)
-    setTimeout(() => { setSaved(false); router.push(`/clientes/${client!.id}`) }, 1500)
-  }
-
-  function handleDelete() {
-    // Em produção: DELETE no banco
-    router.push('/clientes')
+  async function handleDelete() {
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/clients/${clientId}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        alert('Erro ao excluir: ' + (d.error ?? `HTTP ${res.status}`))
+        return
+      }
+      router.push('/clientes')
+    } catch (err) {
+      alert('Erro inesperado: ' + (err instanceof Error ? err.message : String(err)))
+    } finally {
+      setDeleting(false)
+    }
   }
 
   // ── STEP 0 — Identificação ────────────────────────────────────
@@ -301,8 +371,10 @@ export default function EditarClientePage() {
                 <div className="flex items-center gap-2">
                   <span className="text-red-400 text-xs">Confirmar exclusão?</span>
                   <Button size="sm" onClick={handleDelete}
-                    className="bg-red-500 hover:bg-red-600 text-white text-xs h-7">
-                    Sim, excluir
+                    disabled={deleting}
+                    className="bg-red-500 hover:bg-red-600 text-white text-xs h-7 gap-1">
+                    {deleting ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                    {deleting ? 'Excluindo...' : 'Sim, excluir'}
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)}
                     className="text-zinc-400 text-xs h-7">Cancelar</Button>
@@ -327,9 +399,12 @@ export default function EditarClientePage() {
 
               <Button size="sm"
                 onClick={handleSave}
+                disabled={saving || saved}
                 className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1.5">
                 {saved
                   ? <><Check className="w-3.5 h-3.5" /> Salvo!</>
+                  : saving
+                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Salvando...</>
                   : <><Save className="w-3.5 h-3.5" /> Salvar alterações</>}
               </Button>
             </div>
