@@ -1,7 +1,8 @@
 import { createServerClient } from '@supabase/ssr'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 
-// Cliente para Server Components, API Routes e Server Actions
+// Cliente para Server Components e API Routes (respeita RLS via sessão do usuário)
 export async function createClient() {
   const cookieStore = await cookies()
 
@@ -27,11 +28,9 @@ export async function createClient() {
   )
 }
 
-// Cliente com service_role para operações administrativas (sem RLS)
+// Cliente com service_role — bypassa RLS, só usar em API routes seguras
 export function createAdminClient() {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { createClient } = require('@supabase/supabase-js')
-  return createClient(
+  return createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     {

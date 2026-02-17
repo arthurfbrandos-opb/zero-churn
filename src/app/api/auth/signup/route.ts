@@ -3,7 +3,8 @@ import { createAdminClient } from '@/lib/supabase/server'
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password, agencyName, ownerName } = await request.json()
+    const body = await request.json()
+    const { email, password, agencyName, ownerName } = body
 
     if (!email || !password || !agencyName || !ownerName) {
       return NextResponse.json({ error: 'Campos obrigatórios faltando' }, { status: 400 })
@@ -16,53 +17,66 @@ export async function POST(request: NextRequest) {
     const admin = createAdminClient()
 
     // 1. Criar usuário no Supabase Auth
+    console.log('[signup] criando usuario:', email)
     const { data: authData, error: authError } = await admin.auth.admin.createUser({
       email,
       password,
-      email_confirm: true, // confirma automático (sem e-mail de confirmação por ora)
+      email_confirm: true,
       user_metadata: { full_name: ownerName },
     })
 
     if (authError) {
-      if (authError.message.includes('already registered')) {
+      console.error('[signup] erro auth:', authError)
+      if (authError.message.toLowerCase().includes('already registered') ||
+          authError.message.toLowerCase().includes('already exists')) {
         return NextResponse.json({ error: 'E-mail já cadastrado' }, { status: 409 })
       }
-      throw authError
+      return NextResponse.json({ error: authError.message }, { status: 400 })
     }
 
     const userId = authData.user!.id
+    console.log('[signup] usuario criado:', userId)
 
-    // 2. Criar a agência
-    const slug = agencyName
+    // 2. Criar agência
+    const slug = `${agencyName
       .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]/g, '-')
       .replace(/-+/g, '-')
-      .slice(0, 40)
+      .slice(0, 40)}-${Date.now()}`
 
+    console.log('[signup] criando agencia:', agencyName)
     const { data: agency, error: agencyError } = await admin
       .from('agencies')
-      .insert({ name: agencyName, slug: `${slug}-${Date.now()}` })
+      .insert({ name: agencyName, slug })
       .select('id')
       .single()
 
-    if (agencyError) throw agencyError
+    if (agencyError) {
+      console.error('[signup] erro agencia:', agencyError)
+      // Tenta desfazer criação do usuário
+      await admin.auth.admin.deleteUser(userId)
+      return NextResponse.json({ error: 'Erro ao criar agência: ' + agencyError.message }, { status: 500 })
+    }
 
-    // 3. Vincular usuário à agência como admin
+    console.log('[signup] agencia criada:', agency.id)
+
+    // 3. Vincular usuário à agência
     const { error: linkError } = await admin
       .from('agency_users')
       .insert({ agency_id: agency.id, user_id: userId, role: 'admin' })
 
-    if (linkError) throw linkError
+    if (linkError) {
+      console.error('[signup] erro vincular:', linkError)
+      await admin.auth.admin.deleteUser(userId)
+      return NextResponse.json({ error: 'Erro ao configurar conta: ' + linkError.message }, { status: 500 })
+    }
 
+    console.log('[signup] sucesso para:', email)
     return NextResponse.json({ success: true, agencyId: agency.id })
 
   } catch (error) {
-    console.error('[signup]', error)
-    return NextResponse.json(
-      { error: 'Erro interno ao criar conta. Tente novamente.' },
-      { status: 500 }
-    )
+    console.error('[signup] erro inesperado:', error)
+    const msg = error instanceof Error ? error.message : String(error)
+    return NextResponse.json({ error: 'Erro interno: ' + msg }, { status: 500 })
   }
 }

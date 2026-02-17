@@ -40,7 +40,8 @@ export default function CadastroPage() {
       const data = await res.json()
 
       if (!res.ok) {
-        setError(data.error ?? 'Erro ao criar conta.')
+        // Mostra a mensagem real do servidor para facilitar debug
+        setError(data.error ?? `Erro ${res.status} ao criar conta.`)
         return
       }
 
