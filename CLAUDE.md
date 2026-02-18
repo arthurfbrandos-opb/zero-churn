@@ -106,6 +106,12 @@ zero-churn/
 ```
 Todos exigem header: `Authorization: Bearer ${CRON_SECRET}`
 
+## ⚠️ Atenção — Next.js 16 usa `proxy.ts`, não `middleware.ts`
+Este projeto usa Next.js **16.1.6**. O arquivo de middleware é `src/proxy.ts` (exporta função `proxy`), **não** `src/middleware.ts`. Se ambos existirem o build quebra com erro:
+> "Both middleware file and proxy file are detected. Please use proxy.ts only."
+
+Nunca criar `middleware.ts` neste projeto.
+
 ## Auth — fluxo completo
 1. **Cadastro** (`/cadastro` → `POST /api/auth/signup`):
    - Cria user via admin API → cria agência → vincula user à agência
