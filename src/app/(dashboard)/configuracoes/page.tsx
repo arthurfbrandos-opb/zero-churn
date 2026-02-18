@@ -1186,6 +1186,7 @@ function AnalisadorSection() {
   const [npsGrace, setNpsGrace] = useState<7 | 15>(7)
   const [observationDays, setObservationDays] = useState(60)
   const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   const PILLARS = [
     { label: 'Financeiro',            weight: 35, color: 'bg-emerald-500' },
@@ -1194,11 +1195,43 @@ function AnalisadorSection() {
     { label: 'NPS',                    weight: 10, color: 'bg-yellow-500' },
   ]
 
-  function handleSave() {
-    // Persiste o período de observação
-    try { persistObsDays(observationDays) } catch {}
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+  // Carrega analysis_day do banco ao montar
+  useEffect(() => {
+    fetch('/api/agency')
+      .then(r => r.json())
+      .then(d => {
+        const analysisDay = d?.agency?.analysis_day ?? d?.analysis_day
+        if (analysisDay) setDay(Number(analysisDay))
+      })
+      .catch(() => {})
+  }, [])
+
+  // Próxima análise calculada localmente
+  const nextAnalysis = (() => {
+    const today = new Date()
+    const yr    = today.getFullYear()
+    const mo    = today.getMonth()
+    let next    = new Date(yr, mo, day)
+    if (next <= today) next = new Date(yr, mo + 1, day)
+    return next.toLocaleDateString('pt-BR')
+  })()
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      // Persiste o período de observação localmente
+      try { persistObsDays(observationDays) } catch {}
+      // Persiste analysis_day no banco
+      await fetch('/api/agency', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ analysis_day: day }),
+      })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -1221,7 +1254,7 @@ function AnalisadorSection() {
               className={cn(inputCls, 'w-20 text-center')} min={1} max={28} />
             <Label className="text-zinc-400 text-sm">de cada mês</Label>
           </div>
-          <p className="text-zinc-600 text-xs">Próxima análise: <span className="text-zinc-400">01/03/2026</span></p>
+          <p className="text-zinc-600 text-xs">Próxima análise: <span className="text-zinc-400">{nextAnalysis}</span></p>
         </CardContent>
       </Card>
 
@@ -1309,8 +1342,10 @@ function AnalisadorSection() {
         </CardContent>
       </Card>
 
-      <Button size="sm" onClick={handleSave} className="bg-emerald-500 hover:bg-emerald-600 text-white gap-2">
-        {saved ? <><Check className="w-3.5 h-3.5" /> Salvo!</> : 'Salvar configurações'}
+      <Button size="sm" onClick={handleSave} disabled={saving} className="bg-emerald-500 hover:bg-emerald-600 text-white gap-2">
+        {saving ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Salvando...</>
+         : saved  ? <><Check className="w-3.5 h-3.5" /> Salvo!</>
+         : 'Salvar configurações'}
       </Button>
     </div>
   )
