@@ -25,16 +25,21 @@ import { toErrorMsg } from '@/lib/utils'
  *   - 'no_whatsapp_data'   — WhatsApp não conectado
  */
 
-import { fetchGroupMessages, extractMessageText } from '@/lib/evolution/client'
 import type { AgentResult } from './types'
 
 // ── Tipos ─────────────────────────────────────────────────────────
 
 interface ProximidadeInput {
-  clientId:    string
-  groupId:     string | null   // null = sem WhatsApp conectado
-  days?:       number          // padrão: 60
-  openaiKey?:  string          // se não fornecido → score sem IA
+  clientId:   string
+  groupId:    string | null    // null = sem WhatsApp conectado
+  messages?:  {               // mensagens pré-coletadas pelo orchestrator
+    content:    string
+    senderName: string | null
+    timestamp:  number
+    fromMe:     boolean
+  }[]
+  days?:      number           // padrão: 60
+  openaiKey?: string           // se não fornecido → score heurístico
 }
 
 // Palavras-chave de alerta de cancelamento (PT-BR)
@@ -209,15 +214,12 @@ export async function runAgenteProximidade(input: ProximidadeInput): Promise<Age
   }
 
   try {
-    // ── 1. Coleta mensagens ───────────────────────────────────────
-    const rawMessages = await fetchGroupMessages(input.groupId, days)
-
-    // Filtra e normaliza (só mensagens de texto)
-    const messages = rawMessages
+    // ── 1. Normaliza mensagens (já coletadas pelo orchestrator) ───
+    const messages = (input.messages ?? [])
       .map(m => ({
-        sender: m.pushName ?? m.key.participant ?? 'Desconhecido',
-        text:   extractMessageText(m) ?? '',
-        ts:     m.messageTimestamp,
+        sender: m.senderName ?? 'Desconhecido',
+        text:   m.content,
+        ts:     m.timestamp,
       }))
       .filter(m => m.text.trim().length > 0)
 

@@ -38,9 +38,9 @@ export async function POST(req: NextRequest) {
 
     const { type, credentials } = await req.json()
 
-    // Aceita api_key (Asaas / Resend) ou token (Dom Pagamentos)
-    const hasKey = credentials?.api_key || credentials?.token
-    const VALID_TYPES = ['asaas', 'dom_pagamentos', 'resend']
+    // Aceita api_key (Asaas / Resend / Evolution) ou token (Dom Pagamentos)
+    const hasKey = credentials?.api_key || credentials?.token || credentials?.url
+    const VALID_TYPES = ['asaas', 'dom_pagamentos', 'resend', 'evolution_api']
     if (!type || !VALID_TYPES.includes(type) || !hasKey) {
       return NextResponse.json({ error: 'Tipo e credencial são obrigatórios' }, { status: 400 })
     }
@@ -143,6 +143,48 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ── Validação e teste da Evolution API ───────────────────────
+    if (type === 'evolution_api') {
+      const { url, api_key, instance_name } = credentials
+      if (!url || !api_key || !instance_name) {
+        return NextResponse.json(
+          { error: 'URL, API Key e nome da instância são obrigatórios' },
+          { status: 400 }
+        )
+      }
+      // Testa conectividade
+      try {
+        const testRes = await fetch(
+          `${url.replace(/\/$/, '')}/instance/connectionState/${instance_name}`,
+          {
+            headers: { apikey: api_key },
+            signal:  AbortSignal.timeout(8000),
+          }
+        )
+        if (!testRes.ok) {
+          const body = await testRes.json().catch(() => ({}))
+          const msg  = body?.message ?? body?.error ?? `HTTP ${testRes.status}`
+          return NextResponse.json(
+            { error: `Evolution API inválida: ${msg}` },
+            { status: 400 }
+          )
+        }
+        const statusData = await testRes.json().catch(() => ({}))
+        const state      = statusData?.instance?.state ?? 'unknown'
+        if (state !== 'open') {
+          return NextResponse.json(
+            { error: `Instância não conectada (estado: ${state}). Escaneie o QR Code no painel da Evolution API.` },
+            { status: 400 }
+          )
+        }
+      } catch (testErr) {
+        const msg = toErrorMsg(testErr)
+        if (!msg.includes('timeout') && !msg.includes('fetch')) {
+          return NextResponse.json({ error: `Erro ao conectar: ${msg}` }, { status: 400 })
+        }
+      }
+    }
+
     // Criptografa
     const encrypted_key = await encrypt(credentials as Record<string, unknown>)
 
@@ -163,7 +205,6 @@ export async function POST(req: NextRequest) {
 
     if (upsertErr) {
       console.error('[integrations] upsert error:', upsertErr)
-      // Tabela não existe
       if (upsertErr.code === '42P01') {
         return NextResponse.json(
           { error: 'Tabela agency_integrations não existe. Execute o SQL de migração no Supabase.' },
@@ -171,6 +212,32 @@ export async function POST(req: NextRequest) {
         )
       }
       throw upsertErr
+    }
+
+    // ── Auto-registra webhook na Evolution API ────────────────────
+    if (type === 'evolution_api') {
+      const { url, api_key, instance_name } = credentials
+      const appUrl    = process.env.NEXT_PUBLIC_APP_URL ?? 'https://zero-churn.vercel.app'
+      const webhookUrl = `${appUrl}/api/whatsapp/webhook`
+      try {
+        await fetch(`${url.replace(/\/$/, '')}/webhook/set/${instance_name}`, {
+          method:  'POST',
+          headers: { apikey: api_key, 'Content-Type': 'application/json' },
+          body:    JSON.stringify({
+            webhook: {
+              enabled:         true,
+              url:             webhookUrl,
+              webhookByEvents: false,
+              webhookBase64:   false,
+              events:          ['MESSAGES_UPSERT', 'CONNECTION_UPDATE'],
+            },
+          }),
+          signal: AbortSignal.timeout(8000),
+        })
+      } catch (whErr) {
+        // Falha no webhook não bloqueia — apenas loga
+        console.warn('[integrations] Evolution: falha ao registrar webhook:', toErrorMsg(whErr))
+      }
     }
 
     return NextResponse.json({ success: true, status: 'active' })

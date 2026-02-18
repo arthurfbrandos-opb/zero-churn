@@ -9,6 +9,7 @@ import { toErrorMsg } from '@/lib/utils'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { validateGroup } from '@/lib/evolution/client'
+import { getAgencyEvolutionConfig } from '@/lib/evolution/agency-config'
 
 // ── GET ───────────────────────────────────────────────────────────
 
@@ -54,20 +55,26 @@ export async function POST(
   const groupId = typeof body.groupId === 'string' ? body.groupId.trim() : null
   if (!groupId) return NextResponse.json({ error: 'groupId obrigatório' }, { status: 422 })
 
-  // Valida o grupo via Evolution API (só se estiver configurada)
-  let groupName: string | null = null
-  const evolutionConfigured = !!(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY)
+  // Busca agência
+  const { data: agencyUser } = await supabase
+    .from('agency_users').select('agency_id').eq('user_id', user.id).single()
 
-  if (evolutionConfigured) {
+  // Valida o grupo via Evolution API da agência (se configurada)
+  let groupName: string | null = null
+  const evolutionConfig = agencyUser
+    ? await getAgencyEvolutionConfig(supabase, agencyUser.agency_id)
+    : null
+
+  if (evolutionConfig) {
     try {
-      const group = await validateGroup(groupId)
+      const group = await validateGroup(groupId, evolutionConfig)
       groupName = group.subject
     } catch (err) {
       const msg = toErrorMsg(err)
       return NextResponse.json({ error: `Grupo inválido: ${msg}` }, { status: 422 })
     }
   }
-  // Se a API não está configurada, salva o group_id sem validar (modo dev)
+  // Se a Evolution não está configurada, salva sem validar (modo dev)
 
   // Salva o group_id no cliente
   const { error } = await supabase
@@ -95,7 +102,7 @@ export async function POST(
     connected: true,
     groupId,
     groupName,
-    validated: evolutionConfigured,
+    validated: !!evolutionConfig,
   })
 }
 

@@ -21,6 +21,8 @@ import { runAgenteFinanceiro } from './financeiro'
 import { runAgenteNps } from './nps'
 import { runAgenteProximidade } from './proximidade'
 import { runAgenteDiagnostico } from './diagnostico'
+import { getAgencyEvolutionConfig } from '@/lib/evolution/agency-config'
+import { fetchGroupMessages, extractMessageText } from '@/lib/evolution/client'
 import {
   calcWeightedScore,
   calcChurnRisk,
@@ -204,19 +206,61 @@ export async function runAnalysis(input: OrchestratorInput): Promise<Orchestrato
   agentsLog.resultado  = resResult
   agentsLog.nps        = npsResult
 
-  // Proximidade (pode demorar mais — rodamos depois dos outros)
-  // WhatsApp é OPCIONAL: se não conectado ou se a API falhar, o pilar
-  // retorna score null e é excluído do cálculo ponderado automaticamente.
+  // ── Proximidade: busca mensagens do banco (webhook) ou API live ──
+  // WhatsApp é OPCIONAL: se não conectado, pilar retorna score null
+  // e é excluído do cálculo ponderado automaticamente.
   let proxResult: AgentResult
   try {
+    let messages: { content: string; senderName: string | null; timestamp: number; fromMe: boolean }[] = []
+
+    if (groupId) {
+      const cutoff = Math.floor(Date.now() / 1000) - 60 * 86400
+
+      // 1. Tenta banco local (webhook já populou)
+      const { data: dbMsgs } = await supabase
+        .from('whatsapp_messages')
+        .select('content, sender_name, timestamp_unix, from_me')
+        .eq('group_id', groupId.includes('@g.us') ? groupId : `${groupId}@g.us`)
+        .eq('agency_id', agencyId)
+        .gte('timestamp_unix', cutoff)
+        .order('timestamp_unix', { ascending: true })
+        .limit(1000)
+
+      if (dbMsgs && dbMsgs.length > 0) {
+        messages = dbMsgs.map(m => ({
+          content:    String(m.content),
+          senderName: m.sender_name ? String(m.sender_name) : null,
+          timestamp:  Number(m.timestamp_unix),
+          fromMe:     Boolean(m.from_me),
+        }))
+      } else {
+        // 2. Fallback: busca ao vivo na Evolution API
+        const evolutionConfig = await getAgencyEvolutionConfig(supabase, agencyId)
+        if (evolutionConfig) {
+          const rawMsgs = await fetchGroupMessages(groupId, evolutionConfig, 60, 1000)
+          messages = rawMsgs.flatMap(m => {
+            const text = extractMessageText(m)
+            if (!text?.trim()) return []
+            return [{
+              content:    text.trim(),
+              senderName: m.pushName ?? null,
+              timestamp:  m.messageTimestamp,
+              fromMe:     m.key.fromMe,
+            }]
+          })
+        }
+      }
+    }
+
     proxResult = await runAgenteProximidade({
       clientId,
       groupId,
-      days:      60,
-      openaiKey: openaiKey ?? undefined,
+      messages,   // passa as mensagens já coletadas
+      days:       60,
+      openaiKey:  openaiKey ?? undefined,
     })
   } catch (err) {
-    console.error('[orchestrator] runAgenteProximidade lançou exceção:', err)
+    console.error('[orchestrator] Proximidade exception:', err)
     proxResult = {
       agent:   'proximidade',
       score:   null,

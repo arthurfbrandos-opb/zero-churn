@@ -1222,6 +1222,152 @@ function ApiKeyField({ label, placeholder }: { label: string; placeholder: strin
   )
 }
 
+// ─────────────────────────────────────────────────────────────────
+// CARD: Evolution API (WhatsApp)
+// ─────────────────────────────────────────────────────────────────
+
+function EvolutionIntegCard() {
+  const [url,          setUrl]          = useState('')
+  const [apiKey,       setApiKey]       = useState('')
+  const [instanceName, setInstanceName] = useState('')
+  const [showKey,      setShowKey]      = useState(false)
+  const [saving,       setSaving]       = useState(false)
+  const [status,       setStatus]       = useState<'idle' | 'active' | 'error'>('idle')
+  const [msg,          setMsg]          = useState('')
+
+  useEffect(() => {
+    fetch('/api/agency/integrations')
+      .then(r => r.json())
+      .then(d => {
+        const ev = (d.integrations ?? []).find((i: { type: string; status: string }) => i.type === 'evolution_api')
+        if (ev) setStatus(ev.status === 'active' ? 'active' : 'error')
+      })
+      .catch(() => {})
+  }, [])
+
+  async function handleSave() {
+    if (!url.trim() || !apiKey.trim() || !instanceName.trim()) {
+      setMsg('Preencha URL, API Key e nome da instância')
+      return
+    }
+    setSaving(true)
+    setMsg('')
+    try {
+      const res = await fetch('/api/agency/integrations', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          type:        'evolution_api',
+          credentials: {
+            url:           url.trim().replace(/\/$/, ''),
+            api_key:       apiKey.trim(),
+            instance_name: instanceName.trim(),
+          },
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setMsg(data.error ?? 'Erro ao salvar')
+        setStatus('error')
+      } else {
+        setStatus('active')
+        setMsg('✓ Evolution API conectada e webhook registrado automaticamente')
+        setUrl(''); setApiKey(''); setInstanceName('')
+      }
+    } catch {
+      setMsg('Erro de rede')
+      setStatus('error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <IntegCard
+      icon={MessageCircle}
+      name="WhatsApp (Evolution API)"
+      color="bg-emerald-500/15 text-emerald-400"
+      description="Análise de sentimento e proximidade via grupos do WhatsApp"
+      status={status === 'active' ? 'connected' : status === 'error' ? 'error' : 'disconnected'}>
+
+      {status === 'active' ? (
+        <div className="space-y-2 pt-1">
+          <p className="text-emerald-400 text-xs flex items-center gap-1.5">
+            <Check className="w-3.5 h-3.5" /> Instância conectada — webhook registrado
+          </p>
+          <p className="text-zinc-600 text-xs">
+            O número estará monitorando os grupos assim que for adicionado a eles.
+            Configure o grupo em cada cliente em <span className="text-zinc-400">Clientes → Integrações</span>.
+          </p>
+          <Button size="sm" variant="outline"
+            onClick={() => setStatus('idle')}
+            className="border-zinc-700 text-zinc-500 hover:text-zinc-300 text-xs gap-1">
+            <RefreshCw className="w-3 h-3" /> Reconfigurar
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-3 pt-1">
+          <div className="bg-zinc-800/60 rounded-lg p-3 text-xs text-zinc-500 space-y-1">
+            <p className="text-zinc-400 font-medium">Como funciona:</p>
+            <p>1. Hospede a Evolution API (ou use um provedor SaaS)</p>
+            <p>2. Crie uma instância e escaneie o QR code com o número dedicado</p>
+            <p>3. Preencha os dados abaixo — o webhook é registrado automaticamente</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-zinc-400 text-xs">URL da Evolution API</Label>
+            <Input value={url} onChange={e => setUrl(e.target.value)}
+              placeholder="https://evolution.seudominio.com"
+              className={cn(inputCls, 'text-sm')} />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-zinc-400 text-xs">API Key global</Label>
+            <div className="relative">
+              <Input
+                type={showKey ? 'text' : 'password'}
+                value={apiKey} onChange={e => setApiKey(e.target.value)}
+                placeholder="sua-api-key-global"
+                className={cn(inputCls, 'pr-9 text-sm')}
+              />
+              <button onClick={() => setShowKey(p => !p)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300">
+                {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-zinc-400 text-xs">Nome da instância</Label>
+            <Input value={instanceName} onChange={e => setInstanceName(e.target.value)}
+              placeholder="agencia-principal"
+              className={cn(inputCls, 'text-sm')} />
+            <p className="text-zinc-600 text-xs">
+              O mesmo nome usado ao criar a instância no painel da Evolution API.
+            </p>
+          </div>
+
+          {msg && (
+            <p className={cn('text-xs flex items-center gap-1',
+              msg.startsWith('✓') ? 'text-emerald-400' : 'text-red-400')}>
+              {msg.startsWith('✓') ? <Check className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
+              {msg}
+            </p>
+          )}
+
+          <Button size="sm" onClick={handleSave}
+            disabled={saving || !url || !apiKey || !instanceName}
+            className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1.5 w-full disabled:opacity-50">
+            {saving
+              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Conectando e registrando webhook...</>
+              : <><Check className="w-3.5 h-3.5" /> Conectar e registrar webhook</>}
+          </Button>
+        </div>
+      )}
+    </IntegCard>
+  )
+}
+
 function AsaasIntegCard() {
   const [apiKey, setApiKey]   = useState('')
   const [showKey, setShowKey] = useState(false)
@@ -1684,11 +1830,8 @@ function IntegracoesSection() {
       {/* Asaas — funcional */}
       <AsaasIntegCard />
 
-      {/* WhatsApp — em breve */}
-      <IntegCard icon={MessageCircle} name="WhatsApp (Evolution API)" color="bg-emerald-500/15 text-emerald-400"
-        description="Análise de sentimento e proximidade via grupos do WhatsApp" status="coming">
-        <p className="text-zinc-600 text-xs pt-1">Em breve — Sprint 2</p>
-      </IntegCard>
+      {/* WhatsApp — Evolution API */}
+      <EvolutionIntegCard />
 
       {/* Dom Pagamentos — funcional */}
       <DomIntegCard />

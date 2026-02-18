@@ -2,14 +2,13 @@ import { toErrorMsg } from '@/lib/utils'
 /**
  * POST /api/whatsapp/validate-group
  *
- * Valida se um group_id existe e a instância Evolution tem acesso.
+ * Valida se um group_id existe e a instância Evolution da agência tem acesso.
  * Body: { groupId: string }
- *
- * Autenticada — usa RLS via cookie de sessão.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { validateGroup } from '@/lib/evolution/client'
+import { getAgencyEvolutionConfig } from '@/lib/evolution/agency-config'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -22,16 +21,22 @@ export async function POST(req: NextRequest) {
   const groupId = typeof body.groupId === 'string' ? body.groupId.trim() : null
   if (!groupId) return NextResponse.json({ error: 'groupId obrigatório' }, { status: 422 })
 
-  // Verifica se a Evolution API está configurada
-  if (!process.env.EVOLUTION_API_URL) {
+  // Busca config Evolution da agência
+  const { data: agencyUser } = await supabase
+    .from('agency_users').select('agency_id').eq('user_id', user.id).single()
+
+  if (!agencyUser) return NextResponse.json({ error: 'Agência não encontrada' }, { status: 404 })
+
+  const config = await getAgencyEvolutionConfig(supabase, agencyUser.agency_id)
+  if (!config) {
     return NextResponse.json({
-      error: 'WhatsApp não configurado',
-      details: 'EVOLUTION_API_URL não está definido. Configure nas variáveis de ambiente.',
+      error:   'WhatsApp não configurado',
+      details: 'Acesse Configurações → Integrações → WhatsApp para configurar.',
     }, { status: 503 })
   }
 
   try {
-    const group = await validateGroup(groupId)
+    const group = await validateGroup(groupId, config)
     return NextResponse.json({
       valid:        true,
       groupId:      group.id,

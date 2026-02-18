@@ -1,27 +1,26 @@
 /**
- * Evolution API — cliente HTTP
+ * Evolution API — cliente HTTP (per-agency config)
  *
- * Evolution API v2 é auto-hospedada.
- * Variáveis de ambiente necessárias:
- *   EVOLUTION_API_URL   = https://evolution.seudominio.com
- *   EVOLUTION_API_KEY   = sua_api_key_global
- *   EVOLUTION_INSTANCE  = nome_da_instancia_ativa
+ * Cada agência configura sua própria instância via Configurações → Integrações.
+ * As credenciais ficam em agency_integrations (type = 'evolution_api'), criptografadas.
  *
  * Docs: https://doc.evolution-api.com
  */
 
-const BASE_URL  = process.env.EVOLUTION_API_URL  ?? ''
-const API_KEY   = process.env.EVOLUTION_API_KEY   ?? ''
-const INSTANCE  = process.env.EVOLUTION_INSTANCE  ?? ''
-
 // ── Tipos ─────────────────────────────────────────────────────────
+
+export interface EvolutionConfig {
+  url:          string   // https://evolution.seudominio.com
+  apiKey:       string   // API key global da instância
+  instanceName: string   // nome da instância ativa
+}
 
 export interface EvolutionMessage {
   key: {
-    remoteJid: string   // e.g. "120363xxxxx@g.us" para grupos
-    fromMe:    boolean
-    id:        string
-    participant?: string  // remetente dentro do grupo
+    remoteJid:    string        // "120363xxxxx@g.us" para grupos
+    fromMe:       boolean
+    id:           string
+    participant?: string        // remetente dentro do grupo
   }
   message?: {
     conversation?:         string
@@ -30,122 +29,176 @@ export interface EvolutionMessage {
     documentMessage?:      { title?: string }
     audioMessage?:         Record<string, unknown>
   }
-  messageType:    string  // "conversation" | "extendedTextMessage" | ...
-  messageTimestamp: number // unix timestamp em segundos
-  pushName?: string       // nome de exibição do remetente
+  messageType:       string    // "conversation" | "extendedTextMessage" | ...
+  messageTimestamp:  number    // unix timestamp em segundos
+  pushName?:         string    // nome de exibição do remetente
 }
 
 export interface EvolutionGroupInfo {
-  id:          string   // "120363xxxxx@g.us"
-  subject:     string   // nome do grupo
-  creation:    number   // unix timestamp
-  owner?:      string
-  desc?:       string
+  id:           string   // "120363xxxxx@g.us"
+  subject:      string   // nome do grupo
+  creation:     number   // unix timestamp
+  owner?:       string
+  desc?:        string
   participants: { id: string; admin?: string }[]
+}
+
+export interface EvolutionInstanceStatus {
+  connected: boolean
+  state:     string       // "open" | "close" | "connecting"
+  qrcode?:   string       // base64 do QR quando desconectado
 }
 
 // ── Helper de request ─────────────────────────────────────────────
 
-async function evolutionGet<T>(path: string): Promise<T> {
-  if (!BASE_URL || !API_KEY || !INSTANCE) {
-    throw new Error('Evolution API não configurada (EVOLUTION_API_URL / EVOLUTION_API_KEY / EVOLUTION_INSTANCE)')
+async function evolutionRequest<T>(
+  config:  EvolutionConfig,
+  method:  'GET' | 'POST' | 'PUT' | 'DELETE',
+  path:    string,
+  body?:   unknown,
+): Promise<T> {
+  const { url, apiKey, instanceName: _ } = config
+
+  if (!url || !apiKey) {
+    throw new Error('Evolution API não configurada. Acesse Configurações → Integrações para configurar.')
   }
-  const url = `${BASE_URL}${path}`
-  const res = await fetch(url, {
-    headers: { apikey: API_KEY, 'Content-Type': 'application/json' },
-    next: { revalidate: 0 },
+
+  const res = await fetch(`${url.replace(/\/$/, '')}${path}`, {
+    method,
+    headers: {
+      apikey:           apiKey,
+      'Content-Type':   'application/json',
+    },
+    body:   body ? JSON.stringify(body) : undefined,
+    next:   { revalidate: 0 },
   })
+
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error(`Evolution API ${res.status}: ${JSON.stringify(body).slice(0, 200)}`)
+    const err = await res.json().catch(() => ({}))
+    throw new Error(`Evolution API ${res.status}: ${JSON.stringify(err).slice(0, 300)}`)
   }
+
   return res.json()
 }
 
 // ── Funções públicas ──────────────────────────────────────────────
 
 /**
- * Valida se o group_id existe e a instância tem acesso a ele.
- * Retorna as informações do grupo ou lança erro.
+ * Verifica se a instância está conectada (online).
  */
-export async function validateGroup(groupId: string): Promise<EvolutionGroupInfo> {
-  // Normaliza: aceita "120363xxx@g.us" ou só o número
-  const jid = groupId.includes('@g.us') ? groupId : `${groupId}@g.us`
-
-  // A Evolution API v2 usa query param para filtrar por jid
-  const data = await evolutionGet<{ groups: EvolutionGroupInfo[] } | EvolutionGroupInfo[]>(
-    `/group/findGroupInfos/${INSTANCE}?groupJid=${encodeURIComponent(jid)}`
+export async function checkInstanceStatus(config: EvolutionConfig): Promise<EvolutionInstanceStatus> {
+  const data = await evolutionRequest<{ instance: { state: string } }>(
+    config, 'GET',
+    `/instance/connectionState/${config.instanceName}`,
   )
+  const state = data.instance?.state ?? 'unknown'
+  return { connected: state === 'open', state }
+}
 
-  // Pode retornar array ou objeto com .groups
+/**
+ * Lista todos os grupos que a instância participa.
+ */
+export async function listGroups(config: EvolutionConfig): Promise<EvolutionGroupInfo[]> {
+  const data = await evolutionRequest<EvolutionGroupInfo[] | { groups: EvolutionGroupInfo[] }>(
+    config, 'GET',
+    `/group/findGroupInfos/${config.instanceName}`,
+  )
+  return Array.isArray(data) ? data : (data as { groups: EvolutionGroupInfo[] }).groups ?? []
+}
+
+/**
+ * Valida se um group_id existe e a instância tem acesso.
+ */
+export async function validateGroup(groupId: string, config: EvolutionConfig): Promise<EvolutionGroupInfo> {
+  const jid  = groupId.includes('@g.us') ? groupId : `${groupId}@g.us`
+  const data = await evolutionRequest<EvolutionGroupInfo[] | { groups: EvolutionGroupInfo[] }>(
+    config, 'GET',
+    `/group/findGroupInfos/${config.instanceName}?groupJid=${encodeURIComponent(jid)}`,
+  )
   const groups = Array.isArray(data) ? data : (data as { groups: EvolutionGroupInfo[] }).groups ?? []
   const group  = groups.find(g => g.id === jid || g.id === groupId)
 
   if (!group) {
-    throw new Error(`Grupo "${groupId}" não encontrado. Verifique o ID e se o número tem acesso a este grupo.`)
+    throw new Error(`Grupo "${groupId}" não encontrado. Verifique se o número está neste grupo.`)
   }
-
   return group
 }
 
 /**
+ * Registra (ou atualiza) o webhook da instância para receber mensagens.
+ * Zero Churn receberá events de MESSAGES_UPSERT.
+ */
+export async function registerWebhook(config: EvolutionConfig, webhookUrl: string): Promise<void> {
+  await evolutionRequest(
+    config, 'POST',
+    `/webhook/set/${config.instanceName}`,
+    {
+      webhook: {
+        enabled:    true,
+        url:        webhookUrl,
+        webhookByEvents: false,
+        webhookBase64:   false,
+        events: [
+          'MESSAGES_UPSERT',
+          'CONNECTION_UPDATE',
+        ],
+      },
+    },
+  )
+}
+
+/**
  * Busca mensagens de texto de um grupo num período de dias.
- * Faz paginação automática até atingir o limite ou sair do período.
+ * Usado como FALLBACK quando não há mensagens no banco local.
  *
  * @param groupId  ID do grupo (com ou sem @g.us)
- * @param days     Quantos dias retroativos buscar (padrão: 60)
+ * @param config   Credenciais da Evolution API
+ * @param days     Quantos dias retroativos (padrão: 60)
  * @param maxMsgs  Limite de mensagens (padrão: 1000)
  */
 export async function fetchGroupMessages(
   groupId:  string,
+  config:   EvolutionConfig,
   days    = 60,
   maxMsgs = 1000,
 ): Promise<EvolutionMessage[]> {
-  const jid = groupId.includes('@g.us') ? groupId : `${groupId}@g.us`
+  const jid    = groupId.includes('@g.us') ? groupId : `${groupId}@g.us`
+  const cutoff = Math.floor(Date.now() / 1000) - days * 86400
+  const msgs:  EvolutionMessage[] = []
+  let   page = 1
+  const limit = 100
 
-  const cutoff    = Math.floor(Date.now() / 1000) - days * 86400
-  const allMsgs:  EvolutionMessage[] = []
-  let   page    = 1
-  const limit   = 100
-
-  while (allMsgs.length < maxMsgs) {
-    let data: EvolutionMessage[] | { messages: { records: EvolutionMessage[] }; total: number }
+  while (msgs.length < maxMsgs) {
+    let data: EvolutionMessage[] | { messages: { records: EvolutionMessage[] } }
 
     try {
-      data = await evolutionGet(
-        `/chat/findMessages/${INSTANCE}?where[key.remoteJid]=${encodeURIComponent(jid)}&limit=${limit}&page=${page}`
+      data = await evolutionRequest<typeof data>(
+        config, 'GET',
+        `/chat/findMessages/${config.instanceName}?where[key.remoteJid]=${encodeURIComponent(jid)}&limit=${limit}&page=${page}`,
       )
-    } catch (err) {
-      // Se falhar na paginação (ex: não tem mais mensagens), para
+    } catch {
       if (page > 1) break
-      throw err
+      throw new Error(`Não foi possível buscar mensagens do grupo ${jid}`)
     }
 
-    // Normaliza formato da resposta (pode variar por versão da Evolution API)
-    let records: EvolutionMessage[]
-    if (Array.isArray(data)) {
-      records = data
-    } else if ((data as { messages?: { records: EvolutionMessage[] } }).messages?.records) {
-      records = (data as { messages: { records: EvolutionMessage[] } }).messages.records
-    } else {
-      records = []
-    }
+    const records: EvolutionMessage[] = Array.isArray(data)
+      ? data
+      : (data as { messages?: { records: EvolutionMessage[] } }).messages?.records ?? []
 
     if (records.length === 0) break
 
-    // Filtra e para se saiu do período
     let hitCutoff = false
     for (const msg of records) {
       if (msg.messageTimestamp < cutoff) { hitCutoff = true; break }
-      allMsgs.push(msg)
-      if (allMsgs.length >= maxMsgs) break
+      msgs.push(msg)
+      if (msgs.length >= maxMsgs) break
     }
 
-    if (hitCutoff || allMsgs.length >= maxMsgs || records.length < limit) break
+    if (hitCutoff || msgs.length >= maxMsgs || records.length < limit) break
     page++
   }
 
-  return allMsgs
+  return msgs
 }
 
 /**
@@ -160,15 +213,4 @@ export function extractMessageText(msg: EvolutionMessage): string | null {
     m.imageMessage?.caption ??
     null
   )
-}
-
-/**
- * Verifica se a instância está conectada (online).
- */
-export async function checkInstanceStatus(): Promise<{ connected: boolean; state: string }> {
-  const data = await evolutionGet<{ instance: { state: string } }>(
-    `/instance/connectionState/${INSTANCE}`
-  )
-  const state = data.instance?.state ?? 'unknown'
-  return { connected: state === 'open', state }
 }
