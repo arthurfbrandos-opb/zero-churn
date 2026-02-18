@@ -73,22 +73,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Nome e tipo de cliente são obrigatórios' }, { status: 400 })
     }
 
-    // #4 — Verificar CNPJ duplicado dentro da mesma agência
-    if (cnpj) {
-      const cnpjLimpo = String(cnpj).replace(/\D/g, '')
-      if (cnpjLimpo.length >= 11) {
-        const { data: dup } = await supabase
-          .from('clients')
-          .select('id, name')
-          .eq('agency_id', agencyUser.agency_id)
-          .eq('cnpj', cnpjLimpo)
-          .maybeSingle()
-        if (dup) {
-          return NextResponse.json(
-            { error: `Já existe um cliente com este CNPJ: ${dup.name}`, existingId: dup.id },
-            { status: 409 }
-          )
-        }
+    // Sempre salva CNPJ limpo (sem máscara) para dedup confiável
+    const cnpjLimpo = cnpj ? String(cnpj).replace(/\D/g, '') : null
+
+    if (cnpjLimpo && cnpjLimpo.length >= 11) {
+      const { data: dup } = await supabase
+        .from('clients')
+        .select('id, name')
+        .eq('agency_id', agencyUser.agency_id)
+        .eq('cnpj', cnpjLimpo)
+        .maybeSingle()
+      if (dup) {
+        return NextResponse.json(
+          { error: `Já existe um cliente com este CNPJ: ${dup.name}`, existingId: dup.id },
+          { status: 409 }
+        )
       }
     }
 
@@ -96,7 +95,9 @@ export async function POST(request: NextRequest) {
       .from('clients')
       .insert({
         agency_id: agencyUser.agency_id,
-        name, nome_resumido, razao_social, cnpj, segment,
+        name, nome_resumido, razao_social,
+        cnpj: cnpjLimpo || null,   // sempre sem máscara
+        segment,
         nome_decisor, email, telefone, email_financeiro,
         cep, logradouro, numero, complemento, bairro, cidade, estado,
         service_id, entregaveis_incluidos, bonus_incluidos,

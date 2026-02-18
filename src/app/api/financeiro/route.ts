@@ -1,7 +1,8 @@
 /**
  * GET /api/financeiro?mes=2026-02
  *
- * Agrega dados financeiros de TODOS os clientes — Asaas + Dom Pagamentos.
+ * Agrega dados financeiros — Asaas + Dom Pagamentos.
+ * Qualquer uma das fontes pode estar ausente — a outra ainda funciona.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
@@ -14,10 +15,12 @@ import {
   domStatusToInternal,
 } from '@/lib/dom/client'
 
-const BASE_URL = process.env.ASAAS_API_URL ?? 'https://api.asaas.com/v3'
+const ASAAS_BASE = process.env.ASAAS_API_URL ?? 'https://api.asaas.com/v3'
+
+// ── Helpers Asaas ─────────────────────────────────────────────────
 
 async function asaasGet<T>(path: string, apiKey: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await fetch(`${ASAAS_BASE}${path}`, {
     headers: { 'access_token': apiKey, 'Content-Type': 'application/json' },
     next: { revalidate: 0 },
   })
@@ -29,25 +32,17 @@ async function asaasGet<T>(path: string, apiKey: string): Promise<T> {
 }
 
 async function fetchPaymentsByCustomer(
-  apiKey: string,
-  customerId: string,
-  dataInicio: string,
-  dataFim: string,
-  hojeStr: string,
+  apiKey: string, customerId: string,
+  dataInicio: string, dataFim: string, hojeStr: string,
 ): Promise<AsaasPayment[]> {
   const queries = [
-    // Recebidos no período (por paymentDate)
     `/payments?customer=${customerId}&paymentDate[ge]=${dataInicio}&paymentDate[le]=${dataFim}&status=RECEIVED,CONFIRMED,RECEIVED_IN_CASH&limit=100`,
-    // Pendentes com vencimento no período
     `/payments?customer=${customerId}&dueDate[ge]=${dataInicio}&dueDate[le]=${dataFim}&status=PENDING&limit=100`,
-    // Em atraso (vencidos até hoje)
     `/payments?customer=${customerId}&dueDate[le]=${hojeStr}&status=OVERDUE&limit=100`,
   ]
-
   const results = await Promise.allSettled(
     queries.map(q => asaasGet<AsaasListResponse<AsaasPayment>>(q, apiKey))
   )
-
   const seen = new Set<string>()
   const all: AsaasPayment[] = []
   for (const r of results) {
@@ -60,6 +55,85 @@ async function fetchPaymentsByCustomer(
   return all
 }
 
+// ── Tipos compartilhados ──────────────────────────────────────────
+
+type CobrancaItem = {
+  id:           string
+  clientId:     string
+  clientName:   string
+  valorTotal:   number    // bruto
+  valorLiquido: number    // líquido (após taxas)
+  vencimento:   string
+  pagamento:    string | null
+  status:       string
+  tipo:         string
+  descricao:    string | null
+  invoiceUrl:   string | null
+  fonte:        'asaas' | 'dom'
+  contaLabel:   string
+  parcelas?:    string | null
+  cartao?:      string | null
+  domCliente?:  {
+    nome: string; documento: string; email: string
+    telefone: string | null; produto: string | null
+  } | null
+}
+
+type CustomerSemIdent = {
+  customerId:   string
+  customerName: string
+  cpfCnpj:      string | null
+  email:        string | null
+  totalValor:   number
+  pagamentos:   CobrancaItem[]
+  fonte:        'asaas' | 'dom'
+}
+
+type ClienteGroup = {
+  clientId:   string
+  clientName: string
+  recebido:   number
+  previsto:   number
+  emAtraso:   number
+  cobranças:  CobrancaItem[]
+}
+
+type Resumo = {
+  recebido:        number; recebidoBruto:  number
+  previsto:        number; previstobruto:  number
+  emAtraso:        number; emAtrasoBruto:  number
+  semIdentificacao: number
+}
+
+const STATUS_RECEBIDO = new Set(['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH'])
+const STATUS_PREVISTO  = new Set(['PENDING'])
+const STATUS_ATRASO    = new Set(['OVERDUE'])
+
+function acumularResumo(r: Resumo, status: string, liq: number, bruto: number) {
+  if (STATUS_RECEBIDO.has(status)) { r.recebido += liq; r.recebidoBruto += bruto }
+  else if (STATUS_PREVISTO.has(status)) { r.previsto += liq; r.previstobruto += bruto }
+  else if (STATUS_ATRASO.has(status))   { r.emAtraso += liq; r.emAtrasoBruto += bruto }
+}
+
+function addToGrupo(
+  porCliente: Map<string, ClienteGroup>,
+  key: string, clientId: string, clientName: string,
+  cobranca: CobrancaItem
+) {
+  // Guard: nunca criar grupo com chave vazia (causaria merge indevido)
+  if (!key) return
+  if (!porCliente.has(key)) {
+    porCliente.set(key, { clientId, clientName, recebido: 0, previsto: 0, emAtraso: 0, cobranças: [] })
+  }
+  const g = porCliente.get(key)!
+  g.cobranças.push(cobranca)
+  if (STATUS_RECEBIDO.has(cobranca.status)) g.recebido      += cobranca.valorLiquido
+  else if (STATUS_PREVISTO.has(cobranca.status)) g.previsto += cobranca.valorLiquido
+  else if (STATUS_ATRASO.has(cobranca.status))   g.emAtraso += cobranca.valorLiquido
+}
+
+// ── Handler ───────────────────────────────────────────────────────
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -67,287 +141,190 @@ export async function GET(request: NextRequest) {
     if (authErr || !user) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
 
     // Período
-    const mesParam  = request.nextUrl.searchParams.get('mes')
-    const hoje      = new Date()
-    const mes       = mesParam ?? `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
+    const mesParam   = request.nextUrl.searchParams.get('mes')
+    const hoje       = new Date()
+    const mes        = mesParam ?? `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
     const [ano, mesNum] = mes.split('-').map(Number)
     const dataInicio = `${mes}-01`
     const dataFim    = new Date(ano, mesNum, 0).toISOString().slice(0, 10)
     const hojeStr    = hoje.toISOString().slice(0, 10)
 
-    // ── 1. API key Asaas da agência ───────────────────────────────
-    // Mesma pattern das outras rotas: sem filtrar agency_id (RLS isola)
-    // agency_integrations NÃO tem coluna label
-    const { data: agencyInteg } = await supabase
+    const resumo: Resumo = {
+      recebido: 0, recebidoBruto: 0,
+      previsto: 0, previstobruto: 0,
+      emAtraso: 0, emAtrasoBruto: 0,
+      semIdentificacao: 0,
+    }
+    const porCliente     = new Map<string, ClienteGroup>()
+    const semIdentificacao: CustomerSemIdent[] = []
+    const fontes: string[] = []
+
+    // ── Integração Asaas da agência ───────────────────────────────
+    const { data: asaasInteg } = await supabase
       .from('agency_integrations')
       .select('encrypted_key, status')
       .eq('type', 'asaas')
       .maybeSingle()
 
-    if (!agencyInteg?.encrypted_key || agencyInteg.status !== 'active') {
-      return NextResponse.json({
-        resumo:              { recebido: 0, previsto: 0, emAtraso: 0, semIdentificacao: 0 },
-        cobrancasPorCliente: [],
-        semIdentificacao:    [],
-        periodo:             { inicio: dataInicio, fim: dataFim, mes },
-        fontes:              [],
-        debug:               { motivo: 'sem_integracao_asaas', status: agencyInteg?.status ?? 'não encontrada' },
-      })
-    }
+    const asaasAtivo = !!(asaasInteg?.encrypted_key && asaasInteg.status === 'active')
 
-    const { api_key: apiKey } = await decrypt<{ api_key: string }>(agencyInteg.encrypted_key)
-
-    // ── 2. Todas as integrações Asaas dos clientes ────────────────
-    // Sem filtrar por status — inclui connected, error, etc.
-    // credentials é JSONB direto (não criptografado)
-    const { data: clientIntegs, error: ciErr } = await supabase
-      .from('client_integrations')
-      .select('id, credentials, label, client_id')
-      .eq('type', 'asaas')
-
-    if (ciErr) throw ciErr
-
-    if (!clientIntegs?.length) {
-      return NextResponse.json({
-        resumo:              { recebido: 0, previsto: 0, emAtraso: 0, semIdentificacao: 0 },
-        cobrancasPorCliente: [],
-        semIdentificacao:    [],
-        periodo:             { inicio: dataInicio, fim: dataFim, mes },
-        fontes:              ['Asaas'],
-        debug:               { motivo: 'nenhum_cliente_com_asaas' },
-      })
-    }
-
-    // ── 3. Busca dados dos clientes no banco ──────────────────────
-    const clientIds = [...new Set(clientIntegs.map(ci => ci.client_id).filter(Boolean))]
-    const { data: clientes } = await supabase
-      .from('clients')
-      .select('id, name, nome_resumido')
-      .in('id', clientIds)
-
-    const clienteMap = new Map(
-      (clientes ?? []).map(c => [c.id, c.nome_resumido ?? c.name])
-    )
-
-    // ── 4. Para cada customer_id, busca pagamentos no Asaas ───────
-    type CobrancaItem = {
-      id: string; clientId: string; clientName: string
-      valorTotal:   number
-      valorLiquido: number
-      vencimento: string; pagamento: string | null
-      status: string; tipo: string; descricao: string | null
-      invoiceUrl: string | null; fonte: string; contaLabel: string
-      parcelas?: string | null
-      cartao?:   string | null
-      domCliente?: { nome: string; documento: string; email: string; telefone: string | null; produto: string | null } | null
-    }
-
-    const todasCobranças: CobrancaItem[] = []
-    const customerIdsConhecidos = new Set<string>()
-
-    await Promise.all(clientIntegs.map(async (ci) => {
-      const creds      = ci.credentials as { customer_id?: string } | null
-      const customerId = creds?.customer_id
-      if (!customerId) return
-
-      customerIdsConhecidos.add(customerId)
-
-      const clientName = clienteMap.get(ci.client_id) ?? 'Cliente desconhecido'
-      const contaLabel = ci.label ?? 'Asaas'
-
+    if (asaasAtivo) {
       try {
-        const payments = await fetchPaymentsByCustomer(apiKey, customerId, dataInicio, dataFim, hojeStr)
-        for (const p of payments) {
-          // netValue = valor líquido Asaas; se null/0, usa value (sem desconto)
-          const valorLiquido = (p.netValue && p.netValue > 0) ? p.netValue : p.value
-          todasCobranças.push({
-            id:           p.id,
-            clientId:     ci.client_id,
-            clientName,
-            valorTotal:   p.value,
-            valorLiquido,
-            vencimento:   p.dueDate,
-            pagamento:    p.paymentDate ?? null,
-            status:       p.status,
-            tipo:         p.billingType,
-            descricao:    p.description ?? null,
-            invoiceUrl:   p.invoiceUrl ?? null,
-            fonte:        'asaas',
-            contaLabel,
-          })
-        }
-      } catch { /* cliente com erro no Asaas — ignora */ }
-    }))
+        const { api_key: apiKey } = await decrypt<{ api_key: string }>(asaasInteg!.encrypted_key)
+        fontes.push('Asaas')
 
-    // ── 5. Detecta recebimentos sem identificação ─────────────────
-    type CustomerSemIdent = {
-      customerId:   string
-      customerName: string
-      cpfCnpj:      string | null
-      email:        string | null
-      totalValor:   number
-      pagamentos:   CobrancaItem[]
-      fonte:        'asaas' | 'dom'   // ← origem da transação
-    }
+        // ── Client integrations Asaas ─────────────────────────────
+        const { data: clientIntegs } = await supabase
+          .from('client_integrations')
+          .select('id, credentials, label, client_id')
+          .eq('type', 'asaas')
 
-    let semIdentificacao: CustomerSemIdent[] = []
-    try {
-      const allReceived = await asaasGet<AsaasListResponse<AsaasPayment>>(
-        `/payments?paymentDate[ge]=${dataInicio}&paymentDate[le]=${dataFim}&status=RECEIVED,CONFIRMED,RECEIVED_IN_CASH&limit=100`,
-        apiKey
-      )
+        // Mapa de nomes
+        const clientIds = [...new Set((clientIntegs ?? []).map(ci => ci.client_id).filter(Boolean))]
+        const { data: clientes } = clientIds.length > 0
+          ? await supabase.from('clients').select('id, name, nome_resumido').in('id', clientIds)
+          : { data: [] }
+        const clienteMap = new Map((clientes ?? []).map(c => [c.id, c.nome_resumido ?? c.name]))
 
-      // Filtra apenas os sem cadastro e agrupa por customer
-      const semIdentMap = new Map<string, { payments: AsaasPayment[] }>()
-      for (const p of allReceived.data) {
-        if (!customerIdsConhecidos.has(p.customer)) {
-          if (!semIdentMap.has(p.customer)) semIdentMap.set(p.customer, { payments: [] })
-          semIdentMap.get(p.customer)!.payments.push(p)
-        }
-      }
+        // Rastreia customer_ids para detectar sem-identificação
+        const customerIdsConhecidos = new Set<string>()
+        // Dedup: mesmo customer_id vinculado a 2 clientes → processa só uma vez
+        const customerIdVisto = new Set<string>()
 
-      // Busca detalhes de cada customer em paralelo (máx 10 para não sobrecarregar)
-      const customerIds = [...semIdentMap.keys()].slice(0, 20)
-      const customerDetails = await Promise.all(
-        customerIds.map(async id => {
+        await Promise.all((clientIntegs ?? []).map(async (ci) => {
+          const creds      = ci.credentials as { customer_id?: string } | null
+          const customerId = creds?.customer_id
+          if (!customerId) return
+          customerIdsConhecidos.add(customerId)
+
+          // BUG #4 fix: se mesmo customer_id já foi processado (ligado a outro cliente),
+          // registra no segundo cliente mas não busca pagamentos de novo (evita double count).
+          const jaProcessado = customerIdVisto.has(customerId)
+          customerIdVisto.add(customerId)
+          if (jaProcessado) return
+
+          const clientName = clienteMap.get(ci.client_id) ?? 'Cliente desconhecido'
+          const contaLabel = ci.label ?? 'Asaas'
+
           try {
-            return await asaasGet<{ id: string; name: string; cpfCnpj: string | null; email: string | null }>(
-              `/customers/${id}`, apiKey
-            )
-          } catch { return { id, name: 'Desconhecido', cpfCnpj: null, email: null } }
-        })
-      )
+            const payments = await fetchPaymentsByCustomer(apiKey, customerId, dataInicio, dataFim, hojeStr)
+            for (const p of payments) {
+              const valorLiquido = (p.netValue && p.netValue > 0) ? p.netValue : p.value
+              const cobranca: CobrancaItem = {
+                id:           p.id,
+                clientId:     ci.client_id,
+                clientName,
+                valorTotal:   p.value,
+                valorLiquido,
+                vencimento:   p.dueDate,
+                pagamento:    p.paymentDate ?? null,
+                status:       p.status,
+                tipo:         p.billingType,
+                descricao:    p.description ?? null,
+                invoiceUrl:   p.invoiceUrl ?? null,
+                fonte:        'asaas',
+                contaLabel,
+              }
+              addToGrupo(porCliente, ci.client_id, ci.client_id, clientName, cobranca)
+              acumularResumo(resumo, p.status, valorLiquido, p.value)
+            }
+          } catch { /* cliente com erro no Asaas — ignora */ }
+        }))
 
-      semIdentificacao = customerDetails.map(c => {
-        const group = semIdentMap.get(c.id)!
-        const pagamentos = group.payments.map(p => {
-          const liq = (p.netValue && p.netValue > 0) ? p.netValue : p.value
-          return {
-            id:           p.id,
-            clientId:     '',
-            clientName:   c.name,
-            valorTotal:   p.value,
-            valorLiquido: liq,
-            vencimento:   p.dueDate,
-            pagamento:    p.paymentDate ?? null,
-            status:       p.status,
-            tipo:         p.billingType,
-            descricao:    p.description ?? null,
-            invoiceUrl:   p.invoiceUrl ?? null,
-            fonte:        'asaas',
-            contaLabel:   'Asaas',
+        // ── Recebimentos sem identificação (Asaas) ────────────────
+        try {
+          const allReceived = await asaasGet<AsaasListResponse<AsaasPayment>>(
+            `/payments?paymentDate[ge]=${dataInicio}&paymentDate[le]=${dataFim}&status=RECEIVED,CONFIRMED,RECEIVED_IN_CASH&limit=100`,
+            apiKey
+          )
+          const semIdentMap = new Map<string, { payments: AsaasPayment[] }>()
+          for (const p of allReceived.data) {
+            if (!customerIdsConhecidos.has(p.customer)) {
+              if (!semIdentMap.has(p.customer)) semIdentMap.set(p.customer, { payments: [] })
+              semIdentMap.get(p.customer)!.payments.push(p)
+            }
           }
-        })
-        return {
-          customerId:   c.id,
-          customerName: c.name,
-          cpfCnpj:      c.cpfCnpj ?? null,
-          email:        c.email ?? null,
-          totalValor:   pagamentos.reduce((s, p) => s + p.valorLiquido, 0),
-          pagamentos,
-          fonte:        'asaas' as const,
-        }
-      })
-    } catch { /* ignora */ }
-
-    // ── 6. Resumo e agrupamento por cliente ───────────────────────
-    const STATUS_RECEBIDO = new Set(['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH'])
-    const STATUS_PREVISTO  = new Set(['PENDING'])
-    const STATUS_ATRASO    = new Set(['OVERDUE'])
-
-    const resumo = todasCobranças.reduce(
-      (acc, c) => {
-        // Usa valorLiquido nos acumuladores principais
-        if (STATUS_RECEBIDO.has(c.status)) {
-          acc.recebido        += c.valorLiquido
-          acc.recebidoBruto   += c.valorTotal
-        } else if (STATUS_PREVISTO.has(c.status)) {
-          acc.previsto        += c.valorLiquido
-          acc.previstobruto   += c.valorTotal
-        } else if (STATUS_ATRASO.has(c.status)) {
-          acc.emAtraso        += c.valorLiquido
-          acc.emAtrasoBruto   += c.valorTotal
-        }
-        return acc
-      },
-      {
-        recebido: 0, recebidoBruto: 0,
-        previsto: 0, previstobruto: 0,
-        emAtraso: 0, emAtrasoBruto: 0,
-        semIdentificacao: 0,
+          const customerIds = [...semIdentMap.keys()].slice(0, 20)
+          const customerDetails = await Promise.all(
+            customerIds.map(async id => {
+              try {
+                return await asaasGet<{ id: string; name: string; cpfCnpj: string | null; email: string | null }>(
+                  `/customers/${id}`, apiKey
+                )
+              } catch { return { id, name: 'Desconhecido', cpfCnpj: null, email: null } }
+            })
+          )
+          for (const c of customerDetails) {
+            const group = semIdentMap.get(c.id)!
+            const pagamentos = group.payments.map(p => {
+              const liq = (p.netValue && p.netValue > 0) ? p.netValue : p.value
+              return {
+                id: p.id, clientId: '', clientName: c.name,
+                valorTotal: p.value, valorLiquido: liq,
+                vencimento: p.dueDate, pagamento: p.paymentDate ?? null,
+                status: p.status, tipo: p.billingType,
+                descricao: p.description ?? null, invoiceUrl: p.invoiceUrl ?? null,
+                fonte: 'asaas' as const, contaLabel: 'Asaas',
+              }
+            })
+            const total = pagamentos.reduce((s, p) => s + p.valorLiquido, 0)
+            semIdentificacao.push({
+              customerId: c.id, customerName: c.name,
+              cpfCnpj: c.cpfCnpj ?? null, email: c.email ?? null,
+              totalValor: total, pagamentos, fonte: 'asaas',
+            })
+            resumo.semIdentificacao += total
+          }
+        } catch { /* ignora erros na detecção sem-ident */ }
+      } catch (asaasErr) {
+        console.error('[financeiro] Asaas error:', asaasErr)
       }
-    )
-    resumo.semIdentificacao = semIdentificacao.reduce((s, c) => s + c.totalValor, 0)
-
-    type ClienteGroup = {
-      clientId: string; clientName: string
-      recebido: number; previsto: number; emAtraso: number
-      cobranças: CobrancaItem[]
-    }
-    const porCliente = new Map<string, ClienteGroup>()
-    for (const c of todasCobranças) {
-      if (!porCliente.has(c.clientId)) {
-        porCliente.set(c.clientId, {
-          clientId: c.clientId, clientName: c.clientName,
-          recebido: 0, previsto: 0, emAtraso: 0, cobranças: [],
-        })
-      }
-      const g = porCliente.get(c.clientId)!
-      g.cobranças.push(c)
-      if (STATUS_RECEBIDO.has(c.status)) g.recebido      += c.valorLiquido
-      else if (STATUS_PREVISTO.has(c.status)) g.previsto += c.valorLiquido
-      else if (STATUS_ATRASO.has(c.status))   g.emAtraso += c.valorLiquido
     }
 
-    // ── Dom Pagamentos ────────────────────────────────────────────
+    // ── Integração Dom Pagamentos ─────────────────────────────────
     const { data: domInteg } = await supabase
       .from('agency_integrations')
       .select('encrypted_key, status')
       .eq('type', 'dom_pagamentos')
       .maybeSingle()
 
-    const fontes: string[] = ['Asaas']
+    const domAtivo = !!(domInteg?.encrypted_key && domInteg.status === 'active')
 
-    if (domInteg?.encrypted_key && domInteg.status === 'active') {
+    if (domAtivo) {
       try {
-        const domCreds = await decrypt<DomCredentials>(domInteg.encrypted_key)
+        const domCreds = await decrypt<DomCredentials>(domInteg!.encrypted_key)
+        fontes.push('Dom Pagamentos')
 
-        // ── Integrações Dom por cliente (client_integrations) ─────
-        // Mesmo padrão do Asaas: credentials.document = CPF/CNPJ do comprador
+        // ── Client integrations Dom ───────────────────────────────
         const { data: domClientIntegs } = await supabase
           .from('client_integrations')
           .select('id, credentials, label, client_id')
           .eq('type', 'dom_pagamentos')
 
-        // Busca nomes dos clientes que têm integração Dom
-        const domClientIds = [
-          ...new Set((domClientIntegs ?? []).map(ci => ci.client_id).filter(Boolean))
-        ]
+        const domClientIds = [...new Set((domClientIntegs ?? []).map(ci => ci.client_id).filter(Boolean))]
         const { data: domClientes } = domClientIds.length > 0
           ? await supabase.from('clients').select('id, name, nome_resumido').in('id', domClientIds)
           : { data: [] }
+        const domClienteMap = new Map((domClientes ?? []).map(c => [c.id, c.nome_resumido ?? c.name]))
 
-        const domClienteMap = new Map(
-          (domClientes ?? []).map(c => [c.id, c.nome_resumido ?? c.name])
-        )
-
-        // Mapa: documento limpo → { clientId, clientName }
+        // BUG #3 fix: se mesmo documento está em 2 clientes, last-write-wins → log de aviso
         const domDocMap = new Map<string, { clientId: string; clientName: string }>()
+        const docConflitos = new Set<string>()
         for (const ci of (domClientIntegs ?? [])) {
           const doc = (ci.credentials as { document?: string })?.document?.replace(/\D/g, '')
-          if (doc) {
-            domDocMap.set(doc, {
-              clientId:   ci.client_id,
-              clientName: domClienteMap.get(ci.client_id) ?? 'Cliente',
-            })
+          if (!doc) continue
+          if (domDocMap.has(doc)) {
+            docConflitos.add(doc)
+            console.warn(`[financeiro] Dom: documento ${doc} vinculado a múltiplos clientes`)
           }
+          domDocMap.set(doc, {
+            clientId:   ci.client_id,
+            clientName: domClienteMap.get(ci.client_id) ?? 'Cliente',
+          })
         }
 
-        // ── Busca transações pagas do período ─────────────────────
+        // ── Transações Dom do período ─────────────────────────────
         const domTxs = await fetchPaidTransactions(domCreds, dataInicio, dataFim)
-        fontes.push('Dom Pagamentos')
-
-        // Agrupa não-identificadas por documento (para semIdentificacao)
         const domSemIdMap = new Map<string, typeof domTxs>()
 
         for (const tx of domTxs) {
@@ -384,85 +361,63 @@ export async function GET(request: NextRequest) {
           }
 
           if (matched) {
-            // ── Identificado: vai para porCliente ─────────────────
-            const key = matched.clientId
-            if (!porCliente.has(key)) {
-              porCliente.set(key, {
-                clientId:   matched.clientId,
-                clientName: matched.clientName,
-                recebido: 0, previsto: 0, emAtraso: 0, cobranças: [],
-              })
-            }
-            const g = porCliente.get(key)!
-            g.cobranças.push(cobranca)
-            if (STATUS_RECEBIDO.has(status)) {
-              g.recebido           += valorLiquido
-              resumo.recebido      += valorLiquido
-              resumo.recebidoBruto += valorTotal
-            } else if (STATUS_PREVISTO.has(status)) {
-              g.previsto            += valorLiquido
-              resumo.previsto       += valorLiquido
-              resumo.previstobruto  += valorTotal
-            } else if (STATUS_ATRASO.has(status)) {
-              g.emAtraso            += valorLiquido
-              resumo.emAtraso       += valorLiquido
-              resumo.emAtrasoBruto  += valorTotal
-            }
+            // Identificado: entra no grupo do cliente
+            addToGrupo(porCliente, matched.clientId, matched.clientId, matched.clientName, cobranca)
+            acumularResumo(resumo, status, valorLiquido, valorTotal)
           } else {
-            // ── Não identificado: agrupa por documento ────────────
-            const groupKey = doc ?? `noDoc_${tx.id}`
+            // Não identificado: agrupa para semIdentificacao
+            const groupKey = (doc && !docConflitos.has(doc)) ? doc : `noDoc_${tx.id}`
             if (!domSemIdMap.has(groupKey)) domSemIdMap.set(groupKey, [])
             domSemIdMap.get(groupKey)!.push(tx)
           }
         }
 
-        // Monta entradas de semIdentificacao para Dom
+        // Monta semIdentificacao Dom
         for (const [doc, txs] of domSemIdMap) {
           const first = txs[0]
           const pagamentos: CobrancaItem[] = txs.map(tx => {
-            const status = domStatusToInternal(tx.status)
-            const data   = domDateToISO(tx.created_at)
+            const s = domStatusToInternal(tx.status)
+            const d = domDateToISO(tx.created_at)
             return {
-              id:           `dom_${tx.id}`,
-              clientId:     '',
-              clientName:   tx.customer_name ?? '—',
-              valorTotal:   tx.amount,
-              valorLiquido: tx.liquid_amount,
-              vencimento:   data,
-              pagamento:    data,
-              status,
-              tipo:         tx.payment_method,
-              descricao:    tx.product_first ?? null,
-              invoiceUrl:   tx.boleto_url ?? null,
-              fonte:        'dom',
-              contaLabel:   'Dom Pagamentos',
-              parcelas:     tx.installments > 1 ? `${tx.installments}x` : null,
-              cartao:       tx.card_brand ?? null,
+              id: `dom_${tx.id}`, clientId: '', clientName: tx.customer_name ?? '—',
+              valorTotal: tx.amount, valorLiquido: tx.liquid_amount,
+              vencimento: d, pagamento: d, status: s,
+              tipo: tx.payment_method, descricao: tx.product_first ?? null,
+              invoiceUrl: tx.boleto_url ?? null,
+              fonte: 'dom' as const, contaLabel: 'Dom Pagamentos',
+              parcelas: tx.installments > 1 ? `${tx.installments}x` : null,
+              cartao: tx.card_brand ?? null,
               domCliente: {
-                nome:      tx.customer_name,
-                documento: tx.customer_document,
-                email:     tx.customer_email,
-                telefone:  tx.customer_phone ?? null,
-                produto:   tx.product_first  ?? null,
+                nome: tx.customer_name, documento: tx.customer_document,
+                email: tx.customer_email, telefone: tx.customer_phone ?? null,
+                produto: tx.product_first ?? null,
               },
             }
           })
+          const total = pagamentos.reduce((s, p) => s + p.valorLiquido, 0)
           semIdentificacao.push({
-            customerId:   doc,
-            customerName: first.customer_name ?? '—',
-            cpfCnpj:      first.customer_document ?? null,
-            email:        first.customer_email ?? null,
-            totalValor:   pagamentos.reduce((s, p) => s + p.valorLiquido, 0),
-            pagamentos,
-            fonte:        'dom',
+            customerId: doc, customerName: first.customer_name ?? '—',
+            cpfCnpj: first.customer_document ?? null, email: first.customer_email ?? null,
+            totalValor: total, pagamentos, fonte: 'dom',
           })
-          resumo.semIdentificacao += pagamentos.reduce((s, p) => s + p.valorLiquido, 0)
+          resumo.semIdentificacao += total
         }
       } catch (domErr) {
         console.error('[financeiro] Dom Pagamentos error:', domErr)
       }
     }
 
+    // ── Nenhuma fonte ativa ───────────────────────────────────────
+    if (fontes.length === 0) {
+      return NextResponse.json({
+        resumo, cobrancasPorCliente: [], semIdentificacao: [],
+        periodo: { inicio: dataInicio, fim: dataFim, mes },
+        fontes: [],
+        debug: { motivo: 'nenhuma_integracao_ativa' },
+      })
+    }
+
+    // ── Ordenação final ───────────────────────────────────────────
     const cobrancasPorCliente = [...porCliente.values()].sort((a, b) => {
       if (a.emAtraso > 0 && b.emAtraso === 0) return -1
       if (b.emAtraso > 0 && a.emAtraso === 0) return  1
@@ -470,9 +425,7 @@ export async function GET(request: NextRequest) {
     })
 
     return NextResponse.json({
-      resumo,
-      cobrancasPorCliente,
-      semIdentificacao,
+      resumo, cobrancasPorCliente, semIdentificacao,
       periodo: { inicio: dataInicio, fim: dataFim, mes },
       fontes,
     })

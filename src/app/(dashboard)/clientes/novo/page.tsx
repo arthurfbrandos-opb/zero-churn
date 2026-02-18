@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useCallback, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft, ArrowRight, Check, Loader2, Plus, Trash2,
@@ -573,10 +573,24 @@ function WhatsAppStep({
 }
 
 // ── Página principal ──────────────────────────────────────────────
-export default function NovoClientePage() {
-  const router = useRouter()
+function NovoClientePageInner() {
+  const router       = useRouter()
+  const searchParams = useSearchParams()
   const [step, setStep] = useState(0)
-  const [form, setForm] = useState<FormData>(INITIAL)
+
+  // Pré-preenche campos quando vindo do "Cadastrar" no Financeiro (sem-ident)
+  const [form, setForm] = useState<FormData>(() => {
+    const nome      = searchParams.get('nome')      ?? ''
+    const email     = searchParams.get('email')     ?? ''
+    const documento = searchParams.get('documento') ?? searchParams.get('cnpj') ?? ''
+    return {
+      ...INITIAL,
+      razaoSocial:  nome,
+      nomeResumido: nome,
+      email,
+      cnpjCpf:      documento,
+    }
+  })
   const [saving, setSaving] = useState(false)
   const [importModal, setImportModal] = useState<ImportSource | null>(null)
   const { fetchCep, loading: loadingCep, error: cepError } = useCep()
@@ -1741,5 +1755,13 @@ export default function NovoClientePage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function NovoClientePage() {
+  return (
+    <Suspense fallback={null}>
+      <NovoClientePageInner />
+    </Suspense>
   )
 }

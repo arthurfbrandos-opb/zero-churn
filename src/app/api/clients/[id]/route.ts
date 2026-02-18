@@ -67,6 +67,11 @@ export async function PATCH(
     // Remove campos que não devem ser atualizados diretamente
     const { id: _id, agency_id: _aid, created_at: _cat, ...updateData } = body
 
+    // Sempre salva CNPJ limpo (sem máscara)
+    if (updateData.cnpj) {
+      updateData.cnpj = String(updateData.cnpj).replace(/\D/g, '') || null
+    }
+
     const { data: client, error } = await supabase
       .from('clients')
       .update({ ...updateData, updated_at: new Date().toISOString() })

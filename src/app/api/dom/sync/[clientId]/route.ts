@@ -61,18 +61,26 @@ export async function POST(req: NextRequest, { params }: Params) {
       )
     }
 
-    // Verifica duplicata neste cliente
-    const { data: existing } = await supabase
+    // Verifica duplicata em QUALQUER cliente (não só neste) — evita double-counting
+    const { data: existing, error: existErr } = await supabase
       .from('client_integrations')
-      .select('id')
-      .eq('client_id', clientId)
+      .select('id, client_id, clients(name, nome_resumido)')
       .eq('type', 'dom_pagamentos')
       .filter('credentials->>document', 'eq', clean)
       .maybeSingle()
 
+    if (existErr && existErr.code !== 'PGRST116') throw existErr
+
     if (existing) {
+      const clienteNome = (existing.clients as unknown as { name: string; nome_resumido?: string } | null)
+      const nome = clienteNome?.nome_resumido ?? clienteNome?.name ?? 'outro cliente'
+      const mesmoCli = existing.client_id === clientId
       return NextResponse.json(
-        { error: 'Esse documento já está vinculado a este cliente' },
+        {
+          error: mesmoCli
+            ? 'Esse documento já está vinculado a este cliente'
+            : `Esse documento já está vinculado ao cliente "${nome}". Desvincule lá antes de re-vincular aqui.`,
+        },
         { status: 409 }
       )
     }

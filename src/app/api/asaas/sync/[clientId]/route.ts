@@ -60,17 +60,26 @@ export async function POST(req: NextRequest, { params }: Params) {
     const { asaas_customer_id, customer_name, label } = await req.json()
     if (!asaas_customer_id) return NextResponse.json({ error: 'asaas_customer_id é obrigatório' }, { status: 400 })
 
-    // Verifica se esse customer_id já está vinculado a este cliente
+    // Verifica duplicata em QUALQUER cliente — evita double-counting no Financeiro
     const { data: existing } = await supabase
       .from('client_integrations')
-      .select('id')
-      .eq('client_id', clientId)
+      .select('id, client_id, clients(name, nome_resumido)')
       .eq('type', 'asaas')
       .filter('credentials->>customer_id', 'eq', asaas_customer_id)
       .maybeSingle()
 
     if (existing) {
-      return NextResponse.json({ error: 'Essa conta Asaas já está vinculada a este cliente' }, { status: 409 })
+      const clienteNome = (existing.clients as unknown as { name: string; nome_resumido?: string } | null)
+      const nome = clienteNome?.nome_resumido ?? clienteNome?.name ?? 'outro cliente'
+      const mesmoCli = existing.client_id === clientId
+      return NextResponse.json(
+        {
+          error: mesmoCli
+            ? 'Essa conta Asaas já está vinculada a este cliente'
+            : `Essa conta Asaas já está vinculada ao cliente "${nome}". Desvincule lá antes de re-vincular aqui.`,
+        },
+        { status: 409 }
+      )
     }
 
     // Busca agência
