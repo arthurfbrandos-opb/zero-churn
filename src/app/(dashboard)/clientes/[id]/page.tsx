@@ -805,7 +805,8 @@ function TabFinanceiro({ client }: { client: Client }) {
 
   function loadDomPayments() {
     setLoadingDom(true)
-    fetch(`/api/dom/payments?clientId=${client.id}&months=3`)
+    const ano = new Date().getFullYear()
+    fetch(`/api/dom/payments?clientId=${client.id}&inicio=${ano}-01-01&fim=${ano}-12-31`)
       .then(r => r.json())
       .then(d => { if (!d.error) setDomTxs(d.transactions ?? []) })
       .catch(() => {})

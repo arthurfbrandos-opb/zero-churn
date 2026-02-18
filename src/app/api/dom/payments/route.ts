@@ -15,8 +15,10 @@ export async function GET(request: NextRequest) {
     const { data: { user }, error: authErr } = await supabase.auth.getUser()
     if (authErr || !user) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
 
-    const clientId = request.nextUrl.searchParams.get('clientId')
-    const months   = parseInt(request.nextUrl.searchParams.get('months') ?? '3')
+    const clientId    = request.nextUrl.searchParams.get('clientId')
+    const inicioParam = request.nextUrl.searchParams.get('inicio')
+    const fimParam    = request.nextUrl.searchParams.get('fim')
+    const months      = parseInt(request.nextUrl.searchParams.get('months') ?? '3')
     if (!clientId) return NextResponse.json({ error: 'clientId obrigatório' }, { status: 400 })
 
     // Documentos Dom vinculados a este cliente
@@ -43,10 +45,10 @@ export async function GET(request: NextRequest) {
 
     const domCreds = await decrypt<DomCredentials>(domInteg.encrypted_key)
 
-    // Período: últimos N meses
-    const hoje      = new Date()
-    const dataFim   = hoje.toISOString().slice(0, 10)
-    const dataInicio = new Date(hoje.getFullYear(), hoje.getMonth() - months, 1)
+    // Período: inicio/fim explícito OU últimos N meses
+    const hoje       = new Date()
+    const dataFim    = fimParam    ?? hoje.toISOString().slice(0, 10)
+    const dataInicio = inicioParam ?? new Date(hoje.getFullYear(), hoje.getMonth() - months, 1)
       .toISOString().slice(0, 10)
 
     // Documentos limpos deste cliente

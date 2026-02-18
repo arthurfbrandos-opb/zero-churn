@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   DollarSign, TrendingUp, AlertTriangle, HelpCircle,
-  ChevronDown, ChevronRight, RefreshCw, ExternalLink,
+  ChevronDown, ChevronRight, ChevronLeft, RefreshCw, ExternalLink,
   CheckCircle2, Clock, XCircle, Filter, Calendar,
   Building2, Loader2, AlertCircle, CreditCard,
   UserPlus, Link2, Search, X, Check,
@@ -71,19 +71,51 @@ function fmtDoc(v: string | null) {
   if (d.length === 11) return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6,9)}-${d.slice(9)}`
   return v
 }
-function getMesLabel(mes: string) {
-  const [ano, m] = mes.split('-').map(Number)
-  return new Date(ano, m - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
-}
-function getUltimos12Meses() {
+// ── Seletor de período ───────────────────────────────────────────
+type PeriodType = 'mes' | 'trimestre' | 'semestre' | 'ano'
+
+function computePeriod(type: PeriodType, offset: number): { inicio: string; fim: string; label: string } {
   const hoje = new Date()
-  return Array.from({ length: 12 }, (_, i) => {
-    const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1)
-    return {
-      valor: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-      label: d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
-    }
-  })
+  if (type === 'mes') {
+    const d      = new Date(hoje.getFullYear(), hoje.getMonth() + offset, 1)
+    const ano    = d.getFullYear()
+    const m      = d.getMonth()
+    const inicio = `${ano}-${String(m + 1).padStart(2, '0')}-01`
+    const fim    = new Date(ano, m + 1, 0).toISOString().slice(0, 10)
+    const label  = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+    return { inicio, fim, label }
+  }
+  if (type === 'trimestre') {
+    const currentQ = Math.floor(hoje.getMonth() / 3)
+    const targetQ  = currentQ + offset
+    const yearsOff = Math.floor(targetQ / 4)
+    const q        = ((targetQ % 4) + 4) % 4
+    const ano      = hoje.getFullYear() + yearsOff
+    const smStart  = q * 3
+    const inicio   = `${ano}-${String(smStart + 1).padStart(2, '0')}-01`
+    const fim      = new Date(ano, smStart + 3, 0).toISOString().slice(0, 10)
+    const label    = `T${q + 1} · ${ano}`
+    return { inicio, fim, label }
+  }
+  if (type === 'semestre') {
+    const currentH = hoje.getMonth() < 6 ? 0 : 1
+    const targetH  = currentH + offset
+    const yearsOff = Math.floor(targetH / 2)
+    const h        = ((targetH % 2) + 2) % 2
+    const ano      = hoje.getFullYear() + yearsOff
+    const smStart  = h * 6
+    const inicio   = `${ano}-${String(smStart + 1).padStart(2, '0')}-01`
+    const fim      = new Date(ano, smStart + 6, 0).toISOString().slice(0, 10)
+    const label    = `${h === 0 ? '1º' : '2º'} sem. · ${ano}`
+    return { inicio, fim, label }
+  }
+  // ano
+  const ano = hoje.getFullYear() + offset
+  return { inicio: `${ano}-01-01`, fim: `${ano}-12-31`, label: String(ano) }
+}
+
+const PERIOD_LABELS: Record<PeriodType, string> = {
+  mes: 'Mês', trimestre: 'Trimestre', semestre: 'Semestre', ano: 'Ano',
 }
 
 const STATUS_CONFIG: Record<string, { label: string; icon: React.ElementType; cls: string }> = {
@@ -570,17 +602,20 @@ function SemIdentCard({
 
 // ── Página principal ──────────────────────────────────────────────
 export default function FinanceiroPage() {
-  const meses = getUltimos12Meses()
-  const [mesSelecionado, setMesSelecionado] = useState(meses[0].valor)
-  const [filtroStatus, setFiltroStatus]     = useState<'todos' | 'recebido' | 'previsto' | 'emAtraso'>('todos')
-  const [dados, setDados]                   = useState<FinanceiroData | null>(null)
-  const [loading, setLoading]               = useState(true)
-  const [error, setError]                   = useState<string | null>(null)
+  const [periodType,   setPeriodType]   = useState<PeriodType>('mes')
+  const [periodOffset, setPeriodOffset] = useState(0)
+  const [filtroStatus, setFiltroStatus] = useState<'todos' | 'recebido' | 'previsto' | 'emAtraso'>('todos')
+  const [dados, setDados]               = useState<FinanceiroData | null>(null)
+  const [loading, setLoading]           = useState(true)
+  const [error, setError]               = useState<string | null>(null)
+
+  const period = computePeriod(periodType, periodOffset)
 
   const carregar = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      const r = await fetch(`/api/financeiro?mes=${mesSelecionado}`)
+      const { inicio, fim } = computePeriod(periodType, periodOffset)
+      const r = await fetch(`/api/financeiro?inicio=${inicio}&fim=${fim}`)
       if (!r.ok) throw new Error((await r.json()).error ?? 'Erro ao carregar dados')
       setDados(await r.json())
     } catch (e) {
@@ -588,9 +623,13 @@ export default function FinanceiroPage() {
     } finally {
       setLoading(false)
     }
-  }, [mesSelecionado])
+  }, [periodType, periodOffset])
 
   useEffect(() => { carregar() }, [carregar])
+
+  function navPrev() { setPeriodOffset(v => v - 1) }
+  function navNext() { if (periodOffset < 0) setPeriodOffset(v => v + 1) }
+  function setType(t: PeriodType) { setPeriodType(t); setPeriodOffset(0) }
 
   const clientesFiltrados = (dados?.cobrancasPorCliente ?? []).filter(g => {
     if (filtroStatus === 'recebido') return g.recebido > 0
@@ -625,20 +664,39 @@ export default function FinanceiroPage() {
 
         {/* ── Filtros ─────────────────────────────────────────────── */}
         <div className="flex flex-wrap items-center gap-3">
-          <div className="relative">
-            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
-            <select
-              value={mesSelecionado}
-              onChange={e => setMesSelecionado(e.target.value)}
-              className="pl-9 pr-8 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-sm text-zinc-300 appearance-none cursor-pointer focus:outline-none focus:border-zinc-600 capitalize"
-            >
-              {meses.map(m => (
-                <option key={m.valor} value={m.valor} className="capitalize">{m.label}</option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
+
+          {/* Seletor de tipo de período */}
+          <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-lg p-1">
+            {(['mes', 'trimestre', 'semestre', 'ano'] as PeriodType[]).map(t => (
+              <button key={t} onClick={() => setType(t)}
+                className={cn('px-3 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap',
+                  periodType === t
+                    ? 'bg-emerald-600 text-white'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                )}
+              >{PERIOD_LABELS[t]}</button>
+            ))}
           </div>
 
+          {/* Navegação por setas + label do período */}
+          <div className="flex items-center gap-1">
+            <button onClick={navPrev}
+              className="w-8 h-8 flex items-center justify-center rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors"
+              title="Período anterior">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <div className="flex items-center gap-1.5 px-3 h-8 bg-zinc-900 border border-zinc-800 rounded-lg min-w-[150px] justify-center">
+              <Calendar className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+              <span className="text-sm text-zinc-300 capitalize font-medium whitespace-nowrap">{period.label}</span>
+            </div>
+            <button onClick={navNext} disabled={periodOffset >= 0}
+              className="w-8 h-8 flex items-center justify-center rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              title="Próximo período">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Filtro por status */}
           <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-lg p-1">
             {([
               { key: 'todos',    label: 'Todos'     },
@@ -690,7 +748,7 @@ export default function FinanceiroPage() {
               <ResumoCard label="Recebido (líquido)" value={resumo.recebido}
                 sub={resumo.recebidoBruto > resumo.recebido
                   ? `bruto ${fmt(resumo.recebidoBruto)}`
-                  : getMesLabel(mesSelecionado)}
+                  : period.label}
                 icon={CheckCircle2}
                 color="text-emerald-400" bg="bg-emerald-500/5" border="border-emerald-500/20" />
               <ResumoCard label="Previsto (líquido)" value={resumo.previsto}
@@ -727,7 +785,7 @@ export default function FinanceiroPage() {
                 <Card className="bg-zinc-900 border-zinc-800">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between mb-3">
-                      <p className="text-zinc-400 text-xs font-medium">Composição — {getMesLabel(mesSelecionado)}</p>
+                      <p className="text-zinc-400 text-xs font-medium capitalize">Composição — {period.label}</p>
                       <p className="text-zinc-300 text-xs font-semibold">{fmt(total)}</p>
                     </div>
                     <div className="flex h-2.5 rounded-full overflow-hidden gap-0.5">

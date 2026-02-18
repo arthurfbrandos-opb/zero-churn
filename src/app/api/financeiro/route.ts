@@ -35,10 +35,12 @@ async function fetchPaymentsByCustomer(
   apiKey: string, customerId: string,
   dataInicio: string, dataFim: string, hojeStr: string,
 ): Promise<AsaasPayment[]> {
+  // OVERDUE: escopa ao período (dueDate dentro do range, até hoje no máximo)
+  const maxFim = dataFim < hojeStr ? dataFim : hojeStr
   const queries = [
     `/payments?customer=${customerId}&paymentDate[ge]=${dataInicio}&paymentDate[le]=${dataFim}&status=RECEIVED,CONFIRMED,RECEIVED_IN_CASH&limit=100`,
     `/payments?customer=${customerId}&dueDate[ge]=${dataInicio}&dueDate[le]=${dataFim}&status=PENDING&limit=100`,
-    `/payments?customer=${customerId}&dueDate[le]=${hojeStr}&status=OVERDUE&limit=100`,
+    `/payments?customer=${customerId}&dueDate[ge]=${dataInicio}&dueDate[le]=${maxFim}&status=OVERDUE&limit=100`,
   ]
   const results = await Promise.allSettled(
     queries.map(q => asaasGet<AsaasListResponse<AsaasPayment>>(q, apiKey))
@@ -140,14 +142,25 @@ export async function GET(request: NextRequest) {
     const { data: { user }, error: authErr } = await supabase.auth.getUser()
     if (authErr || !user) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
 
-    // Período
-    const mesParam   = request.nextUrl.searchParams.get('mes')
-    const hoje       = new Date()
-    const mes        = mesParam ?? `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
-    const [ano, mesNum] = mes.split('-').map(Number)
-    const dataInicio = `${mes}-01`
-    const dataFim    = new Date(ano, mesNum, 0).toISOString().slice(0, 10)
-    const hojeStr    = hoje.toISOString().slice(0, 10)
+    // Período: suporta ?mes=YYYY-MM (legado) OU ?inicio=YYYY-MM-DD&fim=YYYY-MM-DD
+    const mesParam    = request.nextUrl.searchParams.get('mes')
+    const inicioParam = request.nextUrl.searchParams.get('inicio')
+    const fimParam    = request.nextUrl.searchParams.get('fim')
+    const hoje        = new Date()
+    const hojeStr     = hoje.toISOString().slice(0, 10)
+    let dataInicio: string
+    let dataFim: string
+    let mes: string
+    if (inicioParam && fimParam) {
+      dataInicio = inicioParam
+      dataFim    = fimParam
+      mes        = inicioParam.slice(0, 7)
+    } else {
+      mes        = mesParam ?? `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
+      const [ano, mesNum] = mes.split('-').map(Number)
+      dataInicio = `${mes}-01`
+      dataFim    = new Date(ano, mesNum, 0).toISOString().slice(0, 10)
+    }
 
     const resumo: Resumo = {
       recebido: 0, recebidoBruto: 0,
