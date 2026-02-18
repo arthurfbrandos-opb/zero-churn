@@ -218,3 +218,70 @@ Acesse o painel: ${dashboardUrl}
     text,
   })
 }
+
+/**
+ * E-mail de confirmação de cadastro.
+ * Enviado logo após criar a conta, com o link gerado pelo admin API.
+ */
+export async function sendEmailConfirmation(payload: {
+  to:          string
+  ownerName:   string
+  agencyName:  string
+  confirmUrl:  string
+}): Promise<SendResult> {
+  const { to, ownerName, agencyName, confirmUrl } = payload
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+    <body style="margin:0;padding:0;background:#09090b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+      <div style="max-width:520px;margin:40px auto;background:#18181b;border:1px solid #27272a;border-radius:16px;overflow:hidden">
+        <div style="background:#10b981;padding:24px;text-align:center">
+          <p style="margin:0;color:#fff;font-size:20px;font-weight:700">⚡ Zero Churn</p>
+        </div>
+        <div style="padding:32px">
+          <h1 style="color:#f4f4f5;font-size:22px;margin:0 0 8px">Olá, ${ownerName}! 👋</h1>
+          <p style="color:#a1a1aa;font-size:15px;margin:0 0 24px">
+            Sua conta para a agência <strong style="color:#e4e4e7">${agencyName}</strong> foi criada com sucesso.
+            Confirme seu e-mail para começar a usar o Zero Churn.
+          </p>
+          <p style="margin:0 0 24px">
+            <a href="${confirmUrl}"
+              style="background:#10b981;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px;display:inline-block">
+              ✅ Confirmar e-mail
+            </a>
+          </p>
+          <p style="color:#52525b;font-size:13px;margin:0 0 8px">
+            O link expira em <strong style="color:#71717a">24 horas</strong>.
+          </p>
+          <p style="color:#52525b;font-size:13px;margin:0">
+            Se você não criou esta conta, ignore este e-mail.
+          </p>
+          <hr style="border:none;border-top:1px solid #27272a;margin:24px 0">
+          <p style="color:#3f3f46;font-size:12px;margin:0">
+            Zero Churn · Sistema de gestão e retenção de clientes para agências
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `
+
+  const text = `
+Olá, ${ownerName}!
+
+Sua conta para a agência "${agencyName}" foi criada. Confirme seu e-mail acessando o link abaixo:
+
+${confirmUrl}
+
+O link expira em 24 horas. Se você não criou esta conta, ignore este e-mail.
+  `.trim()
+
+  return sendEmail({
+    to,
+    subject: '✅ Confirme seu e-mail — Zero Churn',
+    html,
+    text,
+  })
+}

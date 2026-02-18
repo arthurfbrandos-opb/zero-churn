@@ -131,12 +131,13 @@ export async function GET(_req: NextRequest) {
     .eq('id', agencyId)
     .maybeSingle()
 
-  const analysisDay = agencyData?.analysis_day ?? 5
-  const today       = new Date()
-  const year        = today.getFullYear()
-  const month       = today.getMonth()
-  let nextAnalysis  = new Date(year, month, analysisDay)
-  if (nextAnalysis <= today) nextAnalysis = new Date(year, month + 1, analysisDay)
+  // analysis_day agora é dia da semana: 0=Dom, 1=Seg, ..., 6=Sáb
+  const analysisDay   = agencyData?.analysis_day ?? 1  // padrão: segunda-feira
+  const today         = new Date()
+  const todayWeekday  = today.getDay()
+  let   daysUntilNext = (analysisDay - todayWeekday + 7) % 7
+  if (daysUntilNext === 0) daysUntilNext = 7  // se hoje é o dia, próxima é daqui a 7 dias
+  const nextAnalysis  = new Date(today.getTime() + daysUntilNext * 86400000)
 
   return NextResponse.json({
     jobHistory,

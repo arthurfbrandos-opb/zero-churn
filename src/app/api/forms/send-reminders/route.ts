@@ -91,18 +91,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'E-mail da agência não encontrado' }, { status: 422 })
   }
 
-  // Calcula a data da próxima análise
-  const now  = new Date()
-  const year = now.getFullYear()
+  // Calcula a data do próximo envio mensal de NPS
+  // analysisDay = dia do mês (1-28) configurado pela agência
+  const now   = new Date()
+  const year  = now.getFullYear()
   const month = now.getMonth()
 
   let nextAnalysis = new Date(year, month, analysisDay)
   if (nextAnalysis <= now) {
-    // Passou do dia deste mês → próximo mês
+    // Já passou do dia neste mês → próximo mês
     nextAnalysis = new Date(year, month + 1, analysisDay)
   }
 
-  const daysLeft = Math.ceil((nextAnalysis.getTime() - now.getTime()) / 86400000)
+  const daysLeft        = Math.ceil((nextAnalysis.getTime() - now.getTime()) / 86400000)
   const analysisDateStr = nextAnalysis.toLocaleDateString('pt-BR')
 
   // Busca clientes ativos sem formulário respondido nos últimos 30 dias

@@ -1181,11 +1181,41 @@ function UsuariosSection() {
 // ─────────────────────────────────────────────────────────────────
 // SEÇÃO: ANALISADOR
 // ─────────────────────────────────────────────────────────────────
+
+const WEEKDAYS = [
+  { value: 1, label: 'Segunda-feira' },
+  { value: 2, label: 'Terça-feira'   },
+  { value: 3, label: 'Quarta-feira'  },
+  { value: 4, label: 'Quinta-feira'  },
+  { value: 5, label: 'Sexta-feira'   },
+  { value: 6, label: 'Sábado'        },
+  { value: 0, label: 'Domingo'       },
+]
+
+function nextWeekdayDate(weekday: number): string {
+  const today  = new Date()
+  const todayW = today.getDay()
+  let   diff   = (weekday - todayW + 7) % 7
+  if (diff === 0) diff = 7
+  const next = new Date(today.getTime() + diff * 86400000)
+  return next.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' })
+}
+
+function nextMonthDay(day: number): string {
+  const today = new Date()
+  const yr    = today.getFullYear()
+  const mo    = today.getMonth()
+  let next    = new Date(yr, mo, day)
+  if (next <= today) next = new Date(yr, mo + 1, day)
+  return next.toLocaleDateString('pt-BR')
+}
+
 function AnalisadorSection() {
-  const [day, setDay] = useState(5)
-  const [npsGrace, setNpsGrace] = useState<7 | 15>(7)
+  const [weekday, setWeekday]       = useState(1)   // 0=Dom..6=Sáb, padrão: Segunda
+  const [npsDay, setNpsDay]         = useState(5)   // dia do mês para NPS mensal
+  const [npsGrace, setNpsGrace]     = useState<7 | 15>(7)
   const [observationDays, setObservationDays] = useState(60)
-  const [saved, setSaved] = useState(false)
+  const [saved, setSaved]   = useState(false)
   const [saving, setSaving] = useState(false)
 
   const PILLARS = [
@@ -1195,37 +1225,26 @@ function AnalisadorSection() {
     { label: 'NPS',                    weight: 10, color: 'bg-yellow-500' },
   ]
 
-  // Carrega analysis_day do banco ao montar
+  // Carrega configurações do banco ao montar
   useEffect(() => {
     fetch('/api/agency')
       .then(r => r.json())
       .then(d => {
-        const analysisDay = d?.agency?.analysis_day ?? d?.analysis_day
-        if (analysisDay) setDay(Number(analysisDay))
+        const agency = d?.agency ?? d
+        if (agency?.analysis_day    !== undefined) setWeekday(Number(agency.analysis_day))
+        if (agency?.analysis_nps_day !== undefined) setNpsDay(Number(agency.analysis_nps_day))
       })
       .catch(() => {})
   }, [])
 
-  // Próxima análise calculada localmente
-  const nextAnalysis = (() => {
-    const today = new Date()
-    const yr    = today.getFullYear()
-    const mo    = today.getMonth()
-    let next    = new Date(yr, mo, day)
-    if (next <= today) next = new Date(yr, mo + 1, day)
-    return next.toLocaleDateString('pt-BR')
-  })()
-
   async function handleSave() {
     setSaving(true)
     try {
-      // Persiste o período de observação localmente
       try { persistObsDays(observationDays) } catch {}
-      // Persiste analysis_day no banco
       await fetch('/api/agency', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ analysis_day: day }),
+        body: JSON.stringify({ analysis_day: weekday, analysis_nps_day: npsDay }),
       })
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
@@ -1238,23 +1257,61 @@ function AnalisadorSection() {
     <div className="space-y-6">
       <SectionTitle>Configurações do analisador</SectionTitle>
 
-      {/* Agendamento */}
+      {/* Análise semanal de sentimento */}
       <Card className="bg-zinc-900 border-zinc-800">
         <CardContent className="p-4 space-y-4">
           <div className="flex items-start gap-3">
             <RefreshCw className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
             <div className="flex-1">
-              <p className="text-zinc-200 text-sm font-medium">Análise automática mensal</p>
-              <p className="text-zinc-500 text-xs mt-0.5">O sistema roda a análise de todos os clientes neste dia todo mês. Você pode acionar manualmente a qualquer momento.</p>
+              <p className="text-zinc-200 text-sm font-medium">Análise semanal de sentimento</p>
+              <p className="text-zinc-500 text-xs mt-0.5">
+                Todo semana neste dia o sistema analisa o sentimento do grupo de WhatsApp e atualiza o Health Score de todos os clientes. Mantém histórico de 60 dias, com ênfase na semana mais recente.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Label className="text-zinc-400 text-sm shrink-0">Todo</Label>
+            <select
+              value={weekday}
+              onChange={e => setWeekday(Number(e.target.value))}
+              className={cn(inputCls, 'h-10 rounded-md border px-3 text-sm')}>
+              {WEEKDAYS.map(w => (
+                <option key={w.value} value={w.value}>{w.label}</option>
+              ))}
+            </select>
+          </div>
+          <p className="text-zinc-600 text-xs">
+            Próxima análise: <span className="text-zinc-400">{nextWeekdayDate(weekday)}</span>
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* NPS mensal */}
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardContent className="p-4 space-y-4">
+          <div className="flex items-start gap-3">
+            <RefreshCw className="w-4 h-4 text-yellow-400 mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <p className="text-zinc-200 text-sm font-medium">Lembrete de NPS mensal</p>
+              <p className="text-zinc-500 text-xs mt-0.5">
+                5 dias antes desta data você recebe um e-mail lembrando de enviar o formulário de satisfação para os clientes. O NPS é coletado mensalmente.
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <Label className="text-zinc-400 text-sm shrink-0">Todo dia</Label>
-            <Input type="number" value={day} onChange={e => setDay(Math.min(28, Math.max(1, +e.target.value)))}
-              className={cn(inputCls, 'w-20 text-center')} min={1} max={28} />
+            <Input
+              type="number"
+              value={npsDay}
+              onChange={e => setNpsDay(Math.min(28, Math.max(1, +e.target.value)))}
+              className={cn(inputCls, 'w-20 text-center')}
+              min={1} max={28}
+            />
             <Label className="text-zinc-400 text-sm">de cada mês</Label>
           </div>
-          <p className="text-zinc-600 text-xs">Próxima análise: <span className="text-zinc-400">{nextAnalysis}</span></p>
+          <p className="text-zinc-600 text-xs">
+            Próximo lembrete de NPS: <span className="text-zinc-400">{nextMonthDay(npsDay)}</span>
+          </p>
         </CardContent>
       </Card>
 

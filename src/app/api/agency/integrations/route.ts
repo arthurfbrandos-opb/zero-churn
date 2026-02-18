@@ -70,12 +70,46 @@ export async function POST(req: NextRequest) {
       } catch (testErr) {
         const msg = testErr instanceof Error ? testErr.message : String(testErr)
         console.error('[integrations] asaas test failed:', msg)
-        // Se for timeout/rede, salva mesmo assim com status 'inactive'
-        // para não bloquear o usuário por problema de rede no Vercel
+        // Se for timeout/rede, salva mesmo assim — não bloqueia o usuário
         if (msg.includes('timeout') || msg.includes('fetch')) {
           console.warn('[integrations] Salvando sem validação (problema de rede)')
         } else {
           return NextResponse.json({ error: `Erro ao testar: ${msg}` }, { status: 400 })
+        }
+      }
+    }
+
+    if (type === 'dom_pagamentos') {
+      const token = credentials.token
+      const env   = credentials.environment ?? 'production'
+      const base  = env === 'sandbox'
+        ? 'https://hml-apiv3.dompagamentos.com.br/checkout/sandbox'
+        : 'https://apiv3.dompagamentos.com.br/checkout/production'
+
+      try {
+        const testRes = await fetch(`${base}/transactions?per_page=1`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type':  'application/json',
+          },
+          signal: AbortSignal.timeout(8000),
+        })
+        if (!testRes.ok) {
+          const body = await testRes.json().catch(() => ({}))
+          const msg = body?.message ?? body?.error ?? `HTTP ${testRes.status}`
+          return NextResponse.json(
+            { error: `Token inválido: ${msg}` },
+            { status: 400 }
+          )
+        }
+      } catch (testErr) {
+        const msg = testErr instanceof Error ? testErr.message : String(testErr)
+        console.error('[integrations] dom test failed:', msg)
+        // Se for timeout/rede, salva mesmo assim — não bloqueia o usuário
+        if (msg.includes('timeout') || msg.includes('fetch')) {
+          console.warn('[integrations] Dom: salvando sem validação (problema de rede)')
+        } else {
+          return NextResponse.json({ error: `Erro ao testar Dom Pagamentos: ${msg}` }, { status: 400 })
         }
       }
     }

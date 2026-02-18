@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
+import { sendEmailConfirmation } from '@/lib/email/resend'
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,16 +15,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Senha deve ter no mínimo 8 caracteres' }, { status: 400 })
     }
 
-    const admin = createAdminClient()
+    const admin  = createAdminClient()
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.zerochurn.com.br'
 
-    // 1. Criar usuário no Supabase Auth
-    // email_confirm omitido → Supabase envia e-mail de verificação automaticamente
-    // O link no e-mail aponta para /auth/callback (configurado no Supabase Dashboard)
+    // 1. Criar usuário no Supabase Auth (sem envio automático de e-mail pelo admin API)
     console.log('[signup] criando usuario:', email)
     const { data: authData, error: authError } = await admin.auth.admin.createUser({
       email,
       password,
       user_metadata: { full_name: ownerName },
+      // email_confirm: false → usuário fica pendente de confirmação
     })
 
     if (authError) {
@@ -70,6 +71,41 @@ export async function POST(request: NextRequest) {
       console.error('[signup] erro vincular:', linkError)
       await admin.auth.admin.deleteUser(userId)
       return NextResponse.json({ error: 'Erro ao configurar conta: ' + linkError.message }, { status: 500 })
+    }
+
+    // 4. Gera link de confirmação e envia e-mail via Resend
+    // admin.generateLink não envia e-mail automaticamente — nós enviamos pelo Resend
+    try {
+      const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+        type:     'signup',
+        email,
+        password,           // obrigatório para type='signup' no admin API
+        options: {
+          redirectTo: `${appUrl}/auth/callback`,
+        },
+      })
+
+      if (linkError || !linkData?.properties?.action_link) {
+        // Se falhar a geração do link, não bloqueia o cadastro.
+        // O usuário pode usar "Reenviar e-mail" na tela /verificar-email.
+        console.warn('[signup] generateLink falhou (não crítico):', linkError?.message)
+      } else {
+        const confirmUrl = linkData.properties.action_link
+        const emailResult = await sendEmailConfirmation({
+          to:         email,
+          ownerName,
+          agencyName,
+          confirmUrl,
+        })
+        if (!emailResult.ok) {
+          console.warn('[signup] sendEmailConfirmation falhou (não crítico):', emailResult.error)
+        } else {
+          console.log('[signup] e-mail de confirmação enviado:', emailResult.id)
+        }
+      }
+    } catch (emailErr) {
+      // Nunca bloqueia o cadastro por falha no e-mail
+      console.warn('[signup] erro ao enviar e-mail (não crítico):', emailErr)
     }
 
     console.log('[signup] sucesso para:', email)

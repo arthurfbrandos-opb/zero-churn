@@ -48,11 +48,11 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, analysis_day, plan, onboarding_done } = body
+    const { name, analysis_day, analysis_nps_day, plan, onboarding_done } = body
 
     const { data: agency, error } = await supabase
       .from('agencies')
-      .update({ name, analysis_day, plan, onboarding_done, updated_at: new Date().toISOString() })
+      .update({ name, analysis_day, analysis_nps_day, plan, onboarding_done, updated_at: new Date().toISOString() })
       .eq('id', agencyUser.agency_id)
       .select()
       .single()

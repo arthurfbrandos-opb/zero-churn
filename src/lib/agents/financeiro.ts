@@ -153,6 +153,19 @@ export async function runAgenteFinanceiro(input: FinanceiroInput): Promise<Agent
   )
   const pending = allPayments.filter(p => p.status === 'PENDING')
 
+  // ── Recência (últimos 7 dias — análise semanal) ───────────────────
+  const today7dCutoff = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)
+  const recentOverdues = overdues.filter(p => p.dueDate >= today7dCutoff)
+  const recentChargebacks = chargebacks.filter(p => p.dueDate >= today7dCutoff)
+
+  if (recentOverdues.length > 0) {
+    details.recentIssue       = 'overdue_this_week'
+    details.recentOverdueCount = recentOverdues.length
+  }
+  if (recentChargebacks.length > 0) {
+    details.recentIssue = 'chargeback_this_week'
+  }
+
   details.totalPayments  = allPayments.length
   details.received       = received.length
   details.pending        = pending.length

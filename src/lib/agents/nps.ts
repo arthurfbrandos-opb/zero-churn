@@ -5,13 +5,17 @@
  *   - Score Resultado (peso 25%): "Qual o impacto dos nossos serviços nos seus resultados?"
  *   - Score NPS (peso 10%): "Qual a chance de nos indicar?"
  *
+ * CADÊNCIA: Mensal — o formulário é enviado 1x por mês pela agência.
+ * A análise de Health Score roda semanalmente mas este agente opera
+ * sobre os dados mensais acumulados (janela de 90 dias).
+ *
  * REGRAS DE SCORING (sem IA — lógica pura):
  *
  * Score Resultado (0–100):
  *   - Baseado na média das notas de resultado dos últimos 90 dias
  *   - Normalizado: nota × 10 (0-10 → 0-100)
  *   - Penalidade por não resposta:
- *       - Sem formulário respondido nos últimos 90 dias: -20 pts
+ *       - Sem formulário respondido nos últimos 90 dias: pilar ausente (null)
  *       - Sem formulário respondido nos últimos 30 dias: -10 pts (aviso)
  *
  * Score NPS (0–100):
@@ -23,7 +27,7 @@
  *   - 'nps_detractor'       — NPS ≤ 6 na última resposta
  *   - 'nps_consecutive_low' — 2 respostas consecutivas NPS ≤ 6
  *   - 'no_form_response'    — sem formulário respondido nos últimos 90 dias
- *   - 'form_silence'        — cliente NPS detrator + sem resposta recente
+ *   - 'form_silence'        — cliente NPS detrator + sem resposta nos últimos 30 dias
  */
 
 import type { AgentResult } from './types'
@@ -67,7 +71,7 @@ export async function runAgenteNps(input: NpsInput): Promise<{
     (a, b) => b.submittedAt.localeCompare(a.submittedAt)
   )
 
-  // Respostas dos últimos 90 dias
+  // Respostas dos últimos 90 dias (histórico) e 30 dias (mensal recente)
   const last90 = sorted.filter(s => daysSince(s.submittedAt.slice(0, 10), reference) <= 90)
   const last30 = sorted.filter(s => daysSince(s.submittedAt.slice(0, 10), reference) <= 30)
 
@@ -88,7 +92,7 @@ export async function runAgenteNps(input: NpsInput): Promise<{
     const avgResultado = last90.reduce((s, f) => s + f.scoreResultado, 0) / last90.length
     scoreResultado = Math.round(avgResultado * 10)  // 0-10 → 0-100
 
-    // Penalidade por não ter resposta recente (30 dias)
+    // Penalidade por não ter resposta no último mês (30 dias)
     if (!hasResponse30) {
       scoreResultado = Math.max(0, scoreResultado - 10)
       resultadoDetails.penaltyNoRecentResponse = true
@@ -119,10 +123,10 @@ export async function runAgenteNps(input: NpsInput): Promise<{
     }
 
     const lastNps = sorted[0]?.npsScore ?? null
-    npsDetails.avgNps        = avgNps
-    npsDetails.lastNps       = lastNps
-    npsDetails.responses     = last90.length
-    npsDetails.lastResponse  = sorted[0]?.submittedAt ?? null
+    npsDetails.avgNps       = avgNps
+    npsDetails.lastNps      = lastNps
+    npsDetails.responses    = last90.length
+    npsDetails.lastResponse = sorted[0]?.submittedAt ?? null
 
     // Flag: Detrator na última resposta
     if (lastNps !== null && lastNps <= 6) {
@@ -135,7 +139,7 @@ export async function runAgenteNps(input: NpsInput): Promise<{
       npsFlags.push('nps_consecutive_low')
     }
 
-    // Flag combinada: detrator + silêncio recente
+    // Flag combinada: detrator + silêncio no último mês
     if (npsFlags.includes('nps_detractor') && !hasResponse30) {
       npsFlags.push('form_silence')
     }

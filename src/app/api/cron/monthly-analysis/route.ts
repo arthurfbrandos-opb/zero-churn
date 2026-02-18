@@ -2,8 +2,13 @@
  * GET /api/cron/monthly-analysis
  *
  * Vercel Cron Job — roda diariamente às 9h UTC.
- * Verifica se hoje é o dia de análise de cada agência e,
- * se for, processa todos os clientes ativos dessa agência.
+ * Verifica se hoje é o DIA DA SEMANA de análise de cada agência
+ * (campo analysis_day: 0=Dom, 1=Seg, 2=Ter, 3=Qua, 4=Qui, 5=Sex, 6=Sáb)
+ * e, se for, processa todos os clientes ativos dessa agência.
+ *
+ * FREQUÊNCIA: semanal — cada agência escolhe o dia da semana.
+ * Os agentes usam janela de 60 dias como histórico, com ênfase
+ * na semana mais recente (últimos 7 dias) no cálculo de score.
  *
  * SEGURANÇA:
  *   - Verifica o header Authorization: Bearer ${CRON_SECRET}
@@ -43,23 +48,23 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = supabaseAdmin()
-  const today    = new Date()
-  const dayOfMonth = today.getDate()  // 1–31
+  const today      = new Date()
+  const dayOfWeek  = today.getDay()   // 0=Dom, 1=Seg, ..., 6=Sáb
 
-  console.log(`[cron] monthly-analysis — dia ${dayOfMonth} de ${today.toISOString().slice(0, 7)}`)
+  console.log(`[cron] weekly-analysis — dia da semana ${dayOfWeek} (${today.toISOString().slice(0, 10)})`)
 
-  // ── 1. Busca agências cujo analysis_day é hoje ─────────────────
+  // ── 1. Busca agências cujo analysis_day é hoje (dia da semana) ─
   const { data: agencies } = await supabase
     .from('agencies')
     .select('id, name, analysis_day')
-    .eq('analysis_day', dayOfMonth)
+    .eq('analysis_day', dayOfWeek)
 
   if (!agencies?.length) {
-    console.log('[cron] Nenhuma agência com análise hoje.')
+    console.log(`[cron] Nenhuma agência com análise na ${['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][dayOfWeek]}.`)
     return NextResponse.json({ processed: 0, message: 'Sem agências para analisar hoje' })
   }
 
-  console.log(`[cron] ${agencies.length} agência(s) para analisar hoje`)
+  console.log(`[cron] ${agencies.length} agência(s) para analisar hoje (${['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][dayOfWeek]})`)
 
   let totalClients  = 0
   let totalSuccess  = 0

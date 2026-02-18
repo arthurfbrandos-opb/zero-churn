@@ -125,8 +125,16 @@ async function analyzeWithGpt4o(
   apiKey: string,
   totalMessages: number,
 ): Promise<ProximidadeGptOutput> {
+  // Rotula os resumos dando destaque especial à semana mais recente
+  const totalWeeks = weeklyResumos.length
   const resumoText = weeklyResumos
-    .map((r, i) => `Semana ${i + 1}: ${r}`)
+    .map((r, i) => {
+      const isLast = i === totalWeeks - 1
+      const label  = isLast
+        ? `[SEMANA MAIS RECENTE — peso maior na avaliação] Semana ${i + 1}`
+        : `Semana ${i + 1} (histórico)`
+      return `${label}:\n${r}`
+    })
     .join('\n\n')
 
   const body = {
@@ -135,28 +143,33 @@ async function analyzeWithGpt4o(
     messages: [
       {
         role: 'system',
-        content: `Você é um especialista em análise de relacionamento entre agências de marketing e seus clientes. Analise os resumos semanais de conversas de WhatsApp e retorne um JSON com:
+        content: `Você é um especialista em análise de relacionamento entre agências de marketing e seus clientes.
+
+Você receberá resumos semanais de conversas de WhatsApp cobrindo os últimos 60 dias.
+A análise é executada SEMANALMENTE — por isso a semana mais recente (marcada como [SEMANA MAIS RECENTE]) deve ter peso maior na sua avaliação do estado atual do relacionamento. As semanas anteriores fornecem contexto histórico e tendências.
+
+Retorne um JSON com:
 {
-  "score": número de 0 a 100 representando a saúde da comunicação,
-  "sentiment": "positive" | "neutral" | "negative",
+  "score": número de 0 a 100 representando a saúde da comunicação ATUAL (baseado principalmente na semana mais recente, com contexto das anteriores),
+  "sentiment": "positive" | "neutral" | "negative" (sentimento predominante na semana mais recente),
   "engagementLevel": "high" | "medium" | "low",
   "flags": array de strings com flags preocupantes (ex: "cancellation_risk", "negative_sentiment", "silence"),
-  "summary": string com 2-3 frases descrevendo o estado do relacionamento
+  "summary": string com 2-3 frases — a primeira frase deve descrever o estado DESTA SEMANA, as demais a tendência histórica
 }
 
-CRITÉRIOS DE SCORE:
-- 80-100: Comunicação frequente e positiva, cliente engajado
-- 60-79: Comunicação regular, tom neutro a positivo
-- 40-59: Comunicação escassa ou tom neutro, sem grandes sinais negativos
-- 20-39: Comunicação rara ou tom negativo
-- 0-19: Silêncio quase total ou sinais fortes de cancelamento`,
+CRITÉRIOS DE SCORE (baseado principalmente na semana mais recente):
+- 80-100: Comunicação frequente e positiva, cliente engajado esta semana
+- 60-79: Comunicação regular, tom neutro a positivo esta semana
+- 40-59: Comunicação escassa ou tom neutro esta semana, sem grandes sinais negativos
+- 20-39: Comunicação rara ou tom negativo detectado esta semana
+- 0-19: Silêncio quase total esta semana ou sinais fortes de cancelamento`,
       },
       {
         role: 'user',
-        content: `Total de mensagens no período: ${totalMessages}\n\nResumos por semana:\n\n${resumoText}`,
+        content: `Total de mensagens nos últimos 60 dias: ${totalMessages}\n\nResumos por semana (do mais antigo ao mais recente):\n\n${resumoText}`,
       },
     ],
-    max_tokens: 400,
+    max_tokens: 500,
     temperature: 0.2,
   }
 
