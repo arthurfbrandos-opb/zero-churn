@@ -1503,89 +1503,260 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
 // ─────────────────────────────────────────────────────────────────
 // TAB 3 — FORMULÁRIOS
 // ─────────────────────────────────────────────────────────────────
-function TabFormularios({ clientId, client }: { clientId: string; client: Client }) {
-  // Usa o último formulário disponível no cliente (vindo do hook)
-  const lastForm = client.lastFormSubmission
-  const forms = lastForm ? [lastForm] : []
-  const responded = forms.filter(f => f.respondedAt)
+// ── Tipos internos de formulário ─────────────────────────────────
+interface FormEntry {
+  id:             string
+  token:          string
+  sentAt:         string | null
+  expiresAt:      string | null
+  respondedAt:    string | null
+  sentVia:        string | null
+  status:         'responded' | 'pending' | 'expired'
+  expired:        boolean
+  daysToRespond:  number | null
+  npsScore:       number | null
+  scoreResultado: number | null
+  comment:        string | null
+  submittedAt:    string | null
+}
+
+function TabFormularios({ clientId }: { clientId: string; client: Client }) {
+  const [forms, setForms]         = useState<FormEntry[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [generating, setGenerating] = useState(false)
+  const [newLink, setNewLink]     = useState<string | null>(null)
+  const [copied, setCopied]       = useState(false)
+  const [genError, setGenError]   = useState<string | null>(null)
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin
+
+  // Carrega histórico
+  useEffect(() => {
+    setLoading(true)
+    fetch(`/api/clients/${clientId}/forms`)
+      .then(r => r.json())
+      .then(d => setForms(d.forms ?? []))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [clientId])
+
+  // Gera novo link
+  async function handleGerar() {
+    setGenerating(true)
+    setGenError(null)
+    try {
+      const res = await fetch(`/api/clients/${clientId}/forms`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) { setGenError(data.error ?? 'Erro ao gerar link'); return }
+
+      const url = data.url ?? `${appUrl}/f/${data.token}`
+      setNewLink(url)
+
+      // Insere na lista localmente
+      setForms(prev => [{
+        id:             data.id,
+        token:          data.token,
+        sentAt:         data.sentAt,
+        expiresAt:      data.expiresAt,
+        respondedAt:    null,
+        sentVia:        'manual',
+        status:         'pending',
+        expired:        false,
+        daysToRespond:  null,
+        npsScore:       null,
+        scoreResultado: null,
+        comment:        null,
+        submittedAt:    null,
+      }, ...prev])
+    } catch {
+      setGenError('Não foi possível gerar o link. Tente novamente.')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  async function handleCopiar(url: string) {
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      /* fallback: seleciona o texto */
+    }
+  }
+
+  const responded   = forms.filter(f => f.status === 'responded')
   const responseRate = forms.length ? Math.round((responded.length / forms.length) * 100) : 0
+  const npsMedia     = responded.length
+    ? (responded.reduce((s, f) => s + (f.npsScore ?? 0), 0) / responded.length)
+    : null
 
   return (
-    <div className="space-y-4">
-      {/* Stats + enviar */}
-      <div className="flex items-center justify-between gap-4">
+    <div className="space-y-5">
+      {/* ── Gerar link ─────────────────────────────────────────── */}
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-zinc-200 text-sm font-semibold">Enviar formulário de satisfação</p>
+              <p className="text-zinc-500 text-xs mt-0.5">
+                Gere um link único e envie ao cliente pelo WhatsApp ou e-mail.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              onClick={handleGerar}
+              disabled={generating}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1.5 shrink-0"
+            >
+              {generating
+                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Gerando…</>
+                : <><Send className="w-3.5 h-3.5" /> Gerar link</>
+              }
+            </Button>
+          </div>
+
+          {genError && (
+            <p className="text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+              {genError}
+            </p>
+          )}
+
+          {newLink && (
+            <div className="flex items-center gap-2 bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2.5">
+              <p className="flex-1 text-zinc-300 text-xs font-mono truncate">{newLink}</p>
+              <button
+                onClick={() => handleCopiar(newLink)}
+                className={cn(
+                  'flex items-center gap-1 text-xs px-2 py-1 rounded-lg transition-all shrink-0',
+                  copied
+                    ? 'bg-emerald-500/20 text-emerald-400'
+                    : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600 hover:text-white'
+                )}
+              >
+                {copied ? <><Check className="w-3 h-3" /> Copiado!</> : <><ExternalLink className="w-3 h-3" /> Copiar</>}
+              </button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Stats ──────────────────────────────────────────────── */}
+      {forms.length > 0 && (
         <div className="flex items-center gap-5">
           <div>
             <p className="text-zinc-200 text-xl font-bold">{forms.length}</p>
-            <p className="text-zinc-500 text-xs">formulários enviados</p>
+            <p className="text-zinc-500 text-xs">enviados</p>
           </div>
           <div>
             <p className="text-zinc-200 text-xl font-bold">{responseRate}%</p>
-            <p className="text-zinc-500 text-xs">taxa de resposta</p>
+            <p className="text-zinc-500 text-xs">respondidos</p>
           </div>
-          {forms.length > 0 && responded.length > 0 && (
+          {npsMedia !== null && (
             <div>
-              <p className="text-zinc-200 text-xl font-bold">
-                {(responded.reduce((s, f) => s + (f.npsScore ?? 0), 0) / responded.length).toFixed(1)}
+              <p className={cn('text-xl font-bold',
+                npsMedia >= 9 ? 'text-emerald-400' : npsMedia >= 7 ? 'text-yellow-400' : 'text-red-400'
+              )}>
+                {npsMedia.toFixed(1)}
               </p>
               <p className="text-zinc-500 text-xs">NPS médio</p>
             </div>
           )}
         </div>
-        <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1.5">
-          <Send className="w-3.5 h-3.5" /> Enviar formulário
-        </Button>
-      </div>
+      )}
 
-      {/* Lista */}
-      {forms.length === 0 ? (
+      {/* ── Histórico ──────────────────────────────────────────── */}
+      {loading ? (
+        <div className="flex items-center justify-center py-10">
+          <Loader2 className="w-5 h-5 text-zinc-500 animate-spin" />
+        </div>
+      ) : forms.length === 0 ? (
         <div className="text-center py-12 text-zinc-600">
           <FileText className="w-8 h-8 mx-auto mb-3 opacity-40" />
           <p className="text-sm">Nenhum formulário enviado ainda.</p>
+          <p className="text-xs mt-1">Gere um link acima e envie ao cliente.</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2">
+          <p className="text-zinc-500 text-xs font-medium uppercase tracking-wider px-1">Histórico</p>
           {forms.map(f => {
-            const responded = !!f.respondedAt
+            const isResponded = f.status === 'responded'
+            const isExpired   = f.status === 'expired'
+            const formUrl     = `${appUrl}/f/${f.token}`
+
             return (
               <Card key={f.id} className="bg-zinc-900 border-zinc-800">
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className={cn('text-xs', responded
-                          ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
-                          : 'text-zinc-500 border-zinc-700')}>
-                          {responded ? '✓ Respondido' : '⏳ Aguardando'}
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge
+                          variant="outline"
+                          className={cn('text-xs',
+                            isResponded ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
+                            : isExpired ? 'text-zinc-600 border-zinc-700 bg-zinc-800'
+                            : 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10'
+                          )}
+                        >
+                          {isResponded ? '✓ Respondido' : isExpired ? '✗ Expirado' : '⏳ Aguardando'}
                         </Badge>
-                        <span className="text-zinc-600 text-xs">Enviado em {fmtDate(f.sentAt)}</span>
+                        {f.sentAt && (
+                          <span className="text-zinc-600 text-xs">
+                            Enviado {fmtDate(f.sentAt)}
+                          </span>
+                        )}
+                        {f.sentVia && f.sentVia !== 'manual' && (
+                          <span className="text-zinc-700 text-xs">via {f.sentVia}</span>
+                        )}
                       </div>
-                      {responded && f.respondedAt && (
+
+                      {isResponded && f.respondedAt && (
                         <p className="text-zinc-500 text-xs">
-                          Respondido em {fmtDate(f.respondedAt)}
-                          {f.daysToRespond && ` · ${f.daysToRespond} dias para responder`}
+                          Respondido {fmtDate(f.respondedAt)}
+                          {f.daysToRespond !== null && ` · ${f.daysToRespond}d para responder`}
                         </p>
                       )}
+
+                      {!isResponded && !isExpired && f.expiresAt && (
+                        <p className="text-zinc-600 text-xs">
+                          Expira {fmtDate(f.expiresAt)}
+                        </p>
+                      )}
+
                       {f.comment && (
-                        <p className="text-zinc-400 text-sm italic mt-1">"{f.comment}"</p>
+                        <p className="text-zinc-400 text-sm italic mt-1.5 leading-relaxed">
+                          "{f.comment}"
+                        </p>
+                      )}
+
+                      {/* Link copiável para formulários pendentes */}
+                      {f.status === 'pending' && (
+                        <button
+                          onClick={() => handleCopiar(formUrl)}
+                          className="flex items-center gap-1 text-zinc-600 hover:text-zinc-400 text-xs mt-1 transition-colors"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          Copiar link
+                        </button>
                       )}
                     </div>
-                    {responded && (
+
+                    {isResponded && (
                       <div className="flex items-center gap-3 shrink-0 text-right">
-                        {f.npsScore !== undefined && (() => {
+                        {f.npsScore !== null && (() => {
                           const cls = getNpsClassification(f.npsScore!)
                           return (
                             <div className="text-center">
-                              <p className={cn('font-bold text-lg', cls.color)}>{f.npsScore}</p>
-                              <p className={cn('text-xs font-medium', cls.color)}>{cls.label}</p>
+                              <p className={cn('font-bold text-lg leading-none', cls.color)}>{f.npsScore}</p>
+                              <p className={cn('text-xs font-medium mt-0.5', cls.color)}>{cls.label}</p>
                               <p className="text-zinc-600 text-xs">NPS</p>
                             </div>
                           )
                         })()}
-                        {f.resultScore !== undefined && (
+                        {f.scoreResultado !== null && (
                           <div className="text-center">
-                            <p className="text-zinc-200 font-bold text-lg">{f.resultScore}</p>
-                            <p className="text-zinc-600 text-xs">Resultado</p>
+                            <p className="text-zinc-200 font-bold text-lg leading-none">{f.scoreResultado}</p>
+                            <p className="text-zinc-600 text-xs mt-0.5">Resultado</p>
                           </div>
                         )}
                       </div>

@@ -20,6 +20,7 @@ import { ScoreGauge } from '@/components/dashboard/score-gauge'
 import { ChurnSparkline } from '@/components/dashboard/churn-sparkline'
 import { IntegrationStatusIcon } from '@/components/integracoes/integration-status-icon'
 import { getNpsClassification } from '@/lib/nps-utils'
+import { useEffect } from 'react'
 import { useClients } from '@/hooks/use-clients'
 import {
   sortClientsByRisk,
@@ -67,6 +68,11 @@ function getDaysToRenew(endDate: string): number {
 export default function DashboardPage() {
   const { clients: allClients, loading, error, refetch } = useClients()
   const [showAsaasImport, setShowAsaasImport] = useState(false)
+
+  // Fire-and-forget: detecta não-respostas de formulários e cria alertas
+  useEffect(() => {
+    fetch('/api/forms/check-nonresponse', { method: 'POST' }).catch(() => {})
+  }, [])
 
   // Filtra só ativos para a maioria dos cálculos
   const clients          = sortClientsByRisk(allClients.filter(c => c.status !== 'inactive'))
