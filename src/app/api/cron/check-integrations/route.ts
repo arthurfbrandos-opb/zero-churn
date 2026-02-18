@@ -21,9 +21,10 @@
  * LOG:
  *   - Retorna resumo JSON com totais por status
  */
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient }              from '@supabase/supabase-js'
-import { decrypt }                   from '@/lib/supabase/encryption'
+import { NextRequest, NextResponse }                         from 'next/server'
+import { createClient }                                      from '@supabase/supabase-js'
+import { decrypt }                                           from '@/lib/supabase/encryption'
+import { sendIntegrationAlert }                              from '@/lib/email/resend'
 
 // ── Admin client (bypass RLS) ─────────────────────────────────────
 
@@ -174,11 +175,33 @@ export async function GET(req: NextRequest) {
   let alertsCreated = 0
   let markedError   = 0
 
-  // ── 5. Avalia cada integração de cliente ──────────────────────
+  // ── 5. Mapa de e-mail dos admins por agência (para e-mails de alerta) ─
+  const agencyAdminEmail = new Map<string, { email: string; agencyName: string }>()
+
+  async function getAgencyAdmin(agencyId: string) {
+    if (agencyAdminEmail.has(agencyId)) return agencyAdminEmail.get(agencyId)!
+    const { data: agency } = await supabase
+      .from('agencies').select('name').eq('id', agencyId).maybeSingle()
+    const { data: au } = await supabase
+      .from('agency_users').select('user_id').eq('agency_id', agencyId).eq('role', 'admin').limit(1).maybeSingle()
+    let email = ''
+    if (au?.user_id) {
+      const { data: authUser } = await supabase.auth.admin.getUserById(au.user_id)
+      email = authUser.user?.email ?? ''
+    }
+    const entry = { email, agencyName: agency?.name ?? '' }
+    agencyAdminEmail.set(agencyId, entry)
+    return entry
+  }
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://zero-churn.vercel.app'
+
+  // ── 6. Avalia cada integração de cliente ──────────────────────
   for (const integ of clientIntegrations) {
     const clientRaw  = integ.clients as unknown as { name: string; nome_resumido?: string } | { name: string; nome_resumido?: string }[] | null
     const clientData = Array.isArray(clientRaw) ? clientRaw[0] : clientRaw
     const clientName = clientData?.nome_resumido ?? clientData?.name ?? 'Cliente'
+    const clientUrl  = `${appUrl}/clientes/${integ.client_id}`
 
     // Asaas e Dom: verifica se a chave da agência ainda é válida
     if (integ.type === 'asaas' || integ.type === 'dom_pagamentos') {
@@ -207,6 +230,19 @@ export async function GET(req: NextRequest) {
           })
           recentAlertKeys.add(alertKey)
           alertsCreated++
+
+          // Envia e-mail de alerta para o admin da agência
+          const admin = await getAgencyAdmin(integ.agency_id)
+          if (admin.email) {
+            await sendIntegrationAlert({
+              to:          admin.email,
+              agencyName:  admin.agencyName,
+              clientName,
+              integration: integ.type === 'asaas' ? 'asaas' : 'dom',
+              reason:      result.msg ?? 'Credencial inválida ou expirada',
+              clientUrl,
+            }).catch(e => console.warn('[check-integrations] email falhou:', e))
+          }
         }
       }
     }
@@ -229,6 +265,19 @@ export async function GET(req: NextRequest) {
           })
           recentAlertKeys.add(alertKey)
           alertsCreated++
+
+          // Envia e-mail de alerta para o admin da agência
+          const admin = await getAgencyAdmin(integ.agency_id)
+          if (admin.email) {
+            await sendIntegrationAlert({
+              to:          admin.email,
+              agencyName:  admin.agencyName,
+              clientName,
+              integration: 'whatsapp',
+              reason:      `Sem sincronização há ${daysSinceSyc} dias (último: ${new Date(integ.last_sync_at).toLocaleDateString('pt-BR')})`,
+              clientUrl,
+            }).catch(e => console.warn('[check-integrations] email falhou:', e))
+          }
         }
       }
     }

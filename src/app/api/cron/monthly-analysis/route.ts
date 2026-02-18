@@ -26,7 +26,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { runAnalysis } from '@/lib/agents/orchestrator'
-import { sendAnalysisCompleted } from '@/lib/email/resend'
+import { sendAnalysisCompleted, sendPaymentAlert } from '@/lib/email/resend'
 
 const supabaseAdmin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -120,6 +120,29 @@ export async function GET(req: NextRequest) {
           agencySuccess++
           totalSuccess++
           console.log(`[cron]   ✅ Score: ${result.result?.scoreTotal}`)
+
+          // ── Alerta de inadimplência por e-mail ──────────────
+          // Dispara se o agente financeiro levantou flags críticos
+          if (agencyEmail && result.result?.flags) {
+            const flags      = result.result.flags
+            const appUrl     = process.env.NEXT_PUBLIC_APP_URL ?? 'https://zero-churn.vercel.app'
+            const clientUrl  = `${appUrl}/clientes/${client.id}`
+
+            const isInad = flags.some(f =>
+              ['chargeback', 'consecutive_overdue', 'long_overdue'].includes(f)
+            )
+            const isVencendo = !isInad && flags.some(f => f === 'overdue')
+
+            if (isInad || isVencendo) {
+              await sendPaymentAlert({
+                to:         agencyEmail,
+                agencyName: agency.name,
+                clientName: client.name,
+                status:     isInad ? 'inadimplente' : 'vencendo',
+                clientUrl,
+              }).catch(e => console.warn('[cron] payment alert email falhou:', e))
+            }
+          }
         } else {
           agencyFailed++
           totalFailed++

@@ -98,6 +98,20 @@ zero-churn/
 - **Cadência:** Proximidade = semanal; NPS/Resultado = mensal
 - **Prompt Proximidade:** última semana marcada com `[SEMANA MAIS RECENTE — peso maior na avaliação]`
 
+## E-mails — templates em `src/lib/email/resend.ts`
+
+| Função | Quando é enviado | Disparado por |
+|--------|-----------------|---------------|
+| `sendEmailConfirmation` | Cadastro novo | `POST /api/auth/signup` |
+| `sendFormReminder` | 5 dias antes do NPS mensal | `POST /api/forms/send-reminders` |
+| `sendAnalysisCompleted` | Análise semanal concluída | cron `monthly-analysis` |
+| `sendNpsFormToClient` | Link NPS direto ao cliente | manual / futuro |
+| `sendPaymentAlert` | Flag de inadimplência/vencimento | cron `monthly-analysis` |
+| `sendIntegrationAlert` | Asaas/Dom/WhatsApp offline | cron `check-integrations` |
+
+Remetente: `FROM_EMAIL` = `process.env.RESEND_FROM_EMAIL` ?? `'Zero Churn <notificacoes@zerochurn.app>'`
+Variáveis necessárias: `RESEND_API_KEY`, `RESEND_FROM_EMAIL` (opcional)
+
 ## Crons (vercel.json)
 ```json
 "0 9 * * *"   → /api/cron/monthly-analysis    (análise semanal de proximidade)
