@@ -1,12 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Building2, Briefcase, Plug, Users, Bot, Bell,
   Plus, Trash2, Check, X, Eye, EyeOff, Loader2, Save,
   ChevronRight, Shield, AlertTriangle, RefreshCw,
   MessageCircle, CreditCard, BarChart2, Zap,
   GripVertical, FileText, Lock, AlignLeft, ListChecks, Hash,
+  ExternalLink,
 } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
@@ -28,6 +30,7 @@ const NAV = [
   { id: 'usuarios',      label: 'Usuários',        icon: Users     },
   { id: 'analisador',    label: 'Analisador',      icon: Bot       },
   { id: 'notificacoes',  label: 'Notificações',    icon: Bell      },
+  { id: 'privacidade',   label: 'Privacidade',     icon: Shield    },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -1373,6 +1376,186 @@ function NotificacoesSection() {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// PRIVACIDADE E LGPD
+// ─────────────────────────────────────────────────────────────────
+function PrivacidadeSection() {
+  const router = useRouter()
+  const [step, setStep]           = useState<'idle' | 'confirm1' | 'confirm2' | 'deleting' | 'done'>('idle')
+  const [password, setPassword]   = useState('')
+  const [showPwd, setShowPwd]     = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  async function handleDelete() {
+    setStep('deleting')
+    setDeleteError(null)
+    try {
+      const res  = await fetch('/api/account/delete', {
+        method:  'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ password }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setDeleteError(data.error ?? 'Erro ao excluir conta')
+        setStep('confirm2')
+        return
+      }
+      setStep('done')
+      setTimeout(() => router.push('/login'), 3000)
+    } catch {
+      setDeleteError('Erro inesperado. Tente novamente.')
+      setStep('confirm2')
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <SectionTitle>Privacidade e Dados (LGPD)</SectionTitle>
+
+      {/* Documentos */}
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardContent className="p-5 space-y-3">
+          <p className="text-zinc-300 text-sm font-semibold">Documentos legais</p>
+          <p className="text-zinc-500 text-xs">
+            Consulte nossa política de privacidade e termos de uso para entender como seus dados são coletados e utilizados.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <a href="/privacidade" target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-emerald-400 hover:text-emerald-300 text-sm transition-colors">
+              <ExternalLink className="w-3.5 h-3.5" /> Política de Privacidade
+            </a>
+            <span className="hidden sm:inline text-zinc-700">·</span>
+            <a href="/termos" target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-emerald-400 hover:text-emerald-300 text-sm transition-colors">
+              <ExternalLink className="w-3.5 h-3.5" /> Termos de Uso
+            </a>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Seus dados */}
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardContent className="p-5 space-y-3">
+          <p className="text-zinc-300 text-sm font-semibold">Seus dados</p>
+          <p className="text-zinc-500 text-xs leading-relaxed">
+            Conforme a LGPD (Lei Geral de Proteção de Dados), você tem direito de:
+            solicitar acesso, correção ou exclusão dos seus dados a qualquer momento.
+          </p>
+          <div className="space-y-1.5 text-zinc-500 text-xs">
+            {[
+              '✓ Dados da agência e usuários',
+              '✓ Clientes e contratos',
+              '✓ Histórico de análises e health scores',
+              '✓ Respostas de formulários',
+              '✓ Integrações (chaves criptografadas)',
+            ].map(item => <p key={item}>{item}</p>)}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Exclusão de conta */}
+      <Card className="bg-red-500/5 border-red-500/20">
+        <CardContent className="p-5 space-y-4">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0 mt-0.5">
+              <Trash2 className="w-4 h-4 text-red-400" />
+            </div>
+            <div>
+              <p className="text-red-300 text-sm font-semibold">Excluir conta e todos os dados</p>
+              <p className="text-red-400/70 text-xs mt-1 leading-relaxed">
+                Esta ação é irreversível. Todos os dados da agência (clientes, análises,
+                formulários, integrações) serão permanentemente excluídos.
+              </p>
+            </div>
+          </div>
+
+          {step === 'done' && (
+            <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3">
+              <Check className="w-4 h-4 text-emerald-400" />
+              <p className="text-emerald-300 text-sm">Conta excluída. Redirecionando...</p>
+            </div>
+          )}
+
+          {step === 'idle' && (
+            <Button variant="outline"
+              onClick={() => setStep('confirm1')}
+              className="border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50 gap-1.5 text-sm">
+              <Trash2 className="w-3.5 h-3.5" /> Solicitar exclusão de dados
+            </Button>
+          )}
+
+          {step === 'confirm1' && (
+            <div className="space-y-3 p-4 bg-red-500/5 border border-red-500/20 rounded-xl">
+              <p className="text-red-300 text-sm font-semibold">⚠️ Tem certeza absoluta?</p>
+              <p className="text-red-400/70 text-xs">
+                Isso excluirá permanentemente toda a conta da agência, incluindo todos os clientes,
+                análises e integrações. Esta ação não pode ser desfeita.
+              </p>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline"
+                  onClick={() => setStep('confirm2')}
+                  className="border-red-500/40 text-red-400 hover:bg-red-500/10 gap-1.5 text-xs">
+                  Sim, quero excluir
+                </Button>
+                <Button size="sm" variant="ghost"
+                  onClick={() => setStep('idle')}
+                  className="text-zinc-500 text-xs">Cancelar</Button>
+              </div>
+            </div>
+          )}
+
+          {(step === 'confirm2' || step === 'deleting') && (
+            <div className="space-y-3 p-4 bg-red-500/5 border border-red-500/20 rounded-xl">
+              <p className="text-red-300 text-sm font-semibold">🔐 Confirme sua senha</p>
+              <p className="text-red-400/70 text-xs">
+                Para confirmar a exclusão, insira sua senha atual.
+              </p>
+              <div className="relative">
+                <Input
+                  type={showPwd ? 'text' : 'password'}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="Sua senha atual"
+                  className="bg-zinc-900 border-red-500/30 text-zinc-200 pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPwd(v => !v)}
+                  tabIndex={-1}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                >
+                  {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {deleteError && (
+                <p className="text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                  {deleteError}
+                </p>
+              )}
+              <div className="flex gap-2">
+                <Button size="sm"
+                  onClick={handleDelete}
+                  disabled={step === 'deleting' || !password.trim()}
+                  className="bg-red-600 hover:bg-red-700 text-white gap-1.5 text-xs">
+                  {step === 'deleting'
+                    ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Excluindo...</>
+                    : <><Trash2 className="w-3.5 h-3.5" /> Excluir permanentemente</>
+                  }
+                </Button>
+                <Button size="sm" variant="ghost"
+                  onClick={() => { setStep('idle'); setPassword(''); setDeleteError(null) }}
+                  disabled={step === 'deleting'}
+                  className="text-zinc-500 text-xs">Cancelar</Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────
 // PÁGINA PRINCIPAL
 // ─────────────────────────────────────────────────────────────────
 export default function ConfiguracoesPage() {
@@ -1386,6 +1569,7 @@ export default function ConfiguracoesPage() {
     usuarios:     <UsuariosSection />,
     analisador:   <AnalisadorSection />,
     notificacoes: <NotificacoesSection />,
+    privacidade:  <PrivacidadeSection />,
   }
 
   return (
