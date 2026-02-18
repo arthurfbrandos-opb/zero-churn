@@ -1,11 +1,11 @@
 /**
  * POST /api/whatsapp/webhook
  *
- * Recebe eventos da Evolution API e armazena mensagens de grupos
- * no banco para alimentar o agente de Proximidade.
+ * Recebe eventos da Evolution API:
+ *  - MESSAGES_UPSERT    → salva mensagens dos grupos no banco
+ *  - CONNECTION_UPDATE  → atualiza status de conexão da agência
  *
- * URL que deve ser registrada na Evolution: https://zero-churn.vercel.app/api/whatsapp/webhook
- * O registro é feito automaticamente ao salvar a integração em Configurações.
+ * URL registrada automaticamente ao conectar: /api/whatsapp/webhook
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -14,68 +14,84 @@ import { decrypt } from '@/lib/supabase/encryption'
 import { extractMessageText } from '@/lib/evolution/client'
 import type { EvolutionMessage } from '@/lib/evolution/client'
 
-// Usa service role — inserção sem autenticação de usuário (webhook público)
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-// ── Tipos do payload da Evolution API v2 ─────────────────────────
-
 interface WebhookPayload {
   event:       string
   instance:    string
-  data:        EvolutionMessage | EvolutionMessage[]
+  data:        unknown
   apikey?:     string
-  server_url?: string
+}
+
+// ── Resolve agência pelo nome da instância ────────────────────────
+
+async function resolveAgencyId(instanceName: string): Promise<string | null> {
+  const { data: integrations } = await supabase
+    .from('agency_integrations')
+    .select('agency_id, encrypted_key')
+    .eq('type', 'evolution_api')
+
+  for (const integ of integrations ?? []) {
+    try {
+      const creds = await decrypt<{ instance_name?: string }>(integ.encrypted_key)
+      if (creds.instance_name === instanceName) return integ.agency_id
+    } catch { /* skip */ }
+  }
+  return null
 }
 
 // ── Handler ───────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   let payload: WebhookPayload
+  try { payload = await req.json() }
+  catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
-  try {
-    payload = await req.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+  const event        = (payload.event ?? '').toUpperCase().replace(/\./g, '_')
+  const instanceName = payload.instance
+
+  if (!instanceName) return NextResponse.json({ ok: true, skipped: true })
+
+  // Resolve agência uma vez para todos os eventos
+  const agencyId = await resolveAgencyId(instanceName)
+
+  // ── 1. CONNECTION_UPDATE ─────────────────────────────────────
+  if (event.includes('CONNECTION_UPDATE')) {
+    if (agencyId) {
+      const conn  = payload.data as Record<string, unknown>
+      const state = conn?.state as string | undefined
+      const phone = (conn?.wuid as string | undefined)?.replace('@s.whatsapp.net', '')
+
+      const { saveAgencyEvolutionRecord } = await import('@/lib/evolution/agency-config')
+
+      if (state === 'open') {
+        await saveAgencyEvolutionRecord(supabase, agencyId, instanceName, {
+          phoneNumber: phone,
+          connectedAt: new Date().toISOString(),
+          status:      'active',
+        })
+      } else if (state === 'close' || state === 'refused') {
+        await saveAgencyEvolutionRecord(supabase, agencyId, instanceName, {
+          status: 'disconnected',
+        })
+      }
+    }
+    return NextResponse.json({ ok: true, event: 'connection_update' })
   }
 
-  // Só processa eventos de mensagens novas
-  const event = (payload.event ?? '').toUpperCase().replace('.', '_')
+  // ── 2. MESSAGES_UPSERT ───────────────────────────────────────
   if (!event.includes('MESSAGES_UPSERT')) {
     return NextResponse.json({ ok: true, skipped: true })
-  }
-
-  const instanceName = payload.instance
-  if (!instanceName) {
-    return NextResponse.json({ error: 'Missing instance name' }, { status: 400 })
-  }
-
-  // ── 1. Identifica agência pelo instance_name ──────────────────
-  const { data: integrations } = await supabase
-    .from('agency_integrations')
-    .select('agency_id, encrypted_key')
-    .eq('type', 'evolution_api')
-    .eq('status', 'active')
-
-  let agencyId: string | null = null
-
-  for (const integ of integrations ?? []) {
-    try {
-      const creds = await decrypt<{ instance_name?: string }>(integ.encrypted_key)
-      if (creds.instance_name === instanceName) {
-        agencyId = integ.agency_id
-        break
-      }
-    } catch { /* skip */ }
   }
 
   if (!agencyId) {
     return NextResponse.json({ ok: true, skipped: true, reason: 'instance not mapped' })
   }
 
-  // ── 2. Mapeamento group_id → client_id ───────────────────────
+  // Mapeamento group_id → client_id
   const { data: clientIntegs } = await supabase
     .from('client_integrations')
     .select('client_id, metadata')
@@ -83,26 +99,26 @@ export async function POST(req: NextRequest) {
 
   const groupToClient: Record<string, string> = {}
   for (const ci of clientIntegs ?? []) {
-    const groupId = (ci.metadata as Record<string, string> | null)?.groupId
-    if (groupId && ci.client_id) {
-      groupToClient[groupId] = ci.client_id
-      groupToClient[groupId.replace('@g.us', '')] = ci.client_id
+    const gid = (ci.metadata as Record<string, string> | null)?.groupId
+    if (gid && ci.client_id) {
+      groupToClient[gid] = ci.client_id
+      groupToClient[gid.replace('@g.us', '')] = ci.client_id
     }
   }
 
-  // ── 3. Normaliza e filtra mensagens ───────────────────────────
+  // Normaliza mensagens
   const messages: EvolutionMessage[] = Array.isArray(payload.data)
-    ? payload.data
-    : [payload.data]
+    ? payload.data as EvolutionMessage[]
+    : [payload.data as EvolutionMessage]
 
   const toInsert: Record<string, unknown>[] = []
 
   for (const msg of messages) {
     const remoteJid = msg.key?.remoteJid ?? ''
-    if (!remoteJid.includes('@g.us')) continue   // só grupos
+    if (!remoteJid.includes('@g.us')) continue
 
     const text = extractMessageText(msg)
-    if (!text?.trim()) continue                  // ignora mídia sem texto
+    if (!text?.trim()) continue
 
     toInsert.push({
       agency_id:      agencyId,
@@ -118,14 +134,13 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  // ── 4. Salva no banco ─────────────────────────────────────────
   if (toInsert.length > 0) {
     const { error } = await supabase
       .from('whatsapp_messages')
       .upsert(toInsert, { onConflict: 'agency_id,message_id', ignoreDuplicates: true })
 
     if (error) {
-      console.error('[webhook/whatsapp] Erro ao salvar:', error.message)
+      console.error('[webhook] Erro ao salvar mensagens:', error.message)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
   }

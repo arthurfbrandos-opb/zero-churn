@@ -1223,145 +1223,192 @@ function ApiKeyField({ label, placeholder }: { label: string; placeholder: strin
 }
 
 // ─────────────────────────────────────────────────────────────────
-// CARD: Evolution API (WhatsApp)
+// CARD: WhatsApp via QR Code
 // ─────────────────────────────────────────────────────────────────
 
 function EvolutionIntegCard() {
-  const [url,          setUrl]          = useState('')
-  const [apiKey,       setApiKey]       = useState('')
-  const [instanceName, setInstanceName] = useState('')
-  const [showKey,      setShowKey]      = useState(false)
-  const [saving,       setSaving]       = useState(false)
-  const [status,       setStatus]       = useState<'idle' | 'active' | 'error'>('idle')
-  const [msg,          setMsg]          = useState('')
+  type ViewState = 'loading' | 'connected' | 'disconnected' | 'qrcode' | 'error'
 
+  const [view,       setView]       = useState<ViewState>('loading')
+  const [phone,      setPhone]      = useState<string | null>(null)
+  const [qrCode,     setQrCode]     = useState<string | null>(null)
+  const [qrAge,      setQrAge]      = useState(0)       // segundos desde o último QR
+  const [errMsg,     setErrMsg]     = useState('')
+  const [connecting, setConnecting] = useState(false)
+  const [polling,    setPolling]    = useState(false)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Verifica status inicial
   useEffect(() => {
-    fetch('/api/agency/integrations')
+    fetch('/api/whatsapp/instance/status')
       .then(r => r.json())
       .then(d => {
-        const ev = (d.integrations ?? []).find((i: { type: string; status: string }) => i.type === 'evolution_api')
-        if (ev) setStatus(ev.status === 'active' ? 'active' : 'error')
+        if (d.connected) { setPhone(d.phone); setView('connected') }
+        else setView('disconnected')
       })
-      .catch(() => {})
+      .catch(() => setView('disconnected'))
   }, [])
 
-  async function handleSave() {
-    if (!url.trim() || !apiKey.trim() || !instanceName.trim()) {
-      setMsg('Preencha URL, API Key e nome da instância')
+  // Inicia polling quando QR está exibido
+  useEffect(() => {
+    if (view !== 'qrcode') {
+      if (pollRef.current) clearInterval(pollRef.current)
       return
     }
-    setSaving(true)
-    setMsg('')
-    try {
-      const res = await fetch('/api/agency/integrations', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          type:        'evolution_api',
-          credentials: {
-            url:           url.trim().replace(/\/$/, ''),
-            api_key:       apiKey.trim(),
-            instance_name: instanceName.trim(),
-          },
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setMsg(data.error ?? 'Erro ao salvar')
-        setStatus('error')
-      } else {
-        setStatus('active')
-        setMsg('✓ Evolution API conectada e webhook registrado automaticamente')
-        setUrl(''); setApiKey(''); setInstanceName('')
-      }
-    } catch {
-      setMsg('Erro de rede')
-      setStatus('error')
-    } finally {
-      setSaving(false)
+    setPolling(true)
+    const qrStart = Date.now()
+
+    const tick = () => setQrAge(Math.floor((Date.now() - qrStart) / 1000))
+    const ageTimer = setInterval(tick, 1000)
+
+    pollRef.current = setInterval(async () => {
+      try {
+        const r = await fetch('/api/whatsapp/instance/status')
+        const d = await r.json()
+        if (d.connected) {
+          clearInterval(pollRef.current!)
+          clearInterval(ageTimer)
+          setPolling(false)
+          setPhone(d.phone)
+          setView('connected')
+        }
+      } catch { /* continua polling */ }
+    }, 3000)
+
+    return () => {
+      clearInterval(pollRef.current!)
+      clearInterval(ageTimer)
+      setPolling(false)
     }
+  }, [view])
+
+  async function handleConnect() {
+    setConnecting(true)
+    setErrMsg('')
+    try {
+      const res = await fetch('/api/whatsapp/instance/connect', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) { setErrMsg(data.error ?? 'Erro ao conectar'); setView('error'); return }
+      if (data.connected) { setPhone(data.phone); setView('connected'); return }
+      setQrCode(data.qrCode)
+      setQrAge(0)
+      setView('qrcode')
+    } catch { setErrMsg('Erro de rede'); setView('error') }
+    finally { setConnecting(false) }
   }
+
+  async function handleRefreshQR() {
+    setQrCode(null)
+    await handleConnect()
+  }
+
+  async function handleDisconnect() {
+    if (!confirm('Desconectar o número? Ele deixará de monitorar os grupos.')) return
+    await fetch('/api/whatsapp/instance/disconnect', { method: 'DELETE' })
+    setPhone(null)
+    setView('disconnected')
+  }
+
+  const cardStatus = view === 'connected' ? 'connected' : view === 'error' ? 'error' : 'disconnected'
 
   return (
     <IntegCard
       icon={MessageCircle}
-      name="WhatsApp (Evolution API)"
+      name="WhatsApp"
       color="bg-emerald-500/15 text-emerald-400"
-      description="Análise de sentimento e proximidade via grupos do WhatsApp"
-      status={status === 'active' ? 'connected' : status === 'error' ? 'error' : 'disconnected'}>
+      description="Análise de sentimento dos grupos via número dedicado"
+      status={cardStatus}>
 
-      {status === 'active' ? (
+      {/* Loading */}
+      {view === 'loading' && (
+        <div className="flex items-center gap-2 pt-1 text-zinc-500 text-xs">
+          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Verificando conexão...
+        </div>
+      )}
+
+      {/* Conectado */}
+      {view === 'connected' && (
         <div className="space-y-2 pt-1">
-          <p className="text-emerald-400 text-xs flex items-center gap-1.5">
-            <Check className="w-3.5 h-3.5" /> Instância conectada — webhook registrado
+          <p className="text-emerald-400 text-xs flex items-center gap-1.5 font-medium">
+            <Check className="w-3.5 h-3.5" />
+            Número conectado{phone ? `: +${phone}` : ''}
           </p>
-          <p className="text-zinc-600 text-xs">
-            O número estará monitorando os grupos assim que for adicionado a eles.
-            Configure o grupo em cada cliente em <span className="text-zinc-400">Clientes → Integrações</span>.
+          <p className="text-zinc-500 text-xs">
+            As mensagens dos grupos chegam automaticamente.
+            Vincule cada grupo no cadastro do cliente em{' '}
+            <span className="text-zinc-300">Clientes → Integrações</span>.
           </p>
-          <Button size="sm" variant="outline"
-            onClick={() => setStatus('idle')}
-            className="border-zinc-700 text-zinc-500 hover:text-zinc-300 text-xs gap-1">
-            <RefreshCw className="w-3 h-3" /> Reconfigurar
+          <Button size="sm" variant="outline" onClick={handleDisconnect}
+            className="border-red-500/30 text-red-400 hover:text-red-300 hover:border-red-500/50 text-xs gap-1">
+            Desconectar número
           </Button>
         </div>
-      ) : (
+      )}
+
+      {/* Desconectado */}
+      {(view === 'disconnected' || view === 'error') && (
         <div className="space-y-3 pt-1">
-          <div className="bg-zinc-800/60 rounded-lg p-3 text-xs text-zinc-500 space-y-1">
-            <p className="text-zinc-400 font-medium">Como funciona:</p>
-            <p>1. Hospede a Evolution API (ou use um provedor SaaS)</p>
-            <p>2. Crie uma instância e escaneie o QR code com o número dedicado</p>
-            <p>3. Preencha os dados abaixo — o webhook é registrado automaticamente</p>
+          <div className="bg-zinc-800/60 rounded-lg p-3 text-xs text-zinc-500 space-y-1.5">
+            <p className="text-zinc-300 font-medium">Como conectar:</p>
+            <p>1. Clique em <span className="text-zinc-200">"Gerar QR Code"</span> abaixo</p>
+            <p>2. Abra WhatsApp no celular do número dedicado</p>
+            <p>3. Vá em <span className="text-zinc-200">Dispositivos vinculados → Vincular dispositivo</span></p>
+            <p>4. Aponte a câmera para o QR Code</p>
           </div>
+          {errMsg && (
+            <p className="text-red-400 text-xs flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3" /> {errMsg}
+            </p>
+          )}
+          <Button size="sm" onClick={handleConnect} disabled={connecting}
+            className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1.5 w-full disabled:opacity-50">
+            {connecting
+              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Gerando QR Code...</>
+              : <><MessageCircle className="w-3.5 h-3.5" /> Gerar QR Code</>}
+          </Button>
+        </div>
+      )}
 
-          <div className="space-y-2">
-            <Label className="text-zinc-400 text-xs">URL da Evolution API</Label>
-            <Input value={url} onChange={e => setUrl(e.target.value)}
-              placeholder="https://evolution.seudominio.com"
-              className={cn(inputCls, 'text-sm')} />
-          </div>
+      {/* QR Code */}
+      {view === 'qrcode' && (
+        <div className="space-y-3 pt-1">
+          <div className="flex flex-col items-center gap-3 bg-zinc-800/50 rounded-xl p-4">
+            {qrCode ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={qrCode} alt="QR Code WhatsApp" className="w-48 h-48 rounded-lg" />
+            ) : (
+              <div className="w-48 h-48 flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-zinc-600" />
+              </div>
+            )}
 
-          <div className="space-y-2">
-            <Label className="text-zinc-400 text-xs">API Key global</Label>
-            <div className="relative">
-              <Input
-                type={showKey ? 'text' : 'password'}
-                value={apiKey} onChange={e => setApiKey(e.target.value)}
-                placeholder="sua-api-key-global"
-                className={cn(inputCls, 'pr-9 text-sm')}
-              />
-              <button onClick={() => setShowKey(p => !p)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300">
-                {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-              </button>
+            {/* Timer de expiração */}
+            <div className="w-full space-y-1">
+              <div className="flex justify-between text-xs text-zinc-500">
+                <span>Expira em</span>
+                <span className={qrAge > 35 ? 'text-red-400' : 'text-zinc-400'}>
+                  {Math.max(0, 45 - qrAge)}s
+                </span>
+              </div>
+              <div className="w-full h-1 bg-zinc-700 rounded-full overflow-hidden">
+                <div
+                  className={cn('h-full rounded-full transition-all', qrAge > 35 ? 'bg-red-500' : 'bg-emerald-500')}
+                  style={{ width: `${Math.max(0, ((45 - qrAge) / 45) * 100)}%` }}
+                />
+              </div>
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label className="text-zinc-400 text-xs">Nome da instância</Label>
-            <Input value={instanceName} onChange={e => setInstanceName(e.target.value)}
-              placeholder="agencia-principal"
-              className={cn(inputCls, 'text-sm')} />
-            <p className="text-zinc-600 text-xs">
-              O mesmo nome usado ao criar a instância no painel da Evolution API.
+          <div className="flex items-center justify-between">
+            <p className="text-zinc-500 text-xs flex items-center gap-1">
+              {polling && <Loader2 className="w-3 h-3 animate-spin" />}
+              {polling ? 'Aguardando conexão...' : 'Polling pausado'}
             </p>
+            <Button size="sm" variant="outline" onClick={handleRefreshQR}
+              className="border-zinc-700 text-zinc-400 hover:text-white text-xs gap-1">
+              <RefreshCw className="w-3 h-3" /> Novo QR
+            </Button>
           </div>
-
-          {msg && (
-            <p className={cn('text-xs flex items-center gap-1',
-              msg.startsWith('✓') ? 'text-emerald-400' : 'text-red-400')}>
-              {msg.startsWith('✓') ? <Check className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
-              {msg}
-            </p>
-          )}
-
-          <Button size="sm" onClick={handleSave}
-            disabled={saving || !url || !apiKey || !instanceName}
-            className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1.5 w-full disabled:opacity-50">
-            {saving
-              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Conectando e registrando webhook...</>
-              : <><Check className="w-3.5 h-3.5" /> Conectar e registrar webhook</>}
-          </Button>
         </div>
       )}
     </IntegCard>
