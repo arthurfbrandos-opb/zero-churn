@@ -1083,6 +1083,13 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
   const [removingDom, setRemovingDom]       = useState<string | null>(null)
   const [showDomForm, setShowDomForm]       = useState(false)
 
+  // WhatsApp
+  const [wppGroupId,    setWppGroupId]    = useState(client.whatsappGroupId ?? '')
+  const [wppConnected,  setWppConnected]  = useState(!!client.whatsappGroupId)
+  const [wppConnecting, setWppConnecting] = useState(false)
+  const [wppError,      setWppError]      = useState<string | null>(null)
+  const [wppEditing,    setWppEditing]    = useState(false)
+
   async function loadAccounts() {
     setLoadingAccounts(true)
     const res = await fetch(`/api/asaas/sync/${client.id}`)
@@ -1464,34 +1471,121 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
         </Card>
 
         {/* ── WhatsApp ──────────────────────────────────────────── */}
-        <Card className="bg-zinc-900 border-zinc-800">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
-                <MessageCircle className="w-5 h-5 text-emerald-400" />
+        <Card className={cn('border-zinc-800', wppConnected ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-zinc-900')}>
+          <CardContent className="p-5 space-y-4">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center shrink-0',
+                  wppConnected ? 'bg-emerald-500/15' : 'bg-emerald-500/10')}>
+                  <MessageCircle className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <p className="text-zinc-200 font-semibold text-sm">WhatsApp</p>
+                  <p className="text-zinc-500 text-xs">Análise de sentimento via Evolution API</p>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-zinc-200 font-semibold text-sm">WhatsApp</p>
-                <p className="text-zinc-500 text-xs">Análise de sentimento via Evolution API</p>
-              </div>
-              <Badge variant="outline" className="border-zinc-700 text-zinc-500 text-xs shrink-0">Em breve</Badge>
+              <Badge variant="outline" className={cn('text-xs shrink-0',
+                wppConnected
+                  ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
+                  : 'border-zinc-700 text-zinc-500'
+              )}>
+                {wppConnected ? '✓ Conectado' : 'Desconectado'}
+              </Badge>
             </div>
-          </CardContent>
-        </Card>
 
-        {/* ── Dom Pagamentos ────────────────────────────────────── */}
-        <Card className="bg-zinc-900/50 border-zinc-800 opacity-60">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-violet-500/10 flex items-center justify-center shrink-0">
-                <Building2 className="w-5 h-5 text-violet-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-zinc-400 font-semibold text-sm">Dom Pagamentos</p>
-                <p className="text-zinc-600 text-xs">Gateway alternativo de cobranças</p>
-              </div>
-              <Badge variant="outline" className="border-zinc-700 text-zinc-500 text-xs shrink-0">Em breve</Badge>
+            {/* Aviso LGPD */}
+            <div className="flex gap-2 p-3 bg-yellow-500/5 border border-yellow-500/20 rounded-xl">
+              <Shield className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" />
+              <p className="text-yellow-300/80 text-xs leading-relaxed">
+                As mensagens do grupo serão lidas e processadas por IA para análise de sentimento e proximidade.
+                Ao conectar, confirmo que tenho autorização dos participantes do grupo. (LGPD)
+              </p>
             </div>
+
+            {/* Conectado — exibe group_id mascarado + botão desconectar */}
+            {wppConnected && !wppEditing && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 bg-zinc-800/60 border border-zinc-700/50 rounded-xl px-3 py-2.5">
+                  <MessageCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <p className="flex-1 text-zinc-300 text-sm font-mono truncate">
+                    {client.whatsappGroupId?.slice(0, 6)}···{client.whatsappGroupId?.slice(-5)}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline"
+                    onClick={() => { setWppEditing(true); setWppGroupId(client.whatsappGroupId ?? '') }}
+                    className="border-zinc-700 text-zinc-400 hover:text-white gap-1.5 text-xs">
+                    <Pencil className="w-3.5 h-3.5" /> Alterar
+                  </Button>
+                  <Button size="sm" variant="outline"
+                    onClick={async () => {
+                      setWppConnecting(true); setWppError(null)
+                      const res = await fetch(`/api/whatsapp/connect/${client.id}`, { method: 'DELETE' })
+                      if (res.ok) { setWppConnected(false); setWppGroupId(''); refetch() }
+                      else { const d = await res.json(); setWppError(d.error ?? 'Erro ao desconectar') }
+                      setWppConnecting(false)
+                    }}
+                    disabled={wppConnecting}
+                    className="border-red-500/30 text-red-400 hover:bg-red-500/10 gap-1.5 text-xs">
+                    {wppConnecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                    Desconectar
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Desconectado ou editando — exibe form */}
+            {(!wppConnected || wppEditing) && (
+              <div className="space-y-3">
+                <div>
+                  <p className="text-zinc-400 text-xs mb-1.5 font-medium">ID do grupo de WhatsApp</p>
+                  <p className="text-zinc-600 text-xs mb-2">
+                    Ex: 120363xxxxxxxxxx ou 120363xxxxxxxxxx@g.us
+                  </p>
+                  <input
+                    value={wppGroupId}
+                    onChange={e => setWppGroupId(e.target.value)}
+                    placeholder="120363xxxxxxxxxx@g.us"
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 placeholder:text-zinc-600 text-sm font-mono focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                {wppError && (
+                  <p className="text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                    {wppError}
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <Button size="sm"
+                    onClick={async () => {
+                      if (!wppGroupId.trim()) return
+                      setWppConnecting(true); setWppError(null)
+                      const res = await fetch(`/api/whatsapp/connect/${client.id}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ groupId: wppGroupId.trim() }),
+                      })
+                      const d = await res.json()
+                      if (res.ok) {
+                        setWppConnected(true); setWppEditing(false); refetch()
+                      } else {
+                        setWppError(d.error ?? 'Erro ao conectar')
+                      }
+                      setWppConnecting(false)
+                    }}
+                    disabled={wppConnecting || !wppGroupId.trim()}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5 text-sm">
+                    {wppConnecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                    Conectar
+                  </Button>
+                  {wppEditing && (
+                    <Button size="sm" variant="ghost"
+                      onClick={() => { setWppEditing(false); setWppError(null) }}
+                      className="text-zinc-500 text-xs">Cancelar</Button>
+                  )}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
