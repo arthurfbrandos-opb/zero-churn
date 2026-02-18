@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Building2, Briefcase, Plug, Users, Bot, Bell,
@@ -154,13 +154,12 @@ interface EditingService extends Service {
 interface ServicoItem { id: string; name: string; description?: string; isActive: boolean }
 
 function ServicosSection() {
-  const [items, setItems]   = useState<ServicoItem[]>([
-    { id: 's1', name: 'SEO On-page e Off-page',   description: 'Otimização para mecanismos de busca', isActive: true },
-    { id: 's2', name: 'Gestão de Redes Sociais',  description: 'Instagram, Facebook, LinkedIn', isActive: true },
-    { id: 's3', name: 'Relatório Mensal',          description: 'Relatório de desempenho e métricas', isActive: true },
-    { id: 's4', name: 'Google Ads',                description: 'Gestão de campanhas pagas', isActive: true },
-    { id: 's5', name: 'E-mail Marketing',          description: '', isActive: false },
-  ])
+  const [items, setItems] = useState<ServicoItem[]>(() => loadServicos())
+
+  // Persiste no localStorage sempre que a lista mudar
+  useEffect(() => {
+    try { localStorage.setItem(LS_SERVICES_KEY, JSON.stringify(items)) } catch { /* ignore */ }
+  }, [items])
   const [newName, setNewName] = useState('')
   const [newDesc, setNewDesc] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -260,160 +259,174 @@ function ServicosSection() {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// CHAVE localStorage para compartilhar serviços entre seções
+// ─────────────────────────────────────────────────────────────────
+const LS_SERVICES_KEY = 'zc_servicos_v1'
+
+const INITIAL_SERVICES: ServicoItem[] = [
+  { id: 's1', name: 'SEO On-page e Off-page',  description: 'Otimização para mecanismos de busca', isActive: true },
+  { id: 's2', name: 'Gestão de Redes Sociais', description: 'Instagram, Facebook, LinkedIn', isActive: true },
+  { id: 's3', name: 'Relatório Mensal',         description: 'Relatório de desempenho e métricas', isActive: true },
+  { id: 's4', name: 'Google Ads',               description: 'Gestão de campanhas pagas', isActive: true },
+  { id: 's5', name: 'E-mail Marketing',         description: '', isActive: false },
+]
+
+function loadServicos(): ServicoItem[] {
+  try {
+    const raw = localStorage.getItem(LS_SERVICES_KEY)
+    if (raw) return JSON.parse(raw) as ServicoItem[]
+  } catch { /* ignore */ }
+  return INITIAL_SERVICES
+}
+
+// ─────────────────────────────────────────────────────────────────
 // SEÇÃO: PRODUTOS (pacotes que agrupam serviços como entregável/bônus)
 // ─────────────────────────────────────────────────────────────────
+
+// Produto sem campo type — MRR/TCV fica no contrato do cliente
+interface Produto {
+  id:          string
+  name:        string
+  entregaveis: ServiceItem[]   // serviços marcados como entregável
+  bonus:       ServiceItem[]   // serviços marcados como bônus
+  isActive:    boolean
+}
+
+const INITIAL_PRODUTOS: Produto[] = [
+  {
+    id: 'p1', name: 'Tríade Gestão Comercial', isActive: true,
+    entregaveis: [{ id: 's1', name: 'SEO On-page e Off-page' }, { id: 's2', name: 'Gestão de Redes Sociais' }],
+    bonus:       [{ id: 's3', name: 'Relatório Mensal' }],
+  },
+]
+
 function ProdutosSection() {
-  const [services, setServices] = useState<Service[]>(mockServices)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [editing, setEditing] = useState<EditingService | null>(null)
-  const [creatingNew, setCreatingNew] = useState(false)
-  const [draft, setDraft] = useState<EditingService>({
-    id: '', agencyId: 'agency-001', name: '', type: 'mrr',
-    entregaveis: [], bonus: [], isActive: true,
-    newItemName: '', newItemKind: 'entregavel',
-  })
+  const [produtos,     setProdutos]     = useState<Produto[]>(INITIAL_PRODUTOS)
+  const [allServicos,  setAllServicos]  = useState<ServicoItem[]>(INITIAL_SERVICES)
+  const [expandedId,   setExpandedId]   = useState<string | null>(null)
+  const [editingId,    setEditingId]    = useState<string | null>(null)
+  const [creatingNew,  setCreatingNew]  = useState(false)
+  const [draftName,    setDraftName]    = useState('')
+  const [draftEntregs, setDraftEntregs] = useState<ServiceItem[]>([])
+  const [draftBonus,   setDraftBonus]   = useState<ServiceItem[]>([])
 
-  const typeBadge = (t: 'mrr' | 'tcv') =>
-    t === 'mrr'
-      ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
-      : 'text-blue-400 border-blue-500/30 bg-blue-500/10'
+  // Carrega serviços do localStorage ao montar
+  useEffect(() => {
+    setAllServicos(loadServicos())
+  }, [])
 
-  function startEdit(s: Service) {
-    setEditing({ ...s, newItemName: '', newItemKind: 'entregavel' })
-    setExpandedId(s.id)
-    setCreatingNew(false)
+  const activeServicos = allServicos.filter(s => s.isActive)
+
+  // Verifica se um serviço já está em entregáveis ou bônus
+  function isUsed(sid: string, entregs: ServiceItem[], bon: ServiceItem[]) {
+    return entregs.some(e => e.id === sid) || bon.some(b => b.id === sid)
   }
 
-  function toggleActive(id: string) {
-    setServices(prev => prev.map(s => s.id === id ? { ...s, isActive: !s.isActive } : s))
-  }
-
-  function deleteService(id: string) {
-    setServices(prev => prev.filter(s => s.id !== id))
-    if (expandedId === id) setExpandedId(null)
-  }
-
-  // Funções de edição de items
-  function addItem(target: EditingService, kind: ItemKind, name: string): EditingService {
-    if (!name.trim()) return target
-    const item: ServiceItem = { id: `item-${Date.now()}`, name: name.trim() }
-    return kind === 'entregavel'
-      ? { ...target, entregaveis: [...target.entregaveis, item], newItemName: '' }
-      : { ...target, bonus: [...target.bonus, item], newItemName: '' }
-  }
-
-  function removeItem(target: EditingService, kind: ItemKind, id: string): EditingService {
-    return kind === 'entregavel'
-      ? { ...target, entregaveis: target.entregaveis.filter(i => i.id !== id) }
-      : { ...target, bonus: target.bonus.filter(i => i.id !== id) }
-  }
-
-  function saveEditing() {
-    if (!editing || !editing.name.trim()) return
-    const { newItemName: _, newItemKind: __, ...clean } = editing
-    setServices(prev => prev.map(s => s.id === clean.id ? clean : s))
-    setEditing(null)
-    setExpandedId(clean.id)
+  function toggleItem(
+    svc: ServicoItem,
+    kind: 'entregavel' | 'bonus',
+    entregs: ServiceItem[], setEntregs: (v: ServiceItem[]) => void,
+    bon:     ServiceItem[], setBonus:   (v: ServiceItem[]) => void,
+  ) {
+    const item: ServiceItem = { id: svc.id, name: svc.name }
+    if (kind === 'entregavel') {
+      // remove de bônus se estiver lá
+      setBonus(bon.filter(b => b.id !== svc.id))
+      setEntregs(entregs.some(e => e.id === svc.id)
+        ? entregs.filter(e => e.id !== svc.id)
+        : [...entregs, item])
+    } else {
+      setEntregs(entregs.filter(e => e.id !== svc.id))
+      setBonus(bon.some(b => b.id === svc.id)
+        ? bon.filter(b => b.id !== svc.id)
+        : [...bon, item])
+    }
   }
 
   function saveNew() {
-    if (!draft.name.trim()) return
-    const { newItemName: _, newItemKind: __, ...clean } = draft
-    const novo: Service = { ...clean, id: `srv-${Date.now()}` }
-    setServices(prev => [...prev, novo])
-    setCreatingNew(false)
-    setDraft({ id: '', agencyId: 'agency-001', name: '', type: 'mrr', entregaveis: [], bonus: [], isActive: true, newItemName: '', newItemKind: 'entregavel' })
+    if (!draftName.trim()) return
+    setProdutos(prev => [...prev, {
+      id: `p-${Date.now()}`, name: draftName.trim(),
+      entregaveis: draftEntregs, bonus: draftBonus, isActive: true,
+    }])
+    setCreatingNew(false); setDraftName(''); setDraftEntregs([]); setDraftBonus([])
   }
 
-  // Componente de lista de itens inline
-  function ItemList({ target, setTarget, kind, label, color }: {
-    target: EditingService
-    setTarget: (v: EditingService) => void
-    kind: ItemKind
-    label: string
-    color: string
-  }) {
-    const items = kind === 'entregavel' ? target.entregaveis : target.bonus
-    return (
-      <div className="space-y-2">
-        <p className={cn('text-xs font-semibold uppercase tracking-wider', color)}>{label}</p>
-        {items.length === 0 && (
-          <p className="text-zinc-600 text-xs italic">Nenhum item. Adicione abaixo.</p>
-        )}
-        {items.map(item => (
-          <div key={item.id} className="flex items-center gap-2 bg-zinc-800/40 rounded-lg px-3 py-1.5">
-            <span className="flex-1 text-zinc-300 text-sm">{item.name}</span>
-            <button onClick={() => setTarget(removeItem(target, kind, item.id))}
-              className="text-zinc-600 hover:text-red-400 transition-colors shrink-0">
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        ))}
-        <div className="flex gap-2">
-          <Input
-            placeholder={`+ Novo ${kind === 'entregavel' ? 'entregável' : 'bônus'}...`}
-            value={target.newItemKind === kind ? target.newItemName : ''}
-            onChange={e => setTarget({ ...target, newItemName: e.target.value, newItemKind: kind })}
-            onKeyDown={e => {
-              if (e.key === 'Enter') setTarget(addItem({ ...target, newItemKind: kind }, kind, target.newItemName))
-            }}
-            className={cn(inputCls, 'h-8 text-xs flex-1')}
-          />
-          <Button size="sm" variant="outline"
-            className="border-zinc-700 text-zinc-400 hover:text-white h-8 px-2"
-            onClick={() => setTarget(addItem({ ...target, newItemKind: kind }, kind, target.newItemName))}>
-            <Plus className="w-3.5 h-3.5" />
-          </Button>
-        </div>
-      </div>
-    )
+  // Estado para edição inline
+  const [editName,    setEditName]    = useState('')
+  const [editEntregs, setEditEntregs] = useState<ServiceItem[]>([])
+  const [editBonus,   setEditBonus]   = useState<ServiceItem[]>([])
+
+  function startEdit(p: Produto) {
+    setEditingId(p.id); setEditName(p.name)
+    setEditEntregs([...p.entregaveis]); setEditBonus([...p.bonus])
+    setExpandedId(null); setCreatingNew(false)
   }
 
-  // Form de criação/edição compartilhado
-  function MetodoForm({ data, setData, onSave, onCancel }: {
-    data: EditingService
-    setData: (v: EditingService) => void
-    onSave: () => void
-    onCancel: () => void
+  function saveEdit() {
+    setProdutos(prev => prev.map(p => p.id === editingId
+      ? { ...p, name: editName.trim(), entregaveis: editEntregs, bonus: editBonus }
+      : p))
+    setEditingId(null)
+  }
+
+  // Seletor de serviços para entregáveis/bônus
+  function ServicePicker({ entregs, setEntregs, bon, setBonus }: {
+    entregs: ServiceItem[]; setEntregs: (v: ServiceItem[]) => void
+    bon:     ServiceItem[]; setBonus:   (v: ServiceItem[]) => void
   }) {
-    return (
-      <div className="space-y-4 pt-3 border-t border-zinc-800">
-        {/* Nome + tipo */}
-        <div className="grid grid-cols-3 gap-3">
-          <div className="col-span-2">
-            <Field label="Nome do produto">
-              <Input autoFocus value={data.name} onChange={e => setData({ ...data, name: e.target.value })}
-                placeholder="Ex: Tríade Gestão Comercial" className={inputCls} />
-            </Field>
-          </div>
-          <Field label="Tipo de contrato">
-            <div className="flex gap-2 pt-0.5">
-              {(['mrr', 'tcv'] as const).map(t => (
-                <button key={t} onClick={() => setData({ ...data, type: t })}
-                  className={cn('flex-1 py-2 rounded-lg border text-xs font-bold transition-all',
-                    data.type === t
-                      ? t === 'mrr' ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400' : 'border-blue-500 bg-blue-500/10 text-blue-400'
-                      : 'border-zinc-700 bg-zinc-800 text-zinc-500 hover:border-zinc-600')}>
-                  {t.toUpperCase()}
-                </button>
-              ))}
-            </div>
-          </Field>
+    if (activeServicos.length === 0) {
+      return (
+        <div className="text-center py-6 text-zinc-600 text-sm border border-dashed border-zinc-700 rounded-xl">
+          Nenhum serviço ativo cadastrado. Vá em <strong className="text-zinc-500">Serviços</strong> para adicionar.
         </div>
-
-        {/* Entregáveis */}
-        <ItemList target={data} setTarget={setData} kind="entregavel"
-          label="Entregáveis" color="text-zinc-300" />
-
-        {/* Bônus */}
-        <ItemList target={data} setTarget={setData} kind="bonus"
-          label="Bônus" color="text-yellow-500" />
-
-        <div className="flex gap-2 pt-1">
-          <Button size="sm" onClick={onSave} className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1">
-            <Check className="w-3.5 h-3.5" /> Salvar produto
-          </Button>
-          <Button size="sm" variant="ghost" onClick={onCancel} className="text-zinc-400">Cancelar</Button>
+      )
+    }
+    return (
+      <div className="space-y-3">
+        <p className="text-zinc-400 text-xs font-medium uppercase tracking-wider">Selecione os serviços e classifique cada um</p>
+        <div className="space-y-2">
+          {activeServicos.map(svc => {
+            const isEntregavel = entregs.some(e => e.id === svc.id)
+            const isBonus      = bon.some(b => b.id === svc.id)
+            return (
+              <div key={svc.id} className={cn(
+                'flex items-center gap-3 p-3 rounded-xl border transition-all',
+                isEntregavel ? 'border-emerald-500/40 bg-emerald-500/5'
+                  : isBonus  ? 'border-yellow-500/40 bg-yellow-500/5'
+                  : 'border-zinc-700 bg-zinc-800/40'
+              )}>
+                <div className="flex-1 min-w-0">
+                  <p className={cn('text-sm font-medium', isEntregavel ? 'text-emerald-300' : isBonus ? 'text-yellow-300' : 'text-zinc-400')}>
+                    {svc.name}
+                  </p>
+                  {svc.description && <p className="text-zinc-600 text-xs">{svc.description}</p>}
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  <button
+                    onClick={() => toggleItem(svc, 'entregavel', entregs, setEntregs, bon, setBonus)}
+                    className={cn('px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all',
+                      isEntregavel
+                        ? 'border-emerald-500 bg-emerald-500/20 text-emerald-400'
+                        : 'border-zinc-600 bg-zinc-800 text-zinc-500 hover:border-emerald-500/50 hover:text-emerald-400')}>
+                    ✓ Entregável
+                  </button>
+                  <button
+                    onClick={() => toggleItem(svc, 'bonus', entregs, setEntregs, bon, setBonus)}
+                    className={cn('px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all',
+                      isBonus
+                        ? 'border-yellow-500 bg-yellow-500/15 text-yellow-400'
+                        : 'border-zinc-600 bg-zinc-800 text-zinc-500 hover:border-yellow-500/50 hover:text-yellow-400')}>
+                    ★ Bônus
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        <div className="flex gap-4 text-xs text-zinc-600 pt-1">
+          <span><span className="text-emerald-400 font-semibold">{entregs.length}</span> entregável{entregs.length !== 1 ? 'is' : ''}</span>
+          <span><span className="text-yellow-400 font-semibold">{bon.length}</span> bônus</span>
         </div>
       </div>
     )
@@ -424,72 +437,68 @@ function ProdutosSection() {
       <div className="flex items-center justify-between">
         <div>
           <SectionTitle>Produtos</SectionTitle>
+          <p className="text-zinc-500 text-sm -mt-3 mb-4">
+            Monte pacotes combinando os serviços cadastrados. O tipo de contrato (Recorrente/Projeto) é definido na negociação com o cliente.
+          </p>
         </div>
-        <Button size="sm" onClick={() => { setCreatingNew(true); setExpandedId(null); setEditing(null) }}
-          className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1 -mt-4">
+        <Button size="sm" onClick={() => { setCreatingNew(true); setEditingId(null); setExpandedId(null) }}
+          className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1 -mt-4 shrink-0">
           <Plus className="w-3.5 h-3.5" /> Novo produto
         </Button>
       </div>
 
-      <p className="text-zinc-500 text-sm -mt-2">
-        Monte pacotes combinando os serviços cadastrados. No cadastro do cliente você escolhe o produto e define quais serviços entram como entregáveis ou bônus da negociação.
-      </p>
-
-      {/* Formulário de novo método */}
+      {/* Form de novo produto */}
       {creatingNew && (
         <Card className="bg-zinc-900 border-emerald-500/30 border-dashed">
-          <CardContent className="p-4">
-            <p className="text-zinc-300 font-medium text-sm mb-3">Novo produto</p>
-            <MetodoForm
-              data={draft}
-              setData={setDraft}
-              onSave={saveNew}
-              onCancel={() => setCreatingNew(false)}
+          <CardContent className="p-4 space-y-4">
+            <Field label="Nome do produto">
+              <Input autoFocus value={draftName} onChange={e => setDraftName(e.target.value)}
+                placeholder="Ex: Tríade Gestão Comercial" className={inputCls} />
+            </Field>
+            <ServicePicker
+              entregs={draftEntregs} setEntregs={setDraftEntregs}
+              bon={draftBonus}       setBonus={setDraftBonus}
             />
+            <div className="flex gap-2 pt-1">
+              <Button size="sm" onClick={saveNew} disabled={!draftName.trim()}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1">
+                <Check className="w-3.5 h-3.5" /> Salvar produto
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => { setCreatingNew(false); setDraftName(''); setDraftEntregs([]); setDraftBonus([]) }}
+                className="text-zinc-400">Cancelar</Button>
+            </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Lista de métodos */}
+      {/* Lista de produtos */}
       <div className="space-y-3">
-        {services.map(s => {
-          const isExpanded = expandedId === s.id
-          const isEditing = editing?.id === s.id
-
+        {produtos.map(p => {
+          const isExpanded = expandedId === p.id
+          const isEditing  = editingId  === p.id
           return (
-            <Card key={s.id}
-              className={cn('bg-zinc-900 border-zinc-800 transition-all', !s.isActive && 'opacity-50')}>
+            <Card key={p.id} className={cn('bg-zinc-900 border-zinc-800', !p.isActive && 'opacity-50')}>
               <CardContent className="p-4">
-
-                {/* Cabeçalho do card */}
+                {/* Cabeçalho */}
                 <div className="flex items-start gap-3">
-                  <button
-                    onClick={() => setExpandedId(isExpanded ? null : s.id)}
-                    className="flex-1 text-left min-w-0"
-                  >
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-zinc-200 text-sm font-semibold">{s.name}</p>
-                      <Badge variant="outline" className={cn('text-xs', typeBadge(s.type))}>
-                        {s.type.toUpperCase()}
-                      </Badge>
-                    </div>
+                  <button onClick={() => !isEditing && setExpandedId(isExpanded ? null : p.id)}
+                    className="flex-1 text-left min-w-0">
+                    <p className="text-zinc-200 text-sm font-semibold">{isEditing ? editName : p.name}</p>
                     <p className="text-zinc-500 text-xs mt-0.5">
-                      {s.entregaveis.length} entregável{s.entregaveis.length !== 1 ? 'is' : ''}
-                      {s.bonus.length > 0 && ` · ${s.bonus.length} bônus`}
+                      {(isEditing ? editEntregs : p.entregaveis).length} entregável{(isEditing ? editEntregs : p.entregaveis).length !== 1 ? 'is' : ''}
+                      {(isEditing ? editBonus : p.bonus).length > 0 && ` · ${(isEditing ? editBonus : p.bonus).length} bônus`}
                     </p>
                   </button>
-
-                  {/* Ações */}
                   <div className="flex items-center gap-2 shrink-0">
-                    <button onClick={() => isEditing ? (setEditing(null)) : startEdit(s)}
-                      className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-2">
+                    <button onClick={() => isEditing ? setEditingId(null) : startEdit(p)}
+                      className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-1">
                       {isEditing ? 'Cancelar' : 'Editar'}
                     </button>
-                    <button onClick={() => toggleActive(s.id)}
-                      className={cn('w-9 h-5 rounded-full transition-all relative', s.isActive ? 'bg-emerald-500' : 'bg-zinc-700')}>
-                      <span className={cn('absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all', s.isActive ? 'left-4' : 'left-0.5')} />
+                    <button onClick={() => setProdutos(prev => prev.map(pp => pp.id === p.id ? { ...pp, isActive: !pp.isActive } : pp))}
+                      className={cn('w-9 h-5 rounded-full transition-all relative', p.isActive ? 'bg-emerald-500' : 'bg-zinc-700')}>
+                      <span className={cn('absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all', p.isActive ? 'left-4' : 'left-0.5')} />
                     </button>
-                    <button onClick={() => deleteService(s.id)}
+                    <button onClick={() => setProdutos(prev => prev.filter(pp => pp.id !== p.id))}
                       className="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-colors">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -497,13 +506,23 @@ function ProdutosSection() {
                 </div>
 
                 {/* Modo edição */}
-                {isEditing && editing && (
-                  <MetodoForm
-                    data={editing}
-                    setData={setEditing}
-                    onSave={saveEditing}
-                    onCancel={() => setEditing(null)}
-                  />
+                {isEditing && (
+                  <div className="mt-4 space-y-4 pt-4 border-t border-zinc-800">
+                    <Field label="Nome do produto">
+                      <Input value={editName} onChange={e => setEditName(e.target.value)}
+                        className={inputCls} />
+                    </Field>
+                    <ServicePicker
+                      entregs={editEntregs} setEntregs={setEditEntregs}
+                      bon={editBonus}       setBonus={setEditBonus}
+                    />
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={saveEdit} className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1">
+                        <Check className="w-3.5 h-3.5" /> Salvar
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditingId(null)} className="text-zinc-400">Cancelar</Button>
+                    </div>
+                  </div>
                 )}
 
                 {/* Modo visualização expandida */}
@@ -511,27 +530,23 @@ function ProdutosSection() {
                   <div className="mt-3 pt-3 border-t border-zinc-800 grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-zinc-400 text-xs font-semibold uppercase tracking-wider mb-2">Entregáveis</p>
-                      <div className="space-y-1.5">
-                        {s.entregaveis.map(e => (
-                          <div key={e.id} className="flex items-center gap-2 text-xs text-zinc-400">
-                            <Check className="w-3 h-3 text-emerald-400 shrink-0" />
-                            {e.name}
+                      {p.entregaveis.length === 0
+                        ? <p className="text-zinc-600 text-xs italic">Nenhum</p>
+                        : p.entregaveis.map(e => (
+                          <div key={e.id} className="flex items-center gap-2 text-xs text-zinc-400 mb-1">
+                            <Check className="w-3 h-3 text-emerald-400 shrink-0" /> {e.name}
                           </div>
                         ))}
-                        {s.entregaveis.length === 0 && <p className="text-zinc-600 text-xs italic">Nenhum entregável</p>}
-                      </div>
                     </div>
                     <div>
                       <p className="text-yellow-500 text-xs font-semibold uppercase tracking-wider mb-2">Bônus</p>
-                      <div className="space-y-1.5">
-                        {s.bonus.map(b => (
-                          <div key={b.id} className="flex items-center gap-2 text-xs text-zinc-400">
-                            <span className="text-yellow-400 shrink-0">⭐</span>
-                            {b.name}
+                      {p.bonus.length === 0
+                        ? <p className="text-zinc-600 text-xs italic">Nenhum</p>
+                        : p.bonus.map(b => (
+                          <div key={b.id} className="flex items-center gap-2 text-xs text-zinc-400 mb-1">
+                            <span className="text-yellow-400 shrink-0">⭐</span> {b.name}
                           </div>
                         ))}
-                        {s.bonus.length === 0 && <p className="text-zinc-600 text-xs italic">Sem bônus</p>}
-                      </div>
                     </div>
                   </div>
                 )}
@@ -637,22 +652,62 @@ Acesse o painel: {{link_dashboard}}`,
   },
 ]
 
-function EmailTemplatesSection() {
-  const [templates, setTemplates] = useState<EmailTemplate[]>(DEFAULT_TEMPLATES)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [saved,     setSaved]     = useState(false)
+// Variáveis por template
+const TEMPLATE_VARS: Record<string, { v: string; d: string }[]> = {
+  email_confirmation: [
+    { v: '{{agencia}}',         d: 'Nome da agência' },
+    { v: '{{nome}}',            d: 'Nome do responsável' },
+    { v: '{{link_confirmacao}}',d: 'Link de confirmação' },
+  ],
+  nps_form_to_client: [
+    { v: '{{agencia}}',         d: 'Nome da agência' },
+    { v: '{{cliente}}',         d: 'Nome do cliente' },
+    { v: '{{link_formulario}}', d: 'Link do formulário NPS' },
+    { v: '{{data_expiracao}}',  d: 'Data de expiração do link' },
+  ],
+  form_reminder: [
+    { v: '{{cliente}}',         d: 'Nome do cliente' },
+    { v: '{{data_analise}}',    d: 'Data da próxima análise' },
+    { v: '{{dias}}',            d: 'Dias até a análise' },
+    { v: '{{link_formulario}}', d: 'Link do formulário NPS' },
+  ],
+  payment_alert: [
+    { v: '{{agencia}}',         d: 'Nome da agência' },
+    { v: '{{cliente}}',         d: 'Nome do cliente' },
+    { v: '{{link_cliente}}',    d: 'Link do cliente no painel' },
+  ],
+  integration_alert: [
+    { v: '{{agencia}}',         d: 'Nome da agência' },
+    { v: '{{cliente}}',         d: 'Nome do cliente' },
+    { v: '{{integracao}}',      d: 'Nome da integração' },
+    { v: '{{motivo}}',          d: 'Motivo do erro' },
+    { v: '{{link_cliente}}',    d: 'Link do cliente no painel' },
+  ],
+  analysis_completed: [
+    { v: '{{agencia}}',         d: 'Nome da agência' },
+    { v: '{{total}}',           d: 'Total de clientes' },
+    { v: '{{sucesso}}',         d: 'Análises com sucesso' },
+    { v: '{{falhas}}',          d: 'Análises com falha' },
+    { v: '{{link_dashboard}}',  d: 'Link do dashboard' },
+  ],
+}
 
-  const editing = templates.find(t => t.id === editingId) ?? null
+function EmailTemplatesSection() {
+  const [templates,   setTemplates]   = useState<EmailTemplate[]>(DEFAULT_TEMPLATES)
+  const [editingId,   setEditingId]   = useState<string | null>(null)
+  const [saved,       setSaved]       = useState(false)
+  const [copiedVar,   setCopiedVar]   = useState<string | null>(null)
+  // Refs para inserir variável na posição do cursor
+  const subjectRef = useRef<HTMLInputElement | null>(null)
+  const bodyRef    = useRef<HTMLTextAreaElement | null>(null)
 
   function update(id: string, field: 'subject' | 'body', value: string) {
     setTemplates(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t))
   }
 
   function handleSave() {
-    // TODO: persistir no banco via PATCH /api/agency/email-templates
-    setSaved(true)
-    setEditingId(null)
-    setTimeout(() => setSaved(false), 2000)
+    setSaved(true); setEditingId(null)
+    setTimeout(() => setSaved(false), 2500)
   }
 
   function reset(id: string) {
@@ -660,12 +715,41 @@ function EmailTemplatesSection() {
     if (def) setTemplates(prev => prev.map(t => t.id === id ? { ...def } : t))
   }
 
+  // Insere variável na posição do cursor do campo ativo (subject ou body)
+  function insertVar(variable: string, templateId: string) {
+    const tpl = templates.find(t => t.id === templateId)
+    if (!tpl) return
+
+    const subEl = subjectRef.current
+    const bodEl = bodyRef.current
+
+    // Tenta inserir no campo que está com foco
+    if (document.activeElement === subEl && subEl) {
+      const start = subEl.selectionStart ?? tpl.subject.length
+      const end   = subEl.selectionEnd   ?? tpl.subject.length
+      const next  = tpl.subject.slice(0, start) + variable + tpl.subject.slice(end)
+      update(templateId, 'subject', next)
+      setTimeout(() => { subEl.setSelectionRange(start + variable.length, start + variable.length); subEl.focus() }, 0)
+    } else if (bodEl) {
+      const start = bodEl.selectionStart ?? tpl.body.length
+      const end   = bodEl.selectionEnd   ?? tpl.body.length
+      const next  = tpl.body.slice(0, start) + variable + tpl.body.slice(end)
+      update(templateId, 'body', next)
+      setTimeout(() => { bodEl.setSelectionRange(start + variable.length, start + variable.length); bodEl.focus() }, 0)
+    } else {
+      // fallback: copia para área de transferência
+      navigator.clipboard.writeText(variable).catch(() => {})
+    }
+    setCopiedVar(variable)
+    setTimeout(() => setCopiedVar(null), 1500)
+  }
+
   return (
     <div className="space-y-4">
       <div>
         <SectionTitle>Templates de E-mail</SectionTitle>
         <p className="text-zinc-500 text-sm -mt-3 mb-4">
-          Personalize o conteúdo dos e-mails enviados pelo sistema. As variáveis entre {'{{chaves}}'} são substituídas automaticamente.
+          Personalize o conteúdo dos e-mails enviados pelo sistema. Clique em uma variável para inseri-la no campo que está editando.
         </p>
       </div>
 
@@ -676,94 +760,100 @@ function EmailTemplatesSection() {
       )}
 
       <div className="space-y-3">
-        {templates.map(t => (
-          <Card key={t.id} className={cn('bg-zinc-900', editingId === t.id ? 'border-emerald-500/30' : 'border-zinc-800')}>
-            <CardContent className="p-4 space-y-3">
-              {/* Cabeçalho */}
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-zinc-200 text-sm font-medium">{t.label}</p>
-                  <p className="text-zinc-500 text-xs">{t.desc}</p>
+        {templates.map(t => {
+          const vars = TEMPLATE_VARS[t.id] ?? []
+          return (
+            <Card key={t.id} className={cn('bg-zinc-900', editingId === t.id ? 'border-emerald-500/30' : 'border-zinc-800')}>
+              <CardContent className="p-4 space-y-3">
+                {/* Cabeçalho */}
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-zinc-200 text-sm font-medium">{t.label}</p>
+                    <p className="text-zinc-500 text-xs">{t.desc}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {editingId === t.id ? (
+                      <>
+                        <Button size="sm" onClick={handleSave} className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1">
+                          <Check className="w-3.5 h-3.5" /> Salvar
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditingId(null)} className="text-zinc-400">Cancelar</Button>
+                      </>
+                    ) : (
+                      <>
+                        <button onClick={() => setEditingId(t.id)} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">Editar</button>
+                        <button onClick={() => reset(t.id)} className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors">Restaurar padrão</button>
+                      </>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {editingId === t.id ? (
-                    <>
-                      <Button size="sm" onClick={handleSave} className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1">
-                        <Check className="w-3.5 h-3.5" /> Salvar
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => setEditingId(null)} className="text-zinc-400">Cancelar</Button>
-                    </>
-                  ) : (
-                    <>
-                      <button onClick={() => setEditingId(t.id)} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">Editar</button>
-                      <button onClick={() => reset(t.id)} className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors">Restaurar padrão</button>
-                    </>
-                  )}
-                </div>
-              </div>
 
-              {/* Assunto */}
-              {editingId === t.id ? (
-                <div className="space-y-3">
-                  <Field label="Assunto">
-                    <Input value={t.subject} onChange={e => update(t.id, 'subject', e.target.value)}
-                      className={cn(inputCls, 'text-sm')} />
-                  </Field>
-                  <Field label="Corpo do e-mail" hint="Suporta texto simples. As variáveis {{entre_chaves}} são substituídas automaticamente.">
-                    <textarea
-                      value={t.body}
-                      onChange={e => update(t.id, 'body', e.target.value)}
-                      rows={8}
-                      className={cn(inputCls, 'w-full rounded-md border px-3 py-2 text-sm font-mono resize-y')}
-                    />
-                  </Field>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-zinc-600 text-xs shrink-0">Assunto:</span>
-                    <span className="text-zinc-400 text-xs truncate">{t.subject}</span>
+                {editingId === t.id ? (
+                  <div className="space-y-4">
+                    {/* Variáveis clicáveis */}
+                    <div className="space-y-1.5">
+                      <p className="text-zinc-500 text-xs font-medium">Variáveis disponíveis — clique para inserir no campo ativo:</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {vars.map(({ v, d }) => (
+                          <button
+                            key={v}
+                            type="button"
+                            onClick={() => insertVar(v, t.id)}
+                            title={d}
+                            className={cn(
+                              'px-2 py-1 rounded-md border text-xs font-mono transition-all',
+                              copiedVar === v
+                                ? 'border-emerald-500 bg-emerald-500/15 text-emerald-400'
+                                : 'border-zinc-700 bg-zinc-800 text-zinc-400 hover:border-emerald-500/50 hover:text-emerald-300 hover:bg-emerald-500/5'
+                            )}>
+                            {copiedVar === v ? '✓ ' : ''}{v}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <Field label="Assunto">
+                      <Input
+                        ref={subjectRef}
+                        value={t.subject}
+                        onChange={e => update(t.id, 'subject', e.target.value)}
+                        className={cn(inputCls, 'text-sm font-mono')}
+                      />
+                    </Field>
+                    <Field label="Corpo do e-mail" hint="Texto simples. Variáveis entre {{chaves}} são substituídas automaticamente no envio.">
+                      <textarea
+                        ref={bodyRef}
+                        value={t.body}
+                        onChange={e => update(t.id, 'body', e.target.value)}
+                        rows={9}
+                        className={cn(inputCls, 'w-full rounded-md border px-3 py-2 text-sm font-mono resize-y leading-relaxed')}
+                      />
+                    </Field>
                   </div>
-                  <div className="bg-zinc-800/60 rounded-lg p-3">
-                    <pre className="text-zinc-500 text-xs whitespace-pre-wrap font-sans leading-relaxed line-clamp-3">{t.body}</pre>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-zinc-600 text-xs shrink-0">Assunto:</span>
+                      <span className="text-zinc-400 text-xs truncate font-mono">{t.subject}</span>
+                    </div>
+                    <div className="bg-zinc-800/60 rounded-lg p-3">
+                      <pre className="text-zinc-500 text-xs whitespace-pre-wrap font-sans leading-relaxed line-clamp-4">{t.body}</pre>
+                    </div>
+                    {/* Badge das variáveis no modo visualização */}
+                    {vars.length > 0 && (
+                      <div className="flex flex-wrap gap-1 pt-1">
+                        {vars.map(({ v }) => (
+                          <span key={v} className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-zinc-800 text-zinc-600 border border-zinc-700">{v}</span>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
+                )}
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
-
-      {/* Legenda de variáveis */}
-      <Card className="bg-zinc-900/50 border-zinc-800">
-        <CardContent className="p-4">
-          <p className="text-zinc-400 text-xs font-medium mb-2">Variáveis disponíveis</p>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-            {[
-              ['{{agencia}}',        'Nome da agência'],
-              ['{{nome}}',           'Nome do usuário/responsável'],
-              ['{{cliente}}',        'Nome do cliente'],
-              ['{{link_confirmacao}}','Link de confirmação de e-mail'],
-              ['{{link_formulario}}','Link do formulário NPS'],
-              ['{{link_cliente}}',   'Link do cliente no painel'],
-              ['{{link_dashboard}}', 'Link do dashboard'],
-              ['{{data_analise}}',   'Data da próxima análise'],
-              ['{{data_expiracao}}', 'Data de expiração do link'],
-              ['{{dias}}',           'Dias até o evento'],
-              ['{{total}}',          'Total de clientes analisados'],
-              ['{{sucesso}}',        'Análises bem-sucedidas'],
-              ['{{falhas}}',         'Análises com falha'],
-              ['{{integracao}}',     'Nome da integração (Asaas, WhatsApp...)'],
-              ['{{motivo}}',         'Motivo do erro na integração'],
-            ].map(([v, d]) => (
-              <div key={v} className="flex items-baseline gap-2">
-                <code className="text-emerald-400 text-xs shrink-0">{v}</code>
-                <span className="text-zinc-600 text-xs">{d}</span>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }
