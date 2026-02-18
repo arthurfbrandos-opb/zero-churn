@@ -309,47 +309,60 @@ export async function GET(request: NextRequest) {
       try {
         const domCreds = await decrypt<DomCredentials>(domInteg.encrypted_key)
 
-        // Busca SOMENTE transações pagas (status: "paid")
+        // ── Integrações Dom por cliente (client_integrations) ─────
+        // Mesmo padrão do Asaas: credentials.document = CPF/CNPJ do comprador
+        const { data: domClientIntegs } = await supabase
+          .from('client_integrations')
+          .select('id, credentials, label, client_id')
+          .eq('type', 'dom_pagamentos')
+
+        // Busca nomes dos clientes que têm integração Dom
+        const domClientIds = [
+          ...new Set((domClientIntegs ?? []).map(ci => ci.client_id).filter(Boolean))
+        ]
+        const { data: domClientes } = domClientIds.length > 0
+          ? await supabase.from('clients').select('id, name, nome_resumido').in('id', domClientIds)
+          : { data: [] }
+
+        const domClienteMap = new Map(
+          (domClientes ?? []).map(c => [c.id, c.nome_resumido ?? c.name])
+        )
+
+        // Mapa: documento limpo → { clientId, clientName }
+        const domDocMap = new Map<string, { clientId: string; clientName: string }>()
+        for (const ci of (domClientIntegs ?? [])) {
+          const doc = (ci.credentials as { document?: string })?.document?.replace(/\D/g, '')
+          if (doc) {
+            domDocMap.set(doc, {
+              clientId:   ci.client_id,
+              clientName: domClienteMap.get(ci.client_id) ?? 'Cliente',
+            })
+          }
+        }
+
+        // ── Busca transações pagas do período ─────────────────────
         const domTxs = await fetchPaidTransactions(domCreds, dataInicio, dataFim)
         fontes.push('Dom Pagamentos')
-
-        // Mapa de clientes por document (CPF ou CNPJ — ambos possíveis na Dom)
-        const { data: clientesDom } = await supabase
-          .from('clients').select('id, name, nome_resumido, cnpj, email')
-
-        const docMap = new Map(
-          (clientesDom ?? [])
-            .filter(c => c.cnpj)
-            .map(c => [c.cnpj!.replace(/\D/g, ''), c])
-        )
-        const emailMap = new Map(
-          (clientesDom ?? [])
-            .filter(c => c.email)
-            .map(c => [c.email!.toLowerCase().trim(), c])
-        )
 
         for (const tx of domTxs) {
           // Ambos já em REAIS (sem divisão por 100)
           const valorTotal   = tx.amount
           const valorLiquido = tx.liquid_amount
 
-          // Identifica cliente: 1º por CPF/CNPJ, 2º por e-mail
-          // Campos PLANOS na resposta da lista: customer_document, customer_email
-          const doc   = tx.customer_document?.replace(/\D/g, '')
-          const email = tx.customer_email?.toLowerCase().trim()
-          const cli   = (doc ? docMap.get(doc) : null)
-                     ?? (email ? emailMap.get(email) : null)
-                     ?? null
+          // Identifica cliente pelo documento vinculado em client_integrations
+          const doc     = tx.customer_document?.replace(/\D/g, '')
+          const matched = doc ? domDocMap.get(doc) : null
+
+          const clientId   = matched?.clientId   ?? ''
+          const clientName = matched?.clientName  ?? tx.customer_name ?? '— Sem identificação —'
 
           const status = domStatusToInternal(tx.status)
           const data   = domDateToISO(tx.created_at)
 
           const cobranca = {
             id:           `dom_${tx.id}`,
-            clientId:     cli?.id ?? '',
-            clientName:   cli
-              ? (cli.nome_resumido ?? cli.name)
-              : (tx.customer_name || '— Sem identificação —'),
+            clientId,
+            clientName,
             valorTotal,
             valorLiquido,
             vencimento:   data,
@@ -371,12 +384,11 @@ export async function GET(request: NextRequest) {
             },
           }
 
-          // Agrupa por cliente cadastrado OU por CPF/CNPJ do comprador Dom
-          const key = cli?.id ?? `__dom_${doc ?? tx.id}`
+          // Agrupa pelo clientId do cliente cadastrado, ou pelo doc se sem vínculo
+          const key = clientId || `__dom_${doc ?? tx.id}`
           if (!porCliente.has(key)) {
             porCliente.set(key, {
-              clientId:   cli?.id ?? '',
-              clientName: cobranca.clientName,
+              clientId, clientName,
               recebido: 0, previsto: 0, emAtraso: 0, cobranças: [],
             })
           }
@@ -384,19 +396,21 @@ export async function GET(request: NextRequest) {
           g.cobranças.push(cobranca)
 
           if (STATUS_RECEBIDO.has(status)) {
-            g.recebido        += valorLiquido; resumo.recebido        += valorLiquido
+            g.recebido           += valorLiquido
+            resumo.recebido      += valorLiquido
             resumo.recebidoBruto += valorTotal
           } else if (STATUS_PREVISTO.has(status)) {
-            g.previsto        += valorLiquido; resumo.previsto        += valorLiquido
-            resumo.previstobruto += valorTotal
+            g.previsto            += valorLiquido
+            resumo.previsto       += valorLiquido
+            resumo.previstobruto  += valorTotal
           } else if (STATUS_ATRASO.has(status)) {
-            g.emAtraso        += valorLiquido; resumo.emAtraso        += valorLiquido
-            resumo.emAtrasoBruto += valorTotal
+            g.emAtraso            += valorLiquido
+            resumo.emAtraso       += valorLiquido
+            resumo.emAtrasoBruto  += valorTotal
           }
         }
       } catch (domErr) {
         console.error('[financeiro] Dom Pagamentos error:', domErr)
-        // Não trava — Asaas continua funcionando
       }
     }
 

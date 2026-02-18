@@ -128,6 +128,18 @@ function ResumoCard({ label, value, sub, icon: Icon, color, bg, border }: {
   )
 }
 
+// ── Badge de origem da cobrança ───────────────────────────────────
+function FonteBadge({ fonte }: { fonte: string }) {
+  if (fonte === 'dom') return (
+    <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-semibold
+      bg-violet-500/15 text-violet-400 border border-violet-500/25 shrink-0">Dom</span>
+  )
+  return (
+    <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-semibold
+      bg-blue-500/15 text-blue-400 border border-blue-500/25 shrink-0">Asaas</span>
+  )
+}
+
 // ── Linha de cobrança ─────────────────────────────────────────────
 function CobrancaRow({ c }: { c: Cobranca }) {
   const tipoMap: Record<string, string> = {
@@ -135,43 +147,59 @@ function CobrancaRow({ c }: { c: Cobranca }) {
     credit_card: 'Cartão', debit_card: 'Débito', boleto: 'Boleto', pix: 'Pix',
     UNDEFINED: 'Bol/Pix',
   }
-  const isPago    = ['RECEIVED','CONFIRMED','RECEIVED_IN_CASH','paid'].includes(c.status)
-  const isAtraso  = c.status === 'OVERDUE'
-  const temDesconto = c.valorTotal !== c.valorLiquido
+  const isPago   = ['RECEIVED','CONFIRMED','RECEIVED_IN_CASH','paid'].includes(c.status)
+  const isAtraso = c.status === 'OVERDUE'
+  const temTaxa  = Math.abs(c.valorTotal - c.valorLiquido) >= 0.01
 
   return (
     <div className="flex items-start gap-3 py-2.5 border-b border-zinc-800/50 last:border-0">
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
+        {/* Linha 1: badges de status, tipo, origem */}
+        <div className="flex items-center gap-1.5 flex-wrap">
           <StatusBadge status={c.status} />
-          <span className="text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-full">
+          <FonteBadge fonte={c.fonte} />
+          <span className="text-xs text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded-full">
             {tipoMap[c.tipo] ?? c.tipo}{c.parcelas ? ` ${c.parcelas}` : ''}{c.cartao ? ` · ${c.cartao}` : ''}
           </span>
-          {c.descricao && <span className="text-zinc-500 text-xs truncate max-w-[180px]">{c.descricao}</span>}
-          {c.fonte === 'dom' && c.domCliente && (
-            <span className="text-violet-400/70 text-xs truncate max-w-[160px]">{c.domCliente.nome}</span>
+          {c.descricao && (
+            <span className="text-zinc-500 text-xs truncate max-w-[160px]">{c.descricao}</span>
           )}
         </div>
-        <div className="flex items-center gap-3 mt-1 text-xs text-zinc-600">
+        {/* Linha 2: datas + comprador Dom */}
+        <div className="flex items-center gap-2 mt-1 text-xs text-zinc-600 flex-wrap">
           <span>Venc: {fmtDate(c.vencimento)}</span>
-          {c.pagamento && <span>Pago: {fmtDate(c.pagamento)}</span>}
-          {c.fonte === 'dom' && c.domCliente?.documento && (
-            <span>{c.domCliente.documento}</span>
+          {c.pagamento && <span>· Pago: {fmtDate(c.pagamento)}</span>}
+          {c.fonte === 'dom' && c.domCliente && (
+            <span className="text-violet-400/60">
+              · {c.domCliente.nome}
+              {c.domCliente.documento ? ` (${c.domCliente.documento})` : ''}
+            </span>
           )}
         </div>
       </div>
-      <div className="text-right shrink-0 min-w-[90px]">
-        {/* Valor líquido — principal */}
-        <p className={cn('font-semibold text-sm tabular-nums',
-          isPago ? 'text-emerald-400' : isAtraso ? 'text-red-400' : 'text-zinc-300'
-        )}>{fmt(c.valorLiquido)}</p>
-        {/* Valor bruto — só aparece se diferente do líquido */}
-        {temDesconto && (
-          <p className="text-zinc-600 text-[11px] tabular-nums line-through">{fmt(c.valorTotal)}</p>
+
+      {/* Valores: total + líquido sempre visíveis */}
+      <div className="text-right shrink-0 min-w-[100px] space-y-0.5">
+        {temTaxa ? (
+          <>
+            <p className="text-zinc-500 text-[11px] tabular-nums">
+              total {fmt(c.valorTotal)}
+            </p>
+            <p className={cn('font-semibold text-sm tabular-nums',
+              isPago ? 'text-emerald-400' : isAtraso ? 'text-red-400' : 'text-zinc-300'
+            )}>
+              {fmt(c.valorLiquido)}
+              <span className="text-[10px] font-normal opacity-50 ml-0.5">líq.</span>
+            </p>
+          </>
+        ) : (
+          <p className={cn('font-semibold text-sm tabular-nums',
+            isPago ? 'text-emerald-400' : isAtraso ? 'text-red-400' : 'text-zinc-300'
+          )}>{fmt(c.valorTotal)}</p>
         )}
         {c.invoiceUrl && (
           <a href={c.invoiceUrl} target="_blank" rel="noopener noreferrer"
-            className="text-xs text-zinc-600 hover:text-zinc-400 flex items-center gap-0.5 justify-end mt-0.5">
+            className="text-xs text-zinc-600 hover:text-zinc-400 flex items-center gap-0.5 justify-end">
             <ExternalLink className="w-3 h-3" /> Ver
           </a>
         )}

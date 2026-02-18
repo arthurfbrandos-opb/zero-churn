@@ -954,13 +954,20 @@ function TabFinanceiro({ client }: { client: Client }) {
   )
 }
 
-// ─── Tipo de integração Asaas com credenciais ────────────────────
+// ─── Tipos de integrações com credenciais ────────────────────────
 interface AsaasInteg {
   id:          string
   status:      string
   last_sync_at: string | null
   label:       string | null
   credentials: { customer_id: string; customer_name?: string | null } | null
+}
+interface DomInteg {
+  id:         string
+  status:     string
+  label:      string | null
+  created_at: string | null
+  credentials: { document: string } | null
 }
 
 function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => void }) {
@@ -977,6 +984,16 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
   const [creating, setCreating]             = useState(false)
   const [createError, setCreateError]       = useState<string | null>(null)
 
+  // Dom Pagamentos
+  const [domAccounts, setDomAccounts]       = useState<DomInteg[]>([])
+  const [loadingDom, setLoadingDom]         = useState(true)
+  const [domDoc, setDomDoc]                 = useState('')
+  const [domLabel, setDomLabel]             = useState('')
+  const [domLinking, setDomLinking]         = useState(false)
+  const [domError, setDomError]             = useState<string | null>(null)
+  const [removingDom, setRemovingDom]       = useState<string | null>(null)
+  const [showDomForm, setShowDomForm]       = useState(false)
+
   async function loadAccounts() {
     setLoadingAccounts(true)
     const res = await fetch(`/api/asaas/sync/${client.id}`)
@@ -984,7 +1001,41 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
     setLoadingAccounts(false)
   }
 
-  useEffect(() => { loadAccounts() }, [])
+  async function loadDomAccounts() {
+    setLoadingDom(true)
+    const res = await fetch(`/api/dom/sync/${client.id}`)
+    if (res.ok) { const d = await res.json(); setDomAccounts(d.integrations ?? []) }
+    setLoadingDom(false)
+  }
+
+  async function handleDomLink() {
+    setDomLinking(true); setDomError(null)
+    const res = await fetch(`/api/dom/sync/${client.id}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ document: domDoc, label: domLabel || undefined }),
+    })
+    const d = await res.json()
+    if (!res.ok) { setDomError(d.error ?? 'Erro ao vincular'); setDomLinking(false); return }
+    setDomDoc(''); setDomLabel(''); setShowDomForm(false)
+    loadDomAccounts()
+    setDomLinking(false)
+  }
+
+  async function handleDomRemove(integId: string) {
+    setRemovingDom(integId)
+    await fetch(`/api/dom/sync/${client.id}?integrationId=${integId}`, { method: 'DELETE' })
+    loadDomAccounts()
+    setRemovingDom(null)
+  }
+
+  function fmtDoc(doc: string) {
+    const d = doc.replace(/\D/g, '')
+    if (d.length === 11) return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6,9)}-${d.slice(9)}`
+    if (d.length === 14) return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}`
+    return doc
+  }
+
+  useEffect(() => { loadAccounts(); loadDomAccounts() }, [])
 
   async function openSearch() {
     setShowSearch(true); setSearch(''); setLinkError(null)
@@ -1221,6 +1272,102 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
                       className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-dashed border-zinc-700 text-zinc-500 hover:border-zinc-600 hover:text-zinc-400 text-xs transition-colors">
                       <Plus className="w-3.5 h-3.5" /> Adicionar outra conta Asaas
                     </button>
+                  </div>
+                )
+            }
+          </CardContent>
+        </Card>
+
+        {/* ── Dom Pagamentos ────────────────────────────────────── */}
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-violet-500/10 flex items-center justify-center shrink-0">
+                  <CreditCard className="w-5 h-5 text-violet-400" />
+                </div>
+                <div>
+                  <p className="text-zinc-200 font-semibold text-sm">Dom Pagamentos</p>
+                  <p className="text-zinc-500 text-xs">CPF/CNPJ dos compradores vinculados</p>
+                </div>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => { setShowDomForm(f => !f); setDomError(null) }}
+                className="border-zinc-700 text-zinc-400 hover:text-white gap-1.5 text-xs">
+                <Plus className="w-3.5 h-3.5" /> Adicionar
+              </Button>
+            </div>
+
+            {/* Formulário para novo documento */}
+            {showDomForm && (
+              <div className="bg-zinc-800/60 border border-zinc-700/50 rounded-xl p-4 space-y-3">
+                <p className="text-zinc-400 text-xs font-medium">Informe o CPF ou CNPJ do comprador que aparece nas transações Dom</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    value={domDoc}
+                    onChange={e => setDomDoc(e.target.value)}
+                    placeholder="CPF ou CNPJ (só números)"
+                    className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 placeholder:text-zinc-600 text-sm focus:outline-none focus:border-violet-500 w-full"
+                  />
+                  <input
+                    value={domLabel}
+                    onChange={e => setDomLabel(e.target.value)}
+                    placeholder="Nome / rótulo (opcional)"
+                    className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 placeholder:text-zinc-600 text-sm focus:outline-none focus:border-violet-500 w-full"
+                  />
+                </div>
+                {domError && <p className="text-red-400 text-xs">{domError}</p>}
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={handleDomLink} disabled={domLinking || !domDoc.trim()}
+                    className="bg-violet-600 hover:bg-violet-700 text-white gap-1.5 text-xs">
+                    {domLinking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                    Vincular
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => { setShowDomForm(false); setDomError(null) }}
+                    className="text-zinc-500 text-xs">Cancelar</Button>
+                </div>
+              </div>
+            )}
+
+            {/* Lista de documentos vinculados */}
+            {loadingDom
+              ? <div className="flex items-center justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-zinc-600" /></div>
+              : domAccounts.length === 0 && !showDomForm
+                ? (
+                  <div className="flex flex-col items-center gap-2 py-4 text-center">
+                    <p className="text-zinc-500 text-sm">Nenhum documento vinculado</p>
+                    <p className="text-zinc-600 text-xs">Adicione o CPF/CNPJ do comprador que aparece nas transações Dom</p>
+                  </div>
+                )
+                : (
+                  <div className="space-y-2">
+                    {domAccounts.map(integ => {
+                      const doc = integ.credentials?.document ?? ''
+                      return (
+                        <div key={integ.id} className="flex items-center gap-3 bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-3">
+                          <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
+                            <Check className="w-4 h-4 text-violet-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-zinc-200 text-sm font-medium">{integ.label ?? fmtDoc(doc)}</p>
+                            <p className="text-zinc-500 text-xs">{fmtDoc(doc)}</p>
+                          </div>
+                          <button title="Desvincular"
+                            onClick={() => handleDomRemove(integ.id)}
+                            disabled={removingDom === integ.id}
+                            className="p-1.5 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors">
+                            {removingDom === integ.id
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <X className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      )
+                    })}
+                    {domAccounts.length > 0 && (
+                      <button onClick={() => setShowDomForm(true)}
+                        className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-dashed border-zinc-700 text-zinc-500 hover:border-zinc-600 hover:text-zinc-400 text-xs transition-colors">
+                        <Plus className="w-3.5 h-3.5" /> Adicionar outro documento
+                      </button>
+                    )}
                   </div>
                 )
             }
