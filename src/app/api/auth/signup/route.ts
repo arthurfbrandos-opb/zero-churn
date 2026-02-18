@@ -17,11 +17,12 @@ export async function POST(request: NextRequest) {
     const admin = createAdminClient()
 
     // 1. Criar usuário no Supabase Auth
+    // email_confirm omitido → Supabase envia e-mail de verificação automaticamente
+    // O link no e-mail aponta para /auth/callback (configurado no Supabase Dashboard)
     console.log('[signup] criando usuario:', email)
     const { data: authData, error: authError } = await admin.auth.admin.createUser({
       email,
       password,
-      email_confirm: true,
       user_metadata: { full_name: ownerName },
     })
 

@@ -1,19 +1,25 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-// Rotas que não precisam de autenticação
-const PUBLIC_ROUTES = ['/login', '/cadastro', '/recuperar-senha']
+// Rotas públicas (sem autenticação exigida)
+const PUBLIC_ROUTES = [
+  '/login',
+  '/cadastro',
+  '/recuperar-senha',
+  '/redefinir-senha',  // nova senha após reset
+  '/verificar-email',  // "verifique seu e-mail"
+]
 const PUBLIC_PREFIXES = [
-  '/f/',         // formulário público /f/[token]
-  '/api/auth/',  // rotas de auth (signup, logout) não exigem sessão
+  '/f/',          // formulário NPS público /f/[token]
+  '/api/auth/',   // signup, logout
+  '/auth/',       // callback PKCE do Supabase (email confirm, password reset)
 ]
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Rotas públicas — passa direto
   if (
-    PUBLIC_ROUTES.some(r => pathname.startsWith(r)) ||
+    PUBLIC_ROUTES.some(r => pathname === r || pathname.startsWith(r + '?')) ||
     PUBLIC_PREFIXES.some(p => pathname.startsWith(p))
   ) {
     return NextResponse.next()
@@ -42,11 +48,10 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  // Verifica sessão atual
-  const { data: { session } } = await supabase.auth.getSession()
+  // getUser() (recomendado Supabase) valida o token no servidor — nunca usa cache local
+  const { data: { user } } = await supabase.auth.getUser()
 
-  // Não autenticado → redireciona para login
-  if (!session) {
+  if (!user) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     url.searchParams.set('redirect', pathname)
@@ -58,7 +63,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Aplica proxy a todas as rotas exceto arquivos estáticos
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
