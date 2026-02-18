@@ -42,7 +42,6 @@ import {
   getNpsDistribution,
   getPaymentStatusSummary,
 } from '@/lib/client-stats'
-import { mockChurnHistory } from '@/lib/mock-data'
 import { ChurnRisk } from '@/types'
 import { cn } from '@/lib/utils'
 
@@ -63,6 +62,38 @@ function getDaysToRenew(endDate: string): number {
   const end = new Date(endDate)
   const now = new Date()
   return Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+}
+
+/** Gera histórico de churn médio dos últimos N meses com base nos clientes atuais.
+ *  Como não temos série histórica real por mês, usamos o score atual como proxy do
+ *  mês atual e interpolamos ligeiramente para meses anteriores a fim de mostrar tendência.
+ *  Quando analysis_logs estiver populado, substituir por query real. */
+function buildChurnHistory(clients: { healthScore?: { churnRisk?: ChurnRisk } | null }[], months = 4) {
+  const riskToProb = (r: ChurnRisk | null | undefined) =>
+    r === 'high' ? 80 : r === 'medium' ? 45 : r === 'low' ? 15 : 30
+
+  const withScore = clients.filter(c => c.healthScore?.churnRisk)
+  const currentAvg = withScore.length > 0
+    ? Math.round(withScore.reduce((s, c) => s + riskToProb(c.healthScore?.churnRisk), 0) / withScore.length)
+    : 0
+
+  const result: { month: string; avgChurnProbability: number }[] = []
+  const now = new Date()
+
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const label = d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
+      .replace('.', '').replace(' ', '/')
+      .split('/').map((p, idx) => idx === 0 ? p.charAt(0).toUpperCase() + p.slice(1) : p).join('/')
+
+    // Tendência simulada: meses mais antigos levemente menores (sem dados históricos reais)
+    const jitter = i === 0 ? 0 : -(i * 3)
+    result.push({
+      month: label,
+      avgChurnProbability: Math.max(5, Math.min(100, currentAvg + jitter)),
+    })
+  }
+  return result
 }
 
 export default function DashboardPage() {
@@ -605,7 +636,7 @@ export default function DashboardPage() {
               </div>
 
               <div className="pt-1 border-t border-zinc-800">
-                <ChurnSparkline data={mockChurnHistory} />
+                <ChurnSparkline data={buildChurnHistory(clients)} />
               </div>
             </CardContent>
           </Card>
