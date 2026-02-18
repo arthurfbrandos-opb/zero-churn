@@ -1904,43 +1904,222 @@ function TabFormularios({ clientId }: { clientId: string; client: Client }) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// TAB 4 — HISTÓRICO
+// TAB 4 — HISTÓRICO (dados reais do banco)
 // ─────────────────────────────────────────────────────────────────
-function TabHistorico({ clientId }: { clientId: string }) {
-  const alerts: unknown[] = [] // será conectado via API na Sprint 2
 
-  const MOCK_EVENTS = [
-    { id: 'ev1', date: '2026-02-05', icon: RefreshCw, color: 'text-violet-400 bg-violet-500/15', title: 'Análise automática executada', sub: 'Score: 32 · Risco: Alto' },
-    { id: 'ev2', date: '2026-02-03', icon: AlertTriangle, color: 'text-red-400 bg-red-500/15',    title: 'Pagamento em atraso detectado', sub: 'R$ 4.500 — 8 dias em atraso' },
-    { id: 'ev3', date: '2026-01-28', icon: Send,     color: 'text-blue-400 bg-blue-500/15',    title: 'Formulário de satisfação enviado', sub: 'Respondido em 3 dias — NPS: 6' },
-    { id: 'ev4', date: '2026-01-15', icon: MessageCircle, color: 'text-emerald-400 bg-emerald-500/15', title: 'Grupo de WhatsApp integrado', sub: 'Grupo: Bella Forma × Agência' },
-    { id: 'ev5', date: '2026-01-10', icon: Check,    color: 'text-emerald-400 bg-emerald-500/15', title: 'Ação concluída: relatório enviado', sub: 'Por Arthur · Plano de Jan/26' },
-    { id: 'ev6', date: '2025-12-05', icon: RefreshCw, color: 'text-violet-400 bg-violet-500/15', title: 'Análise automática executada', sub: 'Score: 41 · Risco: Médio' },
-    { id: 'ev7', date: '2025-06-01', icon: User,     color: 'text-zinc-400 bg-zinc-700',        title: 'Cliente cadastrado', sub: 'Início do contrato MRR' },
-  ]
+interface AnalysisHistoryEntry {
+  id:               string
+  scoreTotal:       number
+  scoreFinanceiro:  number | null
+  scoreProximidade: number | null
+  scoreResultado:   number | null
+  scoreNps:         number | null
+  churnRisk:        string
+  diagnosis:        string | null
+  flags:            string[]
+  triggeredBy:      string
+  analyzedAt:       string
+}
+
+function ScoreSparkbar({ score }: { score: number }) {
+  const color = score >= 70 ? 'bg-emerald-500' : score >= 40 ? 'bg-yellow-500' : 'bg-red-500'
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className="w-16 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+        <div className={cn('h-full rounded-full', color)} style={{ width: `${score}%` }} />
+      </div>
+      <span className={cn('text-xs font-bold',
+        score >= 70 ? 'text-emerald-400' : score >= 40 ? 'text-yellow-400' : 'text-red-400'
+      )}>{score}</span>
+    </div>
+  )
+}
+
+function TabHistorico({ clientId }: { clientId: string }) {
+  const [analyses, setAnalyses]     = useState<AnalysisHistoryEntry[]>([])
+  const [loading, setLoading]       = useState(true)
+  const [expanded, setExpanded]     = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch(`/api/analysis/${clientId}`)
+      .then(r => r.json())
+      .then(d => setAnalyses((d.analyses ?? []).map((a: Record<string, unknown>) => ({
+        id:               String(a.id),
+        scoreTotal:       Number(a.score_total),
+        scoreFinanceiro:  a.score_financeiro != null ? Number(a.score_financeiro) : null,
+        scoreProximidade: a.score_proximidade != null ? Number(a.score_proximidade) : null,
+        scoreResultado:   a.score_resultado != null ? Number(a.score_resultado) : null,
+        scoreNps:         a.score_nps != null ? Number(a.score_nps) : null,
+        churnRisk:        String(a.churn_risk ?? 'low'),
+        diagnosis:        a.diagnosis ? String(a.diagnosis) : null,
+        flags:            (a.flags as string[]) ?? [],
+        triggeredBy:      String(a.triggered_by ?? 'scheduled'),
+        analyzedAt:       String(a.analyzed_at),
+      }))))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [clientId])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-5 h-5 text-zinc-500 animate-spin" />
+      </div>
+    )
+  }
+
+  if (analyses.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
+        <History className="w-8 h-8 text-zinc-700" />
+        <p className="text-zinc-500 text-sm">Nenhuma análise realizada ainda.</p>
+        <p className="text-zinc-600 text-xs">Clique em "Analisar agora" para gerar o primeiro health score.</p>
+      </div>
+    )
+  }
+
+  // Gráfico de linha simples com SVG
+  const maxScore    = 100
+  const chartW      = 280
+  const chartH      = 60
+  const pts         = analyses.slice().reverse()  // mais antigo primeiro
+  const xStep       = pts.length > 1 ? chartW / (pts.length - 1) : chartW
+  const points      = pts.map((a, i) => ({
+    x: pts.length === 1 ? chartW / 2 : i * xStep,
+    y: chartH - (a.scoreTotal / maxScore) * chartH,
+    score: a.scoreTotal,
+  }))
+
+  const polyline = points.map(p => `${p.x},${p.y}`).join(' ')
+  const areaPath = points.length > 0
+    ? `M${points[0].x},${chartH} ${points.map(p => `L${p.x},${p.y}`).join(' ')} L${points[points.length - 1].x},${chartH} Z`
+    : ''
 
   return (
-    <div className="space-y-1">
-      {MOCK_EVENTS.map((ev, i) => {
-        const Icon = ev.icon
-        return (
-          <div key={ev.id} className="flex gap-3">
-            {/* Linha do tempo */}
-            <div className="flex flex-col items-center">
-              <div className={cn('w-8 h-8 rounded-full flex items-center justify-center shrink-0', ev.color)}>
-                <Icon className="w-4 h-4" />
+    <div className="space-y-4">
+      {/* Gráfico de evolução */}
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardContent className="p-4">
+          <p className="text-zinc-400 text-xs font-medium mb-3">Evolução do Health Score</p>
+          {pts.length > 1 ? (
+            <div className="overflow-x-auto">
+              <svg width="100%" viewBox={`0 0 ${chartW} ${chartH + 10}`} className="min-w-[200px]">
+                <defs>
+                  <linearGradient id="scoreGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
+                    <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+                  </linearGradient>
+                </defs>
+                <path d={areaPath} fill="url(#scoreGrad)" />
+                <polyline
+                  points={polyline}
+                  fill="none"
+                  stroke="#10b981"
+                  strokeWidth="2"
+                  strokeLinejoin="round"
+                />
+                {points.map((p, i) => (
+                  <g key={i}>
+                    <circle cx={p.x} cy={p.y} r="3" fill="#10b981" />
+                    <text x={p.x} y={chartH + 9} textAnchor="middle" fontSize="7" fill="#52525b">
+                      {p.score}
+                    </text>
+                  </g>
+                ))}
+              </svg>
+              <div className="flex justify-between text-zinc-700 text-xs mt-1">
+                <span>{fmtDate(pts[0].analyzedAt.slice(0, 10))}</span>
+                <span>{fmtDate(pts[pts.length - 1].analyzedAt.slice(0, 10))}</span>
               </div>
-              {i < MOCK_EVENTS.length - 1 && <div className="w-px flex-1 bg-zinc-800 my-1" />}
             </div>
-            {/* Conteúdo */}
-            <div className="pb-5 flex-1">
-              <p className="text-zinc-200 text-sm font-medium">{ev.title}</p>
-              <p className="text-zinc-500 text-xs">{ev.sub}</p>
-              <p className="text-zinc-700 text-xs mt-0.5">{fmtDate(ev.date)}</p>
+          ) : (
+            <div className="flex items-center gap-3 py-2">
+              <ScoreSparkbar score={pts[0].scoreTotal} />
+              <span className="text-zinc-600 text-xs">Apenas 1 análise disponível</span>
             </div>
-          </div>
-        )
-      })}
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Lista de análises */}
+      <div className="space-y-2">
+        <p className="text-zinc-500 text-xs font-medium uppercase tracking-wider px-1">Análises anteriores</p>
+        {analyses.map(a => {
+          const isExpanded = expanded === a.id
+          const riskColor  = a.churnRisk === 'high' ? 'text-red-400 bg-red-500/10 border-red-500/20'
+                           : a.churnRisk === 'medium' ? 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20'
+                           : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+          const riskLabel  = a.churnRisk === 'high' ? 'Alto' : a.churnRisk === 'medium' ? 'Médio' : 'Baixo'
+
+          return (
+            <Card key={a.id} className="bg-zinc-900 border-zinc-800">
+              <CardContent className="p-4">
+                <button
+                  className="w-full flex items-center gap-3 text-left"
+                  onClick={() => setExpanded(isExpanded ? null : a.id)}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <ScoreSparkbar score={a.scoreTotal} />
+                      <Badge variant="outline" className={cn('text-xs', riskColor)}>
+                        {riskLabel}
+                      </Badge>
+                      <span className="text-zinc-600 text-xs">
+                        {a.triggeredBy === 'manual' ? '🔘 Manual' : '🔄 Automática'}
+                      </span>
+                    </div>
+                    <p className="text-zinc-600 text-xs mt-1">{fmtDate(a.analyzedAt.slice(0, 10))}</p>
+                  </div>
+                  <ChevronRight className={cn('w-4 h-4 text-zinc-600 shrink-0 transition-transform', isExpanded && 'rotate-90')} />
+                </button>
+
+                {isExpanded && (
+                  <div className="mt-3 pt-3 border-t border-zinc-800 space-y-3">
+                    {/* Breakdown dos pilares */}
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { label: '💰 Financeiro',  value: a.scoreFinanceiro  },
+                        { label: '💬 Proximidade', value: a.scoreProximidade },
+                        { label: '🎯 Resultado',   value: a.scoreResultado   },
+                        { label: '⭐ NPS',          value: a.scoreNps         },
+                      ].map(p => (
+                        <div key={p.label} className="bg-zinc-800/50 rounded-lg p-2">
+                          <p className="text-zinc-500 text-xs">{p.label}</p>
+                          {p.value !== null
+                            ? <ScoreSparkbar score={p.value} />
+                            : <p className="text-zinc-700 text-xs">sem dados</p>
+                          }
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Flags */}
+                    {a.flags.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {a.flags.map(f => (
+                          <Badge key={f} variant="outline" className="text-xs text-red-400 border-red-500/30 bg-red-500/5">
+                            ⚠️ {f.replace(/_/g, ' ')}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Diagnóstico */}
+                    {a.diagnosis && (
+                      <div className="bg-zinc-800/30 rounded-lg p-3">
+                        <p className="text-zinc-500 text-xs font-medium mb-1.5">Diagnóstico</p>
+                        <p className="text-zinc-300 text-xs leading-relaxed whitespace-pre-line line-clamp-6">
+                          {a.diagnosis}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
     </div>
   )
 }

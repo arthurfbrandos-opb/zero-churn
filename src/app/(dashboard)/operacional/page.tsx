@@ -1,12 +1,13 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import {
   Activity, CheckCircle2, XCircle, AlertCircle,
   ChevronRight, RefreshCw, Bot, Cpu,
   Calendar, Clock, TrendingUp, Zap,
   MessageCircle, CreditCard, BarChart2, Plug,
-  ShieldCheck,
+  ShieldCheck, Loader2,
 } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -17,34 +18,49 @@ import { useClients } from '@/hooks/use-clients'
 import { sortClientsByRisk } from '@/lib/client-stats'
 import { cn } from '@/lib/utils'
 
-// ── Mock data operacional ─────────────────────────────────────────
+// ── Tipos do painel operacional ───────────────────────────────────
 
-const mockJobHistory = [
-  {
-    id: 'job-001', month: 'Fevereiro 2026', ranAt: '2026-02-05T06:02:11Z',
-    status: 'success' as const, total: 6, processed: 6, failed: 0,
-    duration: '4m 23s', tokensUsed: 41200, costBRL: 8.70,
-  },
-  {
-    id: 'job-002', month: 'Janeiro 2026', ranAt: '2026-01-05T06:01:44Z',
-    status: 'partial' as const, total: 5, processed: 4, failed: 1,
-    duration: '3m 51s', tokensUsed: 34800, costBRL: 7.35,
-    failedClients: ['Imobiliária Casa Certa — Erro na API Asaas (timeout)'],
-  },
-  {
-    id: 'job-003', month: 'Dezembro 2025', ranAt: '2025-12-05T06:00:52Z',
-    status: 'success' as const, total: 4, processed: 4, failed: 0,
-    duration: '3m 02s', tokensUsed: 28600, costBRL: 6.05,
-  },
-]
+interface JobEntry {
+  date:        string
+  total:       number
+  success:     number
+  failed:      number
+  skipped:     number
+  tokensTotal: number
+  costTotal:   number
+  startedAt:   string
+  finishedAt:  string | null
+  failures:    string[]
+}
 
-const mockAICostMonthly = [
-  { month: 'Dez', cost: 6.05, tokens: 28600 },
-  { month: 'Jan', cost: 7.35, tokens: 34800 },
-  { month: 'Fev', cost: 8.70, tokens: 41200 },
-]
+interface AiCostEntry {
+  month:  string
+  label:  string
+  tokens: number
+  cost:   number
+}
 
-const NEXT_JOB_DATE = '05/03/2026'
+interface OperacionalData {
+  jobHistory:       JobEntry[]
+  aiCost:           AiCostEntry[]
+  nextAnalysisDate: string
+  analysisDay:      number
+}
+
+function useOperacional() {
+  const [data, setData]       = useState<OperacionalData | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch('/api/operacional')
+      .then(r => r.json())
+      .then(d => setData(d))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  return { data, loading }
+}
 
 // ─────────────────────────────────────────────────────────────────
 
@@ -65,6 +81,7 @@ const INT_LABEL: Record<string, string> = {
 
 export default function OperacionalPage() {
   const { clients: rawClients } = useClients()
+  const { data: opData, loading: opLoading } = useOperacional()
   const clients = sortClientsByRisk(rawClients.filter(c => c.status !== 'inactive'))
 
   const integrationTypes = ['whatsapp', 'asaas', 'dom_pagamentos', 'meta_ads', 'google_ads']
@@ -80,11 +97,17 @@ export default function OperacionalPage() {
   const errorCount        = allIntegrations.filter(i => i.status === 'error').length
   const disconnectedCount = allIntegrations.filter(i => i.status === 'disconnected').length
 
-  // IA — último job
-  const lastJob  = mockJobHistory[0]
-  const totalTokens = mockAICostMonthly.reduce((s, m) => s + m.tokens, 0)
-  const totalCost   = mockAICostMonthly.reduce((s, m) => s + m.cost, 0)
-  const maxCost     = Math.max(...mockAICostMonthly.map(m => m.cost))
+  // Dados reais do painel
+  const jobHistory      = opData?.jobHistory ?? []
+  const aiCost          = opData?.aiCost ?? []
+  const nextJobDate     = opData?.nextAnalysisDate
+    ? new Date(opData.nextAnalysisDate + 'T00:00:00').toLocaleDateString('pt-BR')
+    : '—'
+
+  const lastJob    = jobHistory[0]
+  const totalTokens = aiCost.reduce((s, m) => s + m.tokens, 0)
+  const totalCost   = aiCost.reduce((s, m) => s + m.cost, 0)
+  const maxCost     = aiCost.length > 0 ? Math.max(...aiCost.map(m => m.cost)) : 1
 
   return (
     <div className="min-h-screen">
@@ -136,7 +159,7 @@ export default function OperacionalPage() {
                 <Calendar className="w-4 h-4 text-blue-400" />
                 <span className="text-zinc-500 text-xs">Próximo job</span>
               </div>
-              <p className="text-blue-400 text-lg font-bold">{NEXT_JOB_DATE}</p>
+              <p className="text-blue-400 text-lg font-bold">{nextJobDate}</p>
               <p className="text-zinc-600 text-xs mt-1">análise mensal agendada</p>
             </CardContent>
           </Card>
@@ -240,30 +263,40 @@ export default function OperacionalPage() {
               </div>
             </CardHeader>
             <CardContent className="px-5 pb-5">
-              <div className="flex items-end gap-3 h-28 mb-3">
-                {mockAICostMonthly.map(m => {
-                  const pct = maxCost > 0 ? (m.cost / maxCost) * 100 : 0
-                  const isLast = m.month === mockAICostMonthly[mockAICostMonthly.length - 1].month
-                  return (
-                    <div key={m.month} className="flex-1 flex flex-col items-center gap-1">
-                      <span className="text-zinc-300 text-xs font-semibold">
-                        R$ {m.cost.toFixed(2)}
-                      </span>
-                      <div className="w-full flex items-end justify-center" style={{ height: '72px' }}>
-                        <div
-                          className={cn('w-full rounded-t-lg transition-all', isLast ? 'bg-emerald-500' : 'bg-zinc-700')}
-                          style={{ height: `${pct}%` }}
-                        />
+              {opLoading ? (
+                <div className="flex items-center justify-center h-28">
+                  <Loader2 className="w-5 h-5 text-zinc-500 animate-spin" />
+                </div>
+              ) : aiCost.length === 0 ? (
+                <div className="flex items-center justify-center h-28 text-zinc-600 text-sm">
+                  Nenhuma análise realizada ainda
+                </div>
+              ) : (
+                <div className="flex items-end gap-3 h-28 mb-3">
+                  {aiCost.map((m, idx) => {
+                    const pct    = maxCost > 0 ? (m.cost / maxCost) * 100 : 0
+                    const isLast = idx === aiCost.length - 1
+                    return (
+                      <div key={m.month} className="flex-1 flex flex-col items-center gap-1">
+                        <span className="text-zinc-300 text-xs font-semibold">
+                          {m.cost > 0 ? `R$ ${m.cost.toFixed(2)}` : '—'}
+                        </span>
+                        <div className="w-full flex items-end justify-center" style={{ height: '72px' }}>
+                          <div
+                            className={cn('w-full rounded-t-lg transition-all', isLast ? 'bg-emerald-500' : 'bg-zinc-700')}
+                            style={{ height: `${Math.max(pct, 4)}%` }}
+                          />
+                        </div>
+                        <span className="text-zinc-500 text-xs">{m.label}</span>
                       </div>
-                      <span className="text-zinc-500 text-xs">{m.month}</span>
-                    </div>
-                  )
-                })}
-              </div>
+                    )
+                  })}
+                </div>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-zinc-800">
                 <div>
-                  <p className="text-zinc-500 text-xs">Total (3 meses)</p>
+                  <p className="text-zinc-500 text-xs">Total acumulado</p>
                   <p className="text-zinc-200 font-bold text-sm">R$ {totalCost.toFixed(2)}</p>
                 </div>
                 <div>
@@ -272,7 +305,14 @@ export default function OperacionalPage() {
                 </div>
                 <div>
                   <p className="text-zinc-500 text-xs">Média por análise</p>
-                  <p className="text-zinc-200 font-bold text-sm">R$ {(totalCost / mockJobHistory.reduce((s, j) => s + j.processed, 0)).toFixed(2)}</p>
+                  {(() => {
+                    const totalAnalyses = jobHistory.reduce((s, j) => s + j.success, 0)
+                    return (
+                      <p className="text-zinc-200 font-bold text-sm">
+                        {totalAnalyses > 0 ? `R$ ${(totalCost / totalAnalyses).toFixed(2)}` : '—'}
+                      </p>
+                    )
+                  })()}
                 </div>
               </div>
             </CardContent>
@@ -288,22 +328,28 @@ export default function OperacionalPage() {
             </CardHeader>
             <CardContent className="px-5 pb-5 space-y-3">
               {/* Último job */}
-              <div className={cn('p-3 rounded-xl border',
-                lastJob.status === 'success' ? 'bg-emerald-500/5 border-emerald-500/20'
-                : 'bg-yellow-500/5 border-yellow-500/20')}>
-                <div className="flex items-center gap-2 mb-1">
-                  {lastJob.status === 'success'
-                    ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                    : <AlertCircle className="w-3.5 h-3.5 text-yellow-400" />}
-                  <span className={cn('text-xs font-semibold',
-                    lastJob.status === 'success' ? 'text-emerald-400' : 'text-yellow-400')}>
-                    {lastJob.status === 'success' ? 'Concluído com sucesso' : 'Concluído com falhas'}
-                  </span>
+              {lastJob ? (
+                <div className={cn('p-3 rounded-xl border',
+                  lastJob.failed === 0 ? 'bg-emerald-500/5 border-emerald-500/20'
+                  : 'bg-yellow-500/5 border-yellow-500/20')}>
+                  <div className="flex items-center gap-2 mb-1">
+                    {lastJob.failed === 0
+                      ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      : <AlertCircle className="w-3.5 h-3.5 text-yellow-400" />}
+                    <span className={cn('text-xs font-semibold',
+                      lastJob.failed === 0 ? 'text-emerald-400' : 'text-yellow-400')}>
+                      {lastJob.failed === 0 ? 'Concluído com sucesso' : 'Concluído com falhas'}
+                    </span>
+                  </div>
+                  <p className="text-zinc-400 text-xs">{new Date(lastJob.date).toLocaleDateString('pt-BR')}</p>
+                  <p className="text-zinc-500 text-xs">{lastJob.success}/{lastJob.total} clientes · {lastJob.tokensTotal.toLocaleString()} tokens</p>
+                  <p className="text-zinc-600 text-xs mt-0.5">{formatDate(lastJob.startedAt)}</p>
                 </div>
-                <p className="text-zinc-400 text-xs">{lastJob.month}</p>
-                <p className="text-zinc-500 text-xs">{lastJob.processed}/{lastJob.total} clientes · {lastJob.duration}</p>
-                <p className="text-zinc-600 text-xs mt-0.5">{formatDate(lastJob.ranAt)}</p>
-              </div>
+              ) : (
+                <div className="p-3 rounded-xl border border-zinc-800 bg-zinc-800/30 text-center">
+                  <p className="text-zinc-600 text-xs">Nenhum job executado ainda</p>
+                </div>
+              )}
 
               {/* Próximo */}
               <div className="p-3 rounded-xl border border-blue-500/20 bg-blue-500/5">
@@ -311,24 +357,28 @@ export default function OperacionalPage() {
                   <Clock className="w-3.5 h-3.5 text-blue-400" />
                   <span className="text-blue-400 text-xs font-semibold">Próximo job</span>
                 </div>
-                <p className="text-zinc-200 text-sm font-bold">{NEXT_JOB_DATE}</p>
-                <p className="text-zinc-500 text-xs">às 06:00 · {clients.length} clientes a processar</p>
+                <p className="text-zinc-200 text-sm font-bold">{nextJobDate}</p>
+                <p className="text-zinc-500 text-xs">às 09:00 UTC · {clients.length} clientes a processar</p>
               </div>
 
               {/* Histórico resumido */}
-              <div className="space-y-1.5">
-                <p className="text-zinc-500 text-xs font-medium uppercase tracking-wider">Histórico</p>
-                {mockJobHistory.map(job => (
-                  <div key={job.id} className="flex items-center gap-2 text-xs">
-                    {job.status === 'success'
-                      ? <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
-                      : <AlertCircle className="w-3 h-3 text-yellow-400 shrink-0" />}
-                    <span className="text-zinc-400 flex-1">{job.month}</span>
-                    <span className="text-zinc-600">{job.processed}/{job.total}</span>
-                    <span className="text-zinc-600">R$ {job.costBRL.toFixed(2)}</span>
-                  </div>
-                ))}
-              </div>
+              {jobHistory.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-zinc-500 text-xs font-medium uppercase tracking-wider">Histórico</p>
+                  {jobHistory.map((job, idx) => (
+                    <div key={idx} className="flex items-center gap-2 text-xs">
+                      {job.failed === 0
+                        ? <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                        : <AlertCircle className="w-3 h-3 text-yellow-400 shrink-0" />}
+                      <span className="text-zinc-400 flex-1">
+                        {new Date(job.date).toLocaleDateString('pt-BR')}
+                      </span>
+                      <span className="text-zinc-600">{job.success}/{job.total}</span>
+                      <span className="text-zinc-600">R$ {job.costTotal.toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
