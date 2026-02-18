@@ -132,11 +132,13 @@ export async function GET(request: NextRequest) {
     // ── 4. Para cada customer_id, busca pagamentos no Asaas ───────
     type CobrancaItem = {
       id: string; clientId: string; clientName: string
-      valorTotal:  number   // bruto (antes das taxas)
-      valorLiquido: number  // líquido (o que cai na conta)
+      valorTotal:   number
+      valorLiquido: number
       vencimento: string; pagamento: string | null
       status: string; tipo: string; descricao: string | null
       invoiceUrl: string | null; fonte: string; contaLabel: string
+      parcelas?: string | null
+      cartao?:   string | null
       domCliente?: { nome: string; documento: string; email: string; telefone: string | null; produto: string | null } | null
     }
 
@@ -178,14 +180,14 @@ export async function GET(request: NextRequest) {
     }))
 
     // ── 5. Detecta recebimentos sem identificação ─────────────────
-    // Agrupa por customer Asaas e busca detalhes do customer
     type CustomerSemIdent = {
-      customerId:  string
+      customerId:   string
       customerName: string
-      cpfCnpj:     string | null
-      email:       string | null
-      totalValor:  number
-      pagamentos:  CobrancaItem[]
+      cpfCnpj:      string | null
+      email:        string | null
+      totalValor:   number
+      pagamentos:   CobrancaItem[]
+      fonte:        'asaas' | 'dom'   // ← origem da transação
     }
 
     let semIdentificacao: CustomerSemIdent[] = []
@@ -243,6 +245,7 @@ export async function GET(request: NextRequest) {
           email:        c.email ?? null,
           totalValor:   pagamentos.reduce((s, p) => s + p.valorLiquido, 0),
           pagamentos,
+          fonte:        'asaas' as const,
         }
       })
     } catch { /* ignora */ }
@@ -344,25 +347,21 @@ export async function GET(request: NextRequest) {
         const domTxs = await fetchPaidTransactions(domCreds, dataInicio, dataFim)
         fontes.push('Dom Pagamentos')
 
+        // Agrupa não-identificadas por documento (para semIdentificacao)
+        const domSemIdMap = new Map<string, typeof domTxs>()
+
         for (const tx of domTxs) {
-          // Ambos já em REAIS (sem divisão por 100)
           const valorTotal   = tx.amount
           const valorLiquido = tx.liquid_amount
+          const doc          = tx.customer_document?.replace(/\D/g, '')
+          const matched      = doc ? domDocMap.get(doc) : null
+          const status       = domStatusToInternal(tx.status)
+          const data         = domDateToISO(tx.created_at)
 
-          // Identifica cliente pelo documento vinculado em client_integrations
-          const doc     = tx.customer_document?.replace(/\D/g, '')
-          const matched = doc ? domDocMap.get(doc) : null
-
-          const clientId   = matched?.clientId   ?? ''
-          const clientName = matched?.clientName  ?? tx.customer_name ?? '— Sem identificação —'
-
-          const status = domStatusToInternal(tx.status)
-          const data   = domDateToISO(tx.created_at)
-
-          const cobranca = {
+          const cobranca: CobrancaItem = {
             id:           `dom_${tx.id}`,
-            clientId,
-            clientName,
+            clientId:     matched?.clientId ?? '',
+            clientName:   matched?.clientName ?? tx.customer_name ?? '— Sem identificação —',
             valorTotal,
             valorLiquido,
             vencimento:   data,
@@ -384,30 +383,80 @@ export async function GET(request: NextRequest) {
             },
           }
 
-          // Agrupa pelo clientId do cliente cadastrado, ou pelo doc se sem vínculo
-          const key = clientId || `__dom_${doc ?? tx.id}`
-          if (!porCliente.has(key)) {
-            porCliente.set(key, {
-              clientId, clientName,
-              recebido: 0, previsto: 0, emAtraso: 0, cobranças: [],
-            })
+          if (matched) {
+            // ── Identificado: vai para porCliente ─────────────────
+            const key = matched.clientId
+            if (!porCliente.has(key)) {
+              porCliente.set(key, {
+                clientId:   matched.clientId,
+                clientName: matched.clientName,
+                recebido: 0, previsto: 0, emAtraso: 0, cobranças: [],
+              })
+            }
+            const g = porCliente.get(key)!
+            g.cobranças.push(cobranca)
+            if (STATUS_RECEBIDO.has(status)) {
+              g.recebido           += valorLiquido
+              resumo.recebido      += valorLiquido
+              resumo.recebidoBruto += valorTotal
+            } else if (STATUS_PREVISTO.has(status)) {
+              g.previsto            += valorLiquido
+              resumo.previsto       += valorLiquido
+              resumo.previstobruto  += valorTotal
+            } else if (STATUS_ATRASO.has(status)) {
+              g.emAtraso            += valorLiquido
+              resumo.emAtraso       += valorLiquido
+              resumo.emAtrasoBruto  += valorTotal
+            }
+          } else {
+            // ── Não identificado: agrupa por documento ────────────
+            const groupKey = doc ?? `noDoc_${tx.id}`
+            if (!domSemIdMap.has(groupKey)) domSemIdMap.set(groupKey, [])
+            domSemIdMap.get(groupKey)!.push(tx)
           }
-          const g = porCliente.get(key)!
-          g.cobranças.push(cobranca)
+        }
 
-          if (STATUS_RECEBIDO.has(status)) {
-            g.recebido           += valorLiquido
-            resumo.recebido      += valorLiquido
-            resumo.recebidoBruto += valorTotal
-          } else if (STATUS_PREVISTO.has(status)) {
-            g.previsto            += valorLiquido
-            resumo.previsto       += valorLiquido
-            resumo.previstobruto  += valorTotal
-          } else if (STATUS_ATRASO.has(status)) {
-            g.emAtraso            += valorLiquido
-            resumo.emAtraso       += valorLiquido
-            resumo.emAtrasoBruto  += valorTotal
-          }
+        // Monta entradas de semIdentificacao para Dom
+        for (const [doc, txs] of domSemIdMap) {
+          const first = txs[0]
+          const pagamentos: CobrancaItem[] = txs.map(tx => {
+            const status = domStatusToInternal(tx.status)
+            const data   = domDateToISO(tx.created_at)
+            return {
+              id:           `dom_${tx.id}`,
+              clientId:     '',
+              clientName:   tx.customer_name ?? '—',
+              valorTotal:   tx.amount,
+              valorLiquido: tx.liquid_amount,
+              vencimento:   data,
+              pagamento:    data,
+              status,
+              tipo:         tx.payment_method,
+              descricao:    tx.product_first ?? null,
+              invoiceUrl:   tx.boleto_url ?? null,
+              fonte:        'dom',
+              contaLabel:   'Dom Pagamentos',
+              parcelas:     tx.installments > 1 ? `${tx.installments}x` : null,
+              cartao:       tx.card_brand ?? null,
+              domCliente: {
+                nome:      tx.customer_name,
+                documento: tx.customer_document,
+                email:     tx.customer_email,
+                telefone:  tx.customer_phone ?? null,
+                produto:   tx.product_first  ?? null,
+              },
+            }
+          })
+          semIdentificacao.push({
+            customerId:   doc,
+            customerName: first.customer_name ?? '—',
+            cpfCnpj:      first.customer_document ?? null,
+            email:        first.customer_email ?? null,
+            totalValor:   pagamentos.reduce((s, p) => s + p.valorLiquido, 0),
+            pagamentos,
+            fonte:        'dom',
+          })
+          resumo.semIdentificacao += pagamentos.reduce((s, p) => s + p.valorLiquido, 0)
         }
       } catch (domErr) {
         console.error('[financeiro] Dom Pagamentos error:', domErr)

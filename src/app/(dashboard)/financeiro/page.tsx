@@ -37,6 +37,7 @@ interface CustomerSemIdent {
   customerId: string; customerName: string
   cpfCnpj: string | null; email: string | null
   totalValor: number; pagamentos: Cobranca[]
+  fonte: 'asaas' | 'dom'
 }
 interface Resumo {
   recebido: number;     recebidoBruto: number
@@ -208,12 +209,43 @@ function CobrancaRow({ c }: { c: Cobranca }) {
   )
 }
 
+// ── Helpers de pills ─────────────────────────────────────────────
+const TIPO_LABEL: Record<string, string> = {
+  BOLETO: 'Boleto', boleto: 'Boleto',
+  PIX: 'Pix', pix: 'Pix',
+  CREDIT_CARD: 'Cartão', credit_card: 'Cartão',
+  DEBIT_CARD: 'Débito', debit_card: 'Débito',
+  UNDEFINED: 'Bol/Pix',
+}
+
+function TipoPill({ tipo }: { tipo: string }) {
+  const label = TIPO_LABEL[tipo] ?? tipo
+  const cfg: Record<string, string> = {
+    Boleto:   'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    Pix:      'bg-teal-500/10  text-teal-400  border-teal-500/20',
+    Cartão:   'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
+    Débito:   'bg-cyan-500/10  text-cyan-400  border-cyan-500/20',
+    'Bol/Pix':'bg-zinc-500/10  text-zinc-400  border-zinc-500/20',
+  }
+  return (
+    <span className={cn(
+      'inline-flex text-[10px] px-1.5 py-0.5 rounded font-semibold border shrink-0',
+      cfg[label] ?? 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
+    )}>{label}</span>
+  )
+}
+
 // ── Bloco por cliente cadastrado ──────────────────────────────────
 function ClienteBlock({ grupo }: { grupo: ClienteGroup }) {
   const [open, setOpen] = useState(grupo.emAtraso > 0)
   const totalLiquido = grupo.recebido + grupo.previsto + grupo.emAtraso
   const totalBruto   = grupo.cobranças.reduce((s, c) => s + c.valorTotal, 0)
   const temDesconto  = Math.abs(totalBruto - totalLiquido) > 0.01
+
+  // Pills sempre visíveis no header
+  const fontes = [...new Set(grupo.cobranças.map(c => c.fonte))]
+  const tipos  = [...new Set(grupo.cobranças.map(c => c.tipo))]
+
   return (
     <div className={cn('rounded-xl border overflow-hidden',
       grupo.emAtraso > 0 ? 'border-red-500/20 bg-red-500/3' : 'border-zinc-800 bg-zinc-900/40'
@@ -223,19 +255,28 @@ function ClienteBlock({ grupo }: { grupo: ClienteGroup }) {
         <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0 text-xs font-bold text-zinc-400">
           {grupo.clientName.slice(0, 2).toUpperCase()}
         </div>
+
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          {/* Linha 1: nome + badge inadimplente */}
+          <div className="flex items-center gap-2 flex-wrap">
             <p className="text-zinc-200 text-sm font-medium truncate">{grupo.clientName}</p>
             {grupo.emAtraso > 0 && (
               <Badge className="bg-red-500/15 text-red-400 border border-red-500/30 text-xs shrink-0">Inadimplente</Badge>
             )}
           </div>
-          <div className="flex items-center gap-3 mt-0.5 text-xs">
-            {grupo.recebido > 0 && <span className="text-emerald-400">✓ {fmt(grupo.recebido)}</span>}
-            {grupo.previsto  > 0 && <span className="text-yellow-400">⏳ {fmt(grupo.previsto)}</span>}
-            {grupo.emAtraso  > 0 && <span className="text-red-400">⚠ {fmt(grupo.emAtraso)}</span>}
+          {/* Linha 2: valores + origem + tipos de pagamento */}
+          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+            {grupo.recebido > 0 && <span className="text-emerald-400 text-xs">✓ {fmt(grupo.recebido)}</span>}
+            {grupo.previsto  > 0 && <span className="text-yellow-400 text-xs">⏳ {fmt(grupo.previsto)}</span>}
+            {grupo.emAtraso  > 0 && <span className="text-red-400 text-xs">⚠ {fmt(grupo.emAtraso)}</span>}
+            {(grupo.recebido > 0 || grupo.previsto > 0 || grupo.emAtraso > 0) && (
+              <span className="text-zinc-700 text-xs">·</span>
+            )}
+            {fontes.map(f => <FonteBadge key={f} fonte={f} />)}
+            {tipos.map(t  => <TipoPill  key={t} tipo={t}  />)}
           </div>
         </div>
+
         <div className="flex items-center gap-3 shrink-0">
           <div className="text-right hidden sm:block">
             <p className="text-zinc-500 text-xs">Total líquido</p>
@@ -298,17 +339,32 @@ function SemIdentCard({
     setModo('vinculando')
     setErro(null)
     try {
-      const res = await fetch(`/api/asaas/sync/${selecionado.id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          asaas_customer_id: customer.customerId,
-          customer_name:     customer.customerName,
-          label:             customer.customerName,
-        }),
-      })
-      const d = await res.json()
-      if (!res.ok) throw new Error(d.error ?? 'Erro ao vincular')
+      if (customer.fonte === 'dom') {
+        // Dom: vincula pelo CPF/CNPJ do comprador
+        const res = await fetch(`/api/dom/sync/${selecionado.id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            document: customer.cpfCnpj,
+            label:    customer.customerName,
+          }),
+        })
+        const d = await res.json()
+        if (!res.ok) throw new Error(d.error ?? 'Erro ao vincular')
+      } else {
+        // Asaas: vincula pelo customerId
+        const res = await fetch(`/api/asaas/sync/${selecionado.id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            asaas_customer_id: customer.customerId,
+            customer_name:     customer.customerName,
+            label:             customer.customerName,
+          }),
+        })
+        const d = await res.json()
+        if (!res.ok) throw new Error(d.error ?? 'Erro ao vincular')
+      }
       setModo('ok')
       setTimeout(() => onVinculado(), 1200)
     } catch (e) {
@@ -318,12 +374,17 @@ function SemIdentCard({
   }
 
   function handleCadastrar() {
-    const params = new URLSearchParams({
-      asaas_customer_id: customer.customerId,
-      nome:              customer.customerName,
-      ...(customer.cpfCnpj ? { cnpj: customer.cpfCnpj } : {}),
-      ...(customer.email   ? { email: customer.email  } : {}),
-    })
+    const base = {
+      nome:  customer.customerName,
+      ...(customer.email ? { email: customer.email } : {}),
+    }
+    const params = customer.fonte === 'dom'
+      ? new URLSearchParams({ ...base, ...(customer.cpfCnpj ? { documento: customer.cpfCnpj } : {}) })
+      : new URLSearchParams({
+          ...base,
+          asaas_customer_id: customer.customerId,
+          ...(customer.cpfCnpj ? { cnpj: customer.cpfCnpj } : {}),
+        })
     router.push(`/clientes/novo?${params}`)
   }
 
@@ -338,25 +399,41 @@ function SemIdentCard({
     )
   }
 
+  const tiposNaCard = [...new Set(customer.pagamentos.map(p => p.tipo))]
+
   return (
     <div className={cn(
       'rounded-xl border transition-all',
       modo === 'vincular' || modo === 'vinculando'
         ? 'border-blue-500/30 bg-blue-500/5'
-        : 'border-yellow-500/20 bg-yellow-500/5'
+        : customer.fonte === 'dom'
+          ? 'border-violet-500/20 bg-violet-500/5'
+          : 'border-yellow-500/20 bg-yellow-500/5'
     )}>
       {/* Cabeçalho do customer */}
       <div className="flex items-start gap-3 p-4">
-        <div className="w-10 h-10 rounded-xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center shrink-0">
-          <HelpCircle className="w-5 h-5 text-yellow-400" />
+        <div className={cn(
+          'w-10 h-10 rounded-xl border flex items-center justify-center shrink-0',
+          customer.fonte === 'dom'
+            ? 'bg-violet-500/10 border-violet-500/20'
+            : 'bg-yellow-500/10 border-yellow-500/20'
+        )}>
+          <HelpCircle className={cn('w-5 h-5', customer.fonte === 'dom' ? 'text-violet-400' : 'text-yellow-400')} />
         </div>
 
         <div className="flex-1 min-w-0">
-          <p className="text-zinc-200 font-semibold text-sm">{customer.customerName}</p>
+          {/* Linha 1: nome + badges de origem e tipo */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <p className="text-zinc-200 font-semibold text-sm">{customer.customerName}</p>
+            <FonteBadge fonte={customer.fonte} />
+            {tiposNaCard.map(t => <TipoPill key={t} tipo={t} />)}
+          </div>
+          {/* Linha 2: documento e e-mail */}
           <div className="flex items-center gap-3 mt-0.5 text-xs text-zinc-500">
             {customer.cpfCnpj && <span>{fmtDoc(customer.cpfCnpj)}</span>}
             {customer.email   && <span>{customer.email}</span>}
           </div>
+          {/* Linha 3: valor + toggle de pagamentos */}
           <div className="flex items-center gap-2 mt-1.5">
             <span className="text-emerald-400 text-xs font-semibold">{fmt(customer.totalValor)}</span>
             <button
@@ -633,7 +710,7 @@ export default function FinanceiroPage() {
                 bg={resumo.emAtraso > 0 ? 'bg-red-500/5' : 'bg-zinc-900'}
                 border={resumo.emAtraso > 0 ? 'border-red-500/20' : 'border-zinc-800'} />
               <ResumoCard label="Sem identificação" value={resumo.semIdentificacao}
-                sub={semIdent.length > 0 ? `${semIdent.length} cliente${semIdent.length > 1 ? 's' : ''} no Asaas` : 'todos identificados'}
+                sub={semIdent.length > 0 ? `${semIdent.length} transação${semIdent.length > 1 ? 'ões' : ''} não reconhecida${semIdent.length > 1 ? 's' : ''}` : 'todos identificados'}
                 icon={HelpCircle}
                 color={semIdent.length > 0 ? 'text-yellow-400' : 'text-zinc-500'}
                 bg={semIdent.length > 0 ? 'bg-yellow-500/5' : 'bg-zinc-900'}
@@ -676,28 +753,39 @@ export default function FinanceiroPage() {
             })()}
 
             {/* ── Sem identificação ─────────────────────────────── */}
-            {semIdent.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 px-1">
-                  <HelpCircle className="w-4 h-4 text-yellow-400" />
-                  <span className="text-yellow-300 text-sm font-semibold">
-                    Recebimentos sem identificação
-                  </span>
-                  <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-xs">
-                    {semIdent.length} cliente{semIdent.length > 1 ? 's' : ''} no Asaas
-                  </Badge>
-                </div>
-                <p className="text-zinc-500 text-xs px-1">
-                  Estes clientes existem no Asaas mas ainda não estão cadastrados no Zero Churn.
-                  Vincule a um cliente existente ou cadastre um novo.
-                </p>
+            {semIdent.length > 0 && (() => {
+              const nAsaas = semIdent.filter(c => c.fonte === 'asaas').length
+              const nDom   = semIdent.filter(c => c.fonte === 'dom').length
+              return (
                 <div className="space-y-2">
-                  {semIdent.map(c => (
-                    <SemIdentCard key={c.customerId} customer={c} onVinculado={carregar} />
-                  ))}
+                  <div className="flex items-center gap-2 px-1 flex-wrap">
+                    <HelpCircle className="w-4 h-4 text-yellow-400" />
+                    <span className="text-yellow-300 text-sm font-semibold">
+                      Recebimentos não reconhecidos
+                    </span>
+                    {nAsaas > 0 && (
+                      <Badge className="bg-blue-500/15 text-blue-400 border-blue-500/30 text-xs gap-1">
+                        <span className="font-bold">Asaas</span> · {nAsaas}
+                      </Badge>
+                    )}
+                    {nDom > 0 && (
+                      <Badge className="bg-violet-500/15 text-violet-400 border-violet-500/30 text-xs gap-1">
+                        <span className="font-bold">Dom</span> · {nDom}
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-zinc-500 text-xs px-1">
+                    Transações recebidas que não estão vinculadas a nenhum cliente cadastrado.
+                    Vincule a um cliente existente ou cadastre um novo.
+                  </p>
+                  <div className="space-y-2">
+                    {semIdent.map(c => (
+                      <SemIdentCard key={`${c.fonte}_${c.customerId}`} customer={c} onVinculado={carregar} />
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )
+            })()}
 
             {/* ── Clientes cadastrados ───────────────────────────── */}
             <div className="space-y-2">
