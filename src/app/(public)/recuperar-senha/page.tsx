@@ -1,18 +1,26 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { Zap, ArrowLeft, Loader2, Mail, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
 
-export default function RecuperarSenhaPage() {
+function RecuperarSenhaForm() {
+  const searchParams = useSearchParams()
+  const errorParam   = searchParams.get('error')
+
   const [email,   setEmail]   = useState('')
   const [loading, setLoading] = useState(false)
   const [sent,    setSent]    = useState(false)
-  const [error,   setError]   = useState<string | null>(null)
+  const [error,   setError]   = useState<string | null>(
+    errorParam === 'link_expirado'
+      ? 'Seu link de redefinição expirou ou já foi usado. Solicite um novo abaixo.'
+      : null
+  )
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -145,5 +153,17 @@ export default function RecuperarSenhaPage() {
         </Link>
       </div>
     </div>
+  )
+}
+
+export default function RecuperarSenhaPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
+      </div>
+    }>
+      <RecuperarSenhaForm />
+    </Suspense>
   )
 }
