@@ -1764,7 +1764,7 @@ export default function EditarClientePage() {
               {selectedService && form.entregaveisIncluidos.length > 0 && (
                 <p>• <span className="text-zinc-400">Entregáveis:</span> {form.entregaveisIncluidos.length}/{selectedService.entregaveis.length} incluídos</p>
               )}
-              {form.clientType === 'mrr' && <p>• <span className="text-zinc-400">MRR:</span> R$ {form.contractValue}/mês · {form.contractMonths} meses</p>}
+              {form.clientType === 'mrr' && <p>• <span className="text-zinc-400">Recorrente:</span> R$ {form.contractValue}/mês · {form.contractMonths} meses</p>}
               {form.clientType === 'tcv' && <p>• <span className="text-zinc-400">TCV:</span> R$ {form.totalProjectValue} · {form.projectDeadlineDays} dias</p>}
             </div>
 

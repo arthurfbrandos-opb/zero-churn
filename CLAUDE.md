@@ -164,7 +164,8 @@ Como rodar: Supabase Dashboard → SQL Editor → cole o conteúdo do arquivo
 
 ## Estado dos Sprints
 - **Sprint 1** ✅ Completo: setup, auth, agências, clientes, integrações básicas
-- **Sprint 2** ✅ Completo: crons, análise semanal, Dom Pagamentos completo, middleware, e-mail de confirmação
+- **Sprint 2** ✅ Completo: crons, análise semanal, Dom Pagamentos, middleware, e-mail, Resend por agência
+- **Recente:** MRR → "Recorrente" (labels UI; DB value `'mrr'` permanece), tab Pasta no cliente (upload contrato), Configurações: Serviços + Produtos separados + Templates de E-mail: crons, análise semanal, Dom Pagamentos completo, middleware, e-mail de confirmação
 - **Sprint 3** 🔜 Próximo: dashboard de Health Score, alertas UI, relatórios
 
 ## Decisões arquiteturais chave

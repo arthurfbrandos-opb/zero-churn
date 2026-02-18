@@ -280,7 +280,7 @@ export default function ClientesPage() {
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
           <SummaryCard label="Ativos"          value={summary.ativos}         icon={Users}          color="bg-zinc-700 text-zinc-300" />
           <SummaryCard label="Novos (30d)"     value={summary.novos}          icon={Sparkles}       color="bg-emerald-500/15 text-emerald-400" sub="recém integrados" />
-          <SummaryCard label="MRR"             value={summary.mrr}            icon={TrendingUp}     color="bg-emerald-500/10 text-emerald-400" sub="recorrentes" />
+          <SummaryCard label="Recorrente"             value={summary.mrr}            icon={TrendingUp}     color="bg-emerald-500/10 text-emerald-400" sub="recorrentes" />
           <SummaryCard label="TCV"             value={summary.tcv}            icon={BarChart2}      color="bg-blue-500/10 text-blue-400" sub="projetos" />
           <SummaryCard label="Em renovação"    value={summary.renovacao}      icon={RefreshCw}      color={summary.renovacao > 0 ? "bg-yellow-500/10 text-yellow-400" : "bg-zinc-700 text-zinc-500"} sub="vencem em 45d" />
           <SummaryCard label="TCV encerrando"  value={summary.tcvEncerrando}  icon={Timer}          color={summary.tcvEncerrando > 0 ? "bg-orange-500/10 text-orange-400" : "bg-zinc-700 text-zinc-500"} sub="próximos 30d" />

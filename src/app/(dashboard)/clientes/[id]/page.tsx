@@ -12,6 +12,7 @@ import {
   Phone, Mail, MapPin, FileText, History,
   Plug, Zap, ExternalLink, ChevronRight,
   Shield, Activity, Heart, Star, UserMinus, UserCheck, Trash2,
+  FolderOpen, Upload, Download, File, X,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -23,7 +24,7 @@ import { useAnalysisCredits } from '@/hooks/use-analysis-credits'
 import { getNpsClassification, isInObservation } from '@/lib/nps-utils'
 import { ChurnModal, CHURN_CATEGORIES } from '@/components/dashboard/churn-modal'
 import { useClient } from '@/hooks/use-client'
-import { Loader2, Plus, Search, X, Pencil } from 'lucide-react'
+import { Loader2, Plus, Search, Pencil } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { mockServices } from '@/lib/mock-data'
 import { AsaasCobrancaModal } from '@/components/integracoes/asaas-cobranca-modal'
@@ -41,12 +42,13 @@ function daysTo(d: string) {
 }
 
 const TABS = [
-  { id: 'visao-geral',  label: 'Visão Geral',  icon: Activity  },
-  { id: 'cadastro',     label: 'Cadastro',     icon: Building2 },
-  { id: 'financeiro',   label: 'Financeiro',   icon: CreditCard },
-  { id: 'integracoes',  label: 'Integrações',  icon: Plug      },
-  { id: 'formularios',  label: 'Formulários',  icon: FileText  },
-  { id: 'historico',    label: 'Histórico',    icon: History   },
+  { id: 'visao-geral',  label: 'Visão Geral',  icon: Activity    },
+  { id: 'cadastro',     label: 'Cadastro',     icon: Building2   },
+  { id: 'financeiro',   label: 'Financeiro',   icon: CreditCard  },
+  { id: 'pasta',        label: 'Pasta',        icon: FolderOpen  },
+  { id: 'integracoes',  label: 'Integrações',  icon: Plug        },
+  { id: 'formularios',  label: 'Formulários',  icon: FileText    },
+  { id: 'historico',    label: 'Histórico',    icon: History     },
 ]
 
 // ── Badge pagamento ───────────────────────────────────────────────
@@ -456,10 +458,10 @@ function TabCadastro({ client }: { client: Client }) {
       )}
 
       <S title="Contrato">
-        <F label="Tipo" value={clientType === 'mrr' ? 'MRR — Recorrente mensal' : 'TCV — Projeto com valor fixo'} />
+        <F label="Tipo" value={clientType === 'mrr' ? 'Recorrente mensal' : 'Projeto com valor fixo'} />
         {service && <F label="Produto / Serviço" value={service.name} />}
         <F label="Início do contrato" value={fmtDate(client.contractStartDate)} />
-        {clientType === 'mrr' && <F label="Mensalidade (MRR)"     value={fmtMoney(mrrVal)} />}
+        {clientType === 'mrr' && <F label="Mensalidade mensal"     value={fmtMoney(mrrVal)} />}
         {clientType === 'tcv' && <F label="Valor total do projeto" value={fmtMoney(tcvVal)} />}
         <F label="Cadastrado em" value={fmtDate(client.createdAt)} />
       </S>
@@ -1094,6 +1096,180 @@ interface DomInteg {
   label:      string | null
   created_at: string | null
   credentials: { document: string } | null
+}
+
+// ─────────────────────────────────────────────────────────────────
+// TAB — PASTA DO CLIENTE
+// ─────────────────────────────────────────────────────────────────
+function TabPasta({ client, refetch }: { client: Client; refetch: () => void }) {
+  const [dragging,   setDragging]   = useState(false)
+  const [uploading,  setUploading]  = useState(false)
+  const [removing,   setRemoving]   = useState(false)
+  const [error,      setError]      = useState<string | null>(null)
+  const [success,    setSuccess]    = useState<string | null>(null)
+
+  const contractUrl      = (client as unknown as Record<string, unknown>).contract_url as string | null
+  const contractFilename = (client as unknown as Record<string, unknown>).contract_filename as string | null
+  const contractUploadedAt = (client as unknown as Record<string, unknown>).contract_uploaded_at as string | null
+
+  async function handleUpload(file: File) {
+    if (!file) return
+    setError(null); setSuccess(null); setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch(`/api/clients/${client.id}/contract`, { method: 'POST', body: fd })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error ?? 'Erro ao enviar'); return }
+      setSuccess('Contrato enviado com sucesso!')
+      setTimeout(() => setSuccess(null), 3000)
+      refetch()
+    } catch { setError('Erro de conexão') }
+    finally { setUploading(false) }
+  }
+
+  async function handleRemove() {
+    setRemoving(true); setError(null)
+    try {
+      const res = await fetch(`/api/clients/${client.id}/contract`, { method: 'DELETE' })
+      if (!res.ok) { const d = await res.json(); setError(d.error ?? 'Erro ao remover'); return }
+      refetch()
+    } catch { setError('Erro de conexão') }
+    finally { setRemoving(false) }
+  }
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault(); setDragging(false)
+    const file = e.dataTransfer.files[0]
+    if (file) handleUpload(file)
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-white font-semibold text-base">Pasta do cliente</h2>
+          <p className="text-zinc-500 text-xs mt-0.5">Documentos e contrato vinculado a este cliente</p>
+        </div>
+      </div>
+
+      {/* Contrato */}
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardContent className="p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <FileText className="w-4 h-4 text-zinc-400" />
+            <p className="text-zinc-200 text-sm font-medium">Contrato</p>
+          </div>
+
+          {contractUrl ? (
+            /* Contrato existente */
+            <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-zinc-800 border border-zinc-700">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-lg bg-red-500/15 flex items-center justify-center shrink-0">
+                  <File className="w-4 h-4 text-red-400" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-zinc-200 text-sm truncate">{contractFilename ?? 'Contrato'}</p>
+                  {contractUploadedAt && (
+                    <p className="text-zinc-600 text-xs">
+                      Enviado em {new Date(contractUploadedAt).toLocaleDateString('pt-BR')}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <a href={contractUrl} target="_blank" rel="noopener noreferrer">
+                  <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-xs transition-colors">
+                    <Download className="w-3.5 h-3.5" /> Baixar
+                  </button>
+                </a>
+                <button
+                  onClick={handleRemove}
+                  disabled={removing}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                >
+                  {removing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Área de upload */
+            <label
+              onDragOver={e => { e.preventDefault(); setDragging(true) }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={onDrop}
+              className={cn(
+                'flex flex-col items-center justify-center gap-3 p-8 rounded-xl border-2 border-dashed transition-all cursor-pointer',
+                dragging
+                  ? 'border-emerald-500/60 bg-emerald-500/5'
+                  : 'border-zinc-700 hover:border-zinc-600 hover:bg-zinc-800/50'
+              )}
+            >
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx"
+                className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(f) }}
+              />
+              {uploading ? (
+                <>
+                  <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
+                  <p className="text-zinc-400 text-sm">Enviando...</p>
+                </>
+              ) : (
+                <>
+                  <div className="w-12 h-12 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center">
+                    <Upload className="w-5 h-5 text-zinc-500" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-zinc-300 text-sm font-medium">Clique ou arraste o contrato aqui</p>
+                    <p className="text-zinc-600 text-xs mt-1">PDF, DOC, DOCX · máx. 10MB</p>
+                  </div>
+                </>
+              )}
+            </label>
+          )}
+
+          {/* Feedback */}
+          {error && (
+            <div className="flex items-center gap-2 text-red-400 text-xs">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {error}
+            </div>
+          )}
+          {success && (
+            <div className="flex items-center gap-2 text-emerald-400 text-xs">
+              <Check className="w-3.5 h-3.5 shrink-0" /> {success}
+            </div>
+          )}
+
+          {/* Substituir contrato existente */}
+          {contractUrl && !uploading && (
+            <label className="flex items-center gap-2 cursor-pointer text-zinc-500 hover:text-zinc-300 text-xs transition-colors">
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx"
+                className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(f) }}
+              />
+              <Upload className="w-3.5 h-3.5" />
+              Substituir contrato
+            </label>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Área para futuros documentos */}
+      <Card className="bg-zinc-900 border-zinc-800 border-dashed opacity-50">
+        <CardContent className="p-5 flex items-center gap-3">
+          <FolderOpen className="w-5 h-5 text-zinc-600" />
+          <div>
+            <p className="text-zinc-500 text-sm">Outros documentos</p>
+            <p className="text-zinc-700 text-xs">Em breve — propostas, atas de reunião, relatórios</p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
 }
 
 function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => void }) {
@@ -2444,12 +2620,13 @@ function ClientePerfilInner() {
 
       {/* Conteúdo da tab */}
       <div className="p-4 lg:p-6 max-w-4xl">
-        {activeTab === 'visao-geral' && <TabVisaoGeral client={client} refetch={refetch} />}
-        {activeTab === 'cadastro'    && <TabCadastro client={client} />}
-        {activeTab === 'financeiro'  && <TabFinanceiro client={client} />}
-        {activeTab === 'integracoes' && <TabIntegracoes client={client} refetch={refetch} />}
-        {activeTab === 'formularios' && <TabFormularios clientId={client.id} client={client} />}
-        {activeTab === 'historico'   && <TabHistorico clientId={client.id} />}
+        {activeTab === 'visao-geral'  && <TabVisaoGeral client={client} refetch={refetch} />}
+        {activeTab === 'cadastro'     && <TabCadastro client={client} />}
+        {activeTab === 'financeiro'   && <TabFinanceiro client={client} />}
+        {activeTab === 'pasta'        && <TabPasta client={client} refetch={refetch} />}
+        {activeTab === 'integracoes'  && <TabIntegracoes client={client} refetch={refetch} />}
+        {activeTab === 'formularios'  && <TabFormularios clientId={client.id} client={client} />}
+        {activeTab === 'historico'    && <TabHistorico clientId={client.id} />}
       </div>
     </div>
   )

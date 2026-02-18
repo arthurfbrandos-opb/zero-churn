@@ -203,7 +203,7 @@ export default function DashboardPage() {
       priority: 1, color: 'red', icon: XCircle,
       label: `${payments.inadimplente.count} cliente${payments.inadimplente.count > 1 ? 's' : ''} inadimplente${payments.inadimplente.count > 1 ? 's' : ''}`,
       sub: clients.filter(c => c.paymentStatus === 'inadimplente').map(c => c.name).join(' · '),
-      value: formatCurrency(payments.inadimplente.value) + ' em MRR bloqueado',
+      value: formatCurrency(payments.inadimplente.value) + ' em recorrente bloqueado',
       href: '/clientes',
     },
     payments.vencendo.count > 0 && {
@@ -312,7 +312,7 @@ export default function DashboardPage() {
               <div className="flex items-center gap-2 sm:px-5">
                 <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
                 <div>
-                  <p className="text-zinc-500 text-xs">MRR</p>
+                  <p className="text-zinc-500 text-xs">Recorrente</p>
                   <p className="text-white text-xl font-bold leading-tight">{mrrClients.length}<span className="text-zinc-500 text-xs font-normal ml-1">cli.</span></p>
                 </div>
               </div>
@@ -379,7 +379,7 @@ export default function DashboardPage() {
                 <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
                   <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
                 </div>
-                <span className="text-zinc-500 text-xs font-medium">MRR Total</span>
+                <span className="text-zinc-500 text-xs font-medium">Recorrente Total</span>
               </div>
               <p className="text-emerald-400 text-2xl font-bold">{formatCurrency(totalMRR)}</p>
               <p className="text-zinc-500 text-xs mt-1">{mrrClients.length} clientes recorrentes</p>
@@ -392,11 +392,11 @@ export default function DashboardPage() {
                 <div className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center">
                   <TrendingDown className="w-3.5 h-3.5 text-red-400" />
                 </div>
-                <span className="text-zinc-500 text-xs font-medium">MRR em Risco</span>
+                <span className="text-zinc-500 text-xs font-medium">Recorrente em Risco</span>
               </div>
               <p className="text-red-400 text-2xl font-bold">{formatCurrency(mrrAtRisk)}</p>
               <p className="text-zinc-500 text-xs mt-1">
-                {totalMRR > 0 ? Math.round((mrrAtRisk / totalMRR) * 100) : 0}% do MRR em risco
+                {totalMRR > 0 ? Math.round((mrrAtRisk / totalMRR) * 100) : 0}% do recorrente em risco
               </p>
             </CardContent>
           </Card>

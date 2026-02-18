@@ -8,7 +8,7 @@ import {
   ChevronRight, Shield, AlertTriangle, RefreshCw,
   MessageCircle, CreditCard, BarChart2, Zap,
   GripVertical, FileText, Lock, AlignLeft, ListChecks, Hash,
-  ExternalLink,
+  ExternalLink, Package, Wrench, Mail,
 } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
@@ -23,14 +23,16 @@ import { cn } from '@/lib/utils'
 
 // ── Nav sections ──────────────────────────────────────────────────
 const NAV = [
-  { id: 'agencia',       label: 'Agência',        icon: Building2 },
-  { id: 'servicos',      label: 'Serviços',        icon: Briefcase },
-  { id: 'formulario',    label: 'Formulário NPS',  icon: FileText  },
-  { id: 'integracoes',   label: 'Integrações',     icon: Plug      },
-  { id: 'usuarios',      label: 'Usuários',        icon: Users     },
-  { id: 'analisador',    label: 'Analisador',      icon: Bot       },
-  { id: 'notificacoes',  label: 'Notificações',    icon: Bell      },
-  { id: 'privacidade',   label: 'Privacidade',     icon: Shield    },
+  { id: 'agencia',       label: 'Agência',           icon: Building2 },
+  { id: 'servicos',      label: 'Serviços',           icon: Wrench    },
+  { id: 'produtos',      label: 'Produtos',           icon: Package   },
+  { id: 'formulario',    label: 'Formulário NPS',     icon: FileText  },
+  { id: 'integracoes',   label: 'Integrações',        icon: Plug      },
+  { id: 'usuarios',      label: 'Usuários',           icon: Users     },
+  { id: 'analisador',    label: 'Analisador',         icon: Bot       },
+  { id: 'email-templates', label: 'Templates de E-mail', icon: Mail  },
+  { id: 'notificacoes',  label: 'Notificações',       icon: Bell      },
+  { id: 'privacidade',   label: 'Privacidade',        icon: Shield    },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -146,7 +148,121 @@ interface EditingService extends Service {
   newItemKind: ItemKind
 }
 
+// ─────────────────────────────────────────────────────────────────
+// SEÇÃO: SERVIÇOS (itens atômicos — ex: SEO, Social Media, Relatório)
+// ─────────────────────────────────────────────────────────────────
+interface ServicoItem { id: string; name: string; description?: string; isActive: boolean }
+
 function ServicosSection() {
+  const [items, setItems]   = useState<ServicoItem[]>([
+    { id: 's1', name: 'SEO On-page e Off-page',   description: 'Otimização para mecanismos de busca', isActive: true },
+    { id: 's2', name: 'Gestão de Redes Sociais',  description: 'Instagram, Facebook, LinkedIn', isActive: true },
+    { id: 's3', name: 'Relatório Mensal',          description: 'Relatório de desempenho e métricas', isActive: true },
+    { id: 's4', name: 'Google Ads',                description: 'Gestão de campanhas pagas', isActive: true },
+    { id: 's5', name: 'E-mail Marketing',          description: '', isActive: false },
+  ])
+  const [newName, setNewName] = useState('')
+  const [newDesc, setNewDesc] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName]   = useState('')
+  const [editDesc, setEditDesc]   = useState('')
+
+  function addItem() {
+    if (!newName.trim()) return
+    setItems(prev => [...prev, { id: `s-${Date.now()}`, name: newName.trim(), description: newDesc.trim(), isActive: true }])
+    setNewName(''); setNewDesc('')
+  }
+
+  function startEdit(item: ServicoItem) {
+    setEditingId(item.id); setEditName(item.name); setEditDesc(item.description ?? '')
+  }
+
+  function saveEdit() {
+    if (!editName.trim()) return
+    setItems(prev => prev.map(i => i.id === editingId ? { ...i, name: editName.trim(), description: editDesc.trim() } : i))
+    setEditingId(null)
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <SectionTitle>Serviços</SectionTitle>
+          <p className="text-zinc-500 text-sm -mt-3 mb-4">
+            Cadastre os serviços/entregáveis que sua agência oferece. Eles serão usados para montar os Produtos.
+          </p>
+        </div>
+      </div>
+
+      {/* Lista de serviços */}
+      <div className="space-y-2">
+        {items.map(item => (
+          <Card key={item.id} className={cn('bg-zinc-900 border-zinc-800', !item.isActive && 'opacity-50')}>
+            <CardContent className="p-3">
+              {editingId === item.id ? (
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <Input autoFocus value={editName} onChange={e => setEditName(e.target.value)}
+                      placeholder="Nome do serviço" className={cn(inputCls, 'flex-1 text-sm')} />
+                    <Button size="sm" onClick={saveEdit} className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1 shrink-0">
+                      <Check className="w-3.5 h-3.5" /> Salvar
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEditingId(null)} className="text-zinc-400 shrink-0">
+                      Cancelar
+                    </Button>
+                  </div>
+                  <Input value={editDesc} onChange={e => setEditDesc(e.target.value)}
+                    placeholder="Descrição (opcional)" className={cn(inputCls, 'text-sm')} />
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-zinc-200 text-sm font-medium">{item.name}</p>
+                    {item.description && <p className="text-zinc-500 text-xs">{item.description}</p>}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button onClick={() => startEdit(item)} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">Editar</button>
+                    <button onClick={() => setItems(prev => prev.map(i => i.id === item.id ? { ...i, isActive: !i.isActive } : i))}
+                      className={cn('w-9 h-5 rounded-full transition-all relative', item.isActive ? 'bg-emerald-500' : 'bg-zinc-700')}>
+                      <span className={cn('absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all', item.isActive ? 'left-4' : 'left-0.5')} />
+                    </button>
+                    <button onClick={() => setItems(prev => prev.filter(i => i.id !== item.id))}
+                      className="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-colors">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Adicionar novo serviço */}
+      <Card className="bg-zinc-900 border-zinc-800 border-dashed">
+        <CardContent className="p-4 space-y-2">
+          <p className="text-zinc-400 text-xs font-medium">Novo serviço</p>
+          <div className="flex gap-2">
+            <Input value={newName} onChange={e => setNewName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addItem()}
+              placeholder="Ex: Produção de Conteúdo" className={cn(inputCls, 'flex-1 text-sm')} />
+            <Button size="sm" onClick={addItem} disabled={!newName.trim()}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1 shrink-0">
+              <Plus className="w-3.5 h-3.5" /> Adicionar
+            </Button>
+          </div>
+          <Input value={newDesc} onChange={e => setNewDesc(e.target.value)}
+            placeholder="Descrição (opcional)" className={cn(inputCls, 'text-sm')} />
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────
+// SEÇÃO: PRODUTOS (pacotes que agrupam serviços como entregável/bônus)
+// ─────────────────────────────────────────────────────────────────
+function ProdutosSection() {
   const [services, setServices] = useState<Service[]>(mockServices)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [editing, setEditing] = useState<EditingService | null>(null)
@@ -265,7 +381,7 @@ function ServicosSection() {
         {/* Nome + tipo */}
         <div className="grid grid-cols-3 gap-3">
           <div className="col-span-2">
-            <Field label="Nome do método / produto">
+            <Field label="Nome do produto">
               <Input autoFocus value={data.name} onChange={e => setData({ ...data, name: e.target.value })}
                 placeholder="Ex: Tríade Gestão Comercial" className={inputCls} />
             </Field>
@@ -295,7 +411,7 @@ function ServicosSection() {
 
         <div className="flex gap-2 pt-1">
           <Button size="sm" onClick={onSave} className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1">
-            <Check className="w-3.5 h-3.5" /> Salvar método
+            <Check className="w-3.5 h-3.5" /> Salvar produto
           </Button>
           <Button size="sm" variant="ghost" onClick={onCancel} className="text-zinc-400">Cancelar</Button>
         </div>
@@ -307,23 +423,23 @@ function ServicosSection() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <SectionTitle>Métodos e Produtos</SectionTitle>
+          <SectionTitle>Produtos</SectionTitle>
         </div>
         <Button size="sm" onClick={() => { setCreatingNew(true); setExpandedId(null); setEditing(null) }}
           className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1 -mt-4">
-          <Plus className="w-3.5 h-3.5" /> Novo método
+          <Plus className="w-3.5 h-3.5" /> Novo produto
         </Button>
       </div>
 
       <p className="text-zinc-500 text-sm -mt-2">
-        Cada método é um produto vendido pela agência. No cadastro do cliente você escolhe o método e personaliza os entregáveis e bônus da negociação.
+        Monte pacotes combinando os serviços cadastrados. No cadastro do cliente você escolhe o produto e define quais serviços entram como entregáveis ou bônus da negociação.
       </p>
 
       {/* Formulário de novo método */}
       {creatingNew && (
         <Card className="bg-zinc-900 border-emerald-500/30 border-dashed">
           <CardContent className="p-4">
-            <p className="text-zinc-300 font-medium text-sm mb-3">Novo método</p>
+            <p className="text-zinc-300 font-medium text-sm mb-3">Novo produto</p>
             <MetodoForm
               data={draft}
               setData={setDraft}
@@ -424,6 +540,230 @@ function ServicosSection() {
           )
         })}
       </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────
+// SEÇÃO: TEMPLATES DE E-MAIL
+// ─────────────────────────────────────────────────────────────────
+
+interface EmailTemplate {
+  id:       string
+  label:    string
+  desc:     string
+  subject:  string
+  body:     string
+}
+
+const DEFAULT_TEMPLATES: EmailTemplate[] = [
+  {
+    id: 'email_confirmation',
+    label: 'Confirmação de cadastro',
+    desc: 'Enviado ao novo usuário logo após criar a conta.',
+    subject: '✅ Confirme seu e-mail — {{agencia}}',
+    body: `Olá, {{nome}}!
+
+Sua conta para a agência "{{agencia}}" foi criada com sucesso.
+Confirme seu e-mail acessando o link abaixo:
+
+{{link_confirmacao}}
+
+O link expira em 24 horas.`,
+  },
+  {
+    id: 'nps_form_to_client',
+    label: 'Formulário NPS para o cliente',
+    desc: 'Enviado diretamente ao cliente da agência com o link do NPS.',
+    subject: '⭐ {{agencia}} quer saber sua opinião — 2 minutinhos',
+    body: `Olá, {{cliente}}!
+
+A {{agencia}} gostaria de saber sua opinião sobre os serviços prestados.
+
+Responda a pesquisa (leva menos de 2 minutos):
+{{link_formulario}}
+
+Link válido até {{data_expiracao}}.`,
+  },
+  {
+    id: 'form_reminder',
+    label: 'Lembrete de NPS (para a agência)',
+    desc: 'Enviado 5 dias antes da data de análise mensal.',
+    subject: '⏰ Envie o formulário para {{cliente}} — análise em {{dias}} dias',
+    body: `Olá!
+
+A análise mensal de {{cliente}} está programada para {{data_analise}} — faltam {{dias}} dias.
+
+Para que o pilar de NPS seja calculado corretamente, envie o formulário de satisfação antes da análise.
+
+{{link_formulario}}`,
+  },
+  {
+    id: 'payment_alert',
+    label: 'Alerta de inadimplência',
+    desc: 'Enviado quando um cliente entra em status vencendo ou inadimplente.',
+    subject: '🚨 Alerta financeiro: {{cliente}} — {{agencia}}',
+    body: `Atenção!
+
+O cliente {{cliente}} possui cobranças em atraso.
+
+Acesse o painel para verificar: {{link_cliente}}`,
+  },
+  {
+    id: 'integration_alert',
+    label: 'Alerta de integração offline',
+    desc: 'Enviado quando Asaas, Dom ou WhatsApp fica com erro.',
+    subject: '🔌 Integração offline: {{integracao}} ({{cliente}}) — {{agencia}}',
+    body: `A integração {{integracao}} do cliente {{cliente}} está com problema:
+
+{{motivo}}
+
+Sem dados desta integração, o Health Score pode ficar incompleto.
+
+Verifique em: {{link_cliente}}`,
+  },
+  {
+    id: 'analysis_completed',
+    label: 'Análise concluída',
+    desc: 'Enviado após a análise semanal de todos os clientes.',
+    subject: '✅ Análise semanal: {{sucesso}}/{{total}} clientes analisados',
+    body: `A análise semanal da {{agencia}} foi executada.
+
+Total: {{total}} clientes
+Analisados: {{sucesso}}
+Falhas: {{falhas}}
+
+Acesse o painel: {{link_dashboard}}`,
+  },
+]
+
+function EmailTemplatesSection() {
+  const [templates, setTemplates] = useState<EmailTemplate[]>(DEFAULT_TEMPLATES)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [saved,     setSaved]     = useState(false)
+
+  const editing = templates.find(t => t.id === editingId) ?? null
+
+  function update(id: string, field: 'subject' | 'body', value: string) {
+    setTemplates(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t))
+  }
+
+  function handleSave() {
+    // TODO: persistir no banco via PATCH /api/agency/email-templates
+    setSaved(true)
+    setEditingId(null)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  function reset(id: string) {
+    const def = DEFAULT_TEMPLATES.find(t => t.id === id)
+    if (def) setTemplates(prev => prev.map(t => t.id === id ? { ...def } : t))
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <SectionTitle>Templates de E-mail</SectionTitle>
+        <p className="text-zinc-500 text-sm -mt-3 mb-4">
+          Personalize o conteúdo dos e-mails enviados pelo sistema. As variáveis entre {'{{chaves}}'} são substituídas automaticamente.
+        </p>
+      </div>
+
+      {saved && (
+        <div className="flex items-center gap-2 text-emerald-400 text-sm bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-4 py-2">
+          <Check className="w-4 h-4" /> Templates salvos com sucesso!
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {templates.map(t => (
+          <Card key={t.id} className={cn('bg-zinc-900', editingId === t.id ? 'border-emerald-500/30' : 'border-zinc-800')}>
+            <CardContent className="p-4 space-y-3">
+              {/* Cabeçalho */}
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-zinc-200 text-sm font-medium">{t.label}</p>
+                  <p className="text-zinc-500 text-xs">{t.desc}</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {editingId === t.id ? (
+                    <>
+                      <Button size="sm" onClick={handleSave} className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1">
+                        <Check className="w-3.5 h-3.5" /> Salvar
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditingId(null)} className="text-zinc-400">Cancelar</Button>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={() => setEditingId(t.id)} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">Editar</button>
+                      <button onClick={() => reset(t.id)} className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors">Restaurar padrão</button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Assunto */}
+              {editingId === t.id ? (
+                <div className="space-y-3">
+                  <Field label="Assunto">
+                    <Input value={t.subject} onChange={e => update(t.id, 'subject', e.target.value)}
+                      className={cn(inputCls, 'text-sm')} />
+                  </Field>
+                  <Field label="Corpo do e-mail" hint="Suporta texto simples. As variáveis {{entre_chaves}} são substituídas automaticamente.">
+                    <textarea
+                      value={t.body}
+                      onChange={e => update(t.id, 'body', e.target.value)}
+                      rows={8}
+                      className={cn(inputCls, 'w-full rounded-md border px-3 py-2 text-sm font-mono resize-y')}
+                    />
+                  </Field>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-zinc-600 text-xs shrink-0">Assunto:</span>
+                    <span className="text-zinc-400 text-xs truncate">{t.subject}</span>
+                  </div>
+                  <div className="bg-zinc-800/60 rounded-lg p-3">
+                    <pre className="text-zinc-500 text-xs whitespace-pre-wrap font-sans leading-relaxed line-clamp-3">{t.body}</pre>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Legenda de variáveis */}
+      <Card className="bg-zinc-900/50 border-zinc-800">
+        <CardContent className="p-4">
+          <p className="text-zinc-400 text-xs font-medium mb-2">Variáveis disponíveis</p>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+            {[
+              ['{{agencia}}',        'Nome da agência'],
+              ['{{nome}}',           'Nome do usuário/responsável'],
+              ['{{cliente}}',        'Nome do cliente'],
+              ['{{link_confirmacao}}','Link de confirmação de e-mail'],
+              ['{{link_formulario}}','Link do formulário NPS'],
+              ['{{link_cliente}}',   'Link do cliente no painel'],
+              ['{{link_dashboard}}', 'Link do dashboard'],
+              ['{{data_analise}}',   'Data da próxima análise'],
+              ['{{data_expiracao}}', 'Data de expiração do link'],
+              ['{{dias}}',           'Dias até o evento'],
+              ['{{total}}',          'Total de clientes analisados'],
+              ['{{sucesso}}',        'Análises bem-sucedidas'],
+              ['{{falhas}}',         'Análises com falha'],
+              ['{{integracao}}',     'Nome da integração (Asaas, WhatsApp...)'],
+              ['{{motivo}}',         'Motivo do erro na integração'],
+            ].map(([v, d]) => (
+              <div key={v} className="flex items-baseline gap-2">
+                <code className="text-emerald-400 text-xs shrink-0">{v}</code>
+                <span className="text-zinc-600 text-xs">{d}</span>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
@@ -1615,7 +1955,7 @@ function NotificacoesSection() {
     { key: 'highRisk',          label: 'Cliente em alto risco',           sub: 'Quando um cliente atingir score crítico' },
     { key: 'integrationError',  label: 'Erro de integração',              sub: 'WhatsApp, Asaas ou Dom com falha de conexão' },
     { key: 'npsPending',        label: 'Formulário sem resposta',         sub: 'Cliente não respondeu dentro do prazo de tolerância' },
-    { key: 'renewalSoon',       label: 'Renovação próxima',              sub: 'Contrato MRR vencendo nos próximos 45 dias' },
+    { key: 'renewalSoon',       label: 'Renovação próxima',              sub: 'Contrato Recorrente vencendo nos próximos 45 dias' },
     { key: 'tcvExpiring',       label: 'Projeto TCV próximo do prazo',   sub: 'Projeto com menos de 15 dias para encerrar' },
     { key: 'analysisComplete',  label: 'Análise mensal concluída',        sub: 'Notificar quando o analisador terminar' },
     { key: 'newFormResponse',   label: 'Nova resposta de formulário',     sub: 'Cliente respondeu NPS ou avaliação de resultado' },
@@ -1838,14 +2178,16 @@ export default function ConfiguracoesPage() {
   const [active, setActive] = useState('agencia')
 
   const SECTIONS: Record<string, React.ReactNode> = {
-    agencia:      <AgenciaSection />,
-    servicos:     <ServicosSection />,
-    formulario:   <FormularioSection />,
-    integracoes:  <IntegracoesSection />,
-    usuarios:     <UsuariosSection />,
-    analisador:   <AnalisadorSection />,
-    notificacoes: <NotificacoesSection />,
-    privacidade:  <PrivacidadeSection />,
+    agencia:           <AgenciaSection />,
+    servicos:          <ServicosSection />,
+    produtos:          <ProdutosSection />,
+    formulario:        <FormularioSection />,
+    integracoes:       <IntegracoesSection />,
+    usuarios:          <UsuariosSection />,
+    analisador:        <AnalisadorSection />,
+    'email-templates': <EmailTemplatesSection />,
+    notificacoes:      <NotificacoesSection />,
+    privacidade:       <PrivacidadeSection />,
   }
 
   return (
