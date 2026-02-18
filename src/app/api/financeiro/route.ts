@@ -7,7 +7,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/supabase/encryption'
 import { AsaasPayment, AsaasListResponse } from '@/lib/asaas/client'
-import { fetchAllTransactions, DomCredentials, domAmountToReal } from '@/lib/dom/client'
+import {
+  fetchPaidTransactions,
+  DomCredentials,
+  domAmountToReal,
+  domDateToISO,
+  domGetPaidAt,
+  domStatusToInternal,
+} from '@/lib/dom/client'
 
 const BASE_URL = process.env.ASAAS_API_URL ?? 'https://api.asaas.com/v3'
 
@@ -280,56 +287,78 @@ export async function GET(request: NextRequest) {
     if (domInteg?.encrypted_key && domInteg.status === 'active') {
       try {
         const domCreds = await decrypt<DomCredentials>(domInteg.encrypted_key)
-        const domTxs   = await fetchAllTransactions(domCreds, dataInicio, dataFim)
+
+        // Busca SOMENTE transações pagas (status: "paid")
+        const domTxs = await fetchPaidTransactions(domCreds, dataInicio, dataFim)
         fontes.push('Dom Pagamentos')
 
+        // Mapa de clientes por document (CPF ou CNPJ — ambos possíveis na Dom)
         const { data: clientesDom } = await supabase
-          .from('clients').select('id, name, nome_resumido, cnpj')
+          .from('clients').select('id, name, nome_resumido, cnpj, email')
 
-        const cnpjMap = new Map(
+        const docMap = new Map(
           (clientesDom ?? [])
             .filter(c => c.cnpj)
             .map(c => [c.cnpj!.replace(/\D/g, ''), c])
         )
-
-        const domStatusMap: Record<string, string> = {
-          APPROVED: 'RECEIVED', PENDING: 'PENDING', OVERDUE: 'OVERDUE',
-          REFUND: 'REFUNDED', CHARGEBACK: 'CHARGEBACK_REQUESTED',
-          EXPIRE: 'REFUNDED', NOT_AUTHORIZED: 'PENDING', REJECTED_ANTIFRAUD: 'PENDING',
-        }
+        const emailMap = new Map(
+          (clientesDom ?? [])
+            .filter(c => c.email)
+            .map(c => [c.email!.toLowerCase().trim(), c])
+        )
 
         for (const tx of domTxs) {
-          const valor  = domAmountToReal(tx.amount)
-          const doc    = tx.customer?.document?.replace(/\D/g, '')
-          const cli    = doc ? cnpjMap.get(doc) : null
-          const status = domStatusMap[tx.status] ?? 'PENDING'
+          // Usa liquid_amount (valor líquido após taxas), não amount (bruto)
+          const valor = domAmountToReal(tx.liquid_amount)
+
+          // Tenta identificar o cliente: 1º por CPF/CNPJ, 2º por e-mail
+          const doc = tx.customer?.document?.replace(/\D/g, '')
+          const email = tx.customer?.email?.toLowerCase().trim()
+          const cli = (doc ? docMap.get(doc) : null) ?? (email ? emailMap.get(email) : null) ?? null
+
+          const status = domStatusToInternal(tx.status)
 
           const cobranca = {
             id:         `dom_${tx.id}`,
             clientId:   cli?.id ?? '',
-            clientName: cli ? (cli.nome_resumido ?? cli.name) : (tx.customer?.name ?? '— Sem identificação —'),
+            clientName: cli
+              ? (cli.nome_resumido ?? cli.name)
+              : (tx.customer?.name ?? '— Sem identificação —'),
             valor,
-            vencimento: tx.due_date ?? tx.created_at?.slice(0, 10) ?? dataInicio,
-            pagamento:  tx.paid_at?.slice(0, 10) ?? null,
-            status, tipo: tx.payment_method, descricao: tx.description ?? null,
-            invoiceUrl: tx.invoice_url ?? tx.boleto_url ?? null,
-            fonte: 'dom', contaLabel: 'Dom Pagamentos',
+            // Data de pagamento: liquidation[0].date (mais precisa) ou created_at
+            vencimento: domDateToISO(tx.created_at),
+            pagamento:  domGetPaidAt(tx),
+            status,
+            tipo:        tx.payment_method,
+            descricao:   tx.product_first ?? tx.items?.[0]?.description ?? null,
+            invoiceUrl:  tx.boleto_url ?? null,
+            fonte:       'dom',
+            contaLabel:  'Dom Pagamentos',
+            // Campos extras Dom
+            parcelas:    tx.installments ? `${tx.installments}x` : null,
+            cartao:      tx.card_brand ?? null,
           }
 
           const key = cli?.id ?? `__dom_${tx.id}`
           if (!porCliente.has(key)) {
             porCliente.set(key, {
-              clientId: cli?.id ?? '', clientName: cobranca.clientName,
+              clientId:   cli?.id ?? '',
+              clientName: cobranca.clientName,
               recebido: 0, previsto: 0, emAtraso: 0, cobranças: [],
             })
           }
           const g = porCliente.get(key)!
           g.cobranças.push(cobranca)
-          if (STATUS_RECEBIDO.has(status))      { g.recebido += valor; resumo.recebido += valor }
+
+          // Transações pagas → sempre RECEIVED
+          if (STATUS_RECEBIDO.has(status)) { g.recebido += valor; resumo.recebido += valor }
           else if (STATUS_PREVISTO.has(status)) { g.previsto += valor; resumo.previsto += valor }
           else if (STATUS_ATRASO.has(status))   { g.emAtraso += valor; resumo.emAtraso += valor }
         }
-      } catch { /* Dom com erro — não trava o Asaas */ }
+      } catch (domErr) {
+        console.error('[financeiro] Dom Pagamentos error:', domErr)
+        // Não trava — Asaas continua funcionando
+      }
     }
 
     const cobrancasPorCliente = [...porCliente.values()].sort((a, b) => {

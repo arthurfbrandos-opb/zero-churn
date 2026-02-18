@@ -24,7 +24,7 @@ import {
 export async function POST(request: NextRequest) {
   try {
     const payload = await request.json() as DomWebhookPayload
-    const { event, webhook_code, data } = payload
+    const { event, data } = payload
 
     if (!event) return NextResponse.json({ error: 'evento inválido' }, { status: 400 })
 
@@ -42,11 +42,10 @@ export async function POST(request: NextRequest) {
 
     for (const integ of integrations ?? []) {
       try {
-        const creds = await decrypt<{ token: string; webhook_code?: string }>(integ.encrypted_key)
-        if (creds.webhook_code && creds.webhook_code === webhook_code) {
-          agencyId = integ.agency_id
-          break
-        }
+        await decrypt<{ token: string }>(integ.encrypted_key)
+        // Sem webhook_code — aceita qualquer agência com Dom ativo
+        agencyId = integ.agency_id
+        break
       } catch { continue }
     }
 

@@ -6,7 +6,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/supabase/encryption'
-import { listTransactions, DomCredentials } from '@/lib/dom/client'
+import { listTransactions, DomCredentials, domAmountToReal } from '@/lib/dom/client'
 
 export async function GET() {
   try {
@@ -47,16 +47,28 @@ export async function GET() {
     const startDate = h30dias.toISOString().slice(0, 10)
     const endDate   = hoje.toISOString().slice(0, 10)
 
-    const result = await listTransactions(creds, { start_date: startDate, end_date: endDate, per_page: 1 })
+    // Busca apenas transações pagas nos últimos 30 dias
+    const result = await listTransactions(creds, {
+      start_date: startDate,
+      end_date:   endDate,
+      status:     'paid',
+      per_page:   5,
+    })
 
-    const total = result.total ?? result.data?.length ?? 0
+    const paid  = (result.data ?? []).filter(tx => tx.status === 'paid')
+    const total = result.total ?? paid.length
+
+    // Soma o valor líquido das transações pagas na amostra
+    const valorLiquido = paid.reduce((sum, tx) => sum + domAmountToReal(tx.liquid_amount), 0)
 
     return NextResponse.json({
-      ok:                  true,
-      message:             'Conexão estabelecida com sucesso!',
-      transactions_found:  total,
-      period:              `${startDate} → ${endDate}`,
-      environment:         creds.environment ?? 'production',
+      ok:                 true,
+      message:            'Conexão estabelecida com sucesso!',
+      transactions_found: total,
+      valor_liquido_amostra: valorLiquido,
+      note:               'Valor líquido (após taxas Dom) das primeiras 5 transações pagas',
+      period:             `${startDate} → ${endDate}`,
+      environment:        creds.environment ?? 'production',
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
