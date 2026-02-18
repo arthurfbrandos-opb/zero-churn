@@ -20,7 +20,6 @@ import { Button } from '@/components/ui/button'
 import { ScoreGauge } from '@/components/dashboard/score-gauge'
 import { RiskBadge } from '@/components/dashboard/risk-badge'
 import { Client, ActionItem, Integration, Trend, PaymentStatus, ChurnRecord } from '@/types'
-import { useAnalysisCredits } from '@/hooks/use-analysis-credits'
 import { getNpsClassification, isInObservation } from '@/lib/nps-utils'
 import { ChurnModal, CHURN_CATEGORIES } from '@/components/dashboard/churn-modal'
 import { useClient } from '@/hooks/use-client'
@@ -79,11 +78,9 @@ function TabVisaoGeral({ client, refetch }: { client: Client; refetch: () => voi
   const [runningAnalysis, setRunningAnalysis] = useState(false)
   const [analysisMsg, setAnalysisMsg]         = useState('')
   const [analysisError, setAnalysisError]     = useState<string | null>(null)
-  const [blockedMsg, setBlockedMsg]           = useState(false)
-  const credits = useAnalysisCredits()
+
 
   async function handleRunAnalysis() {
-    setBlockedMsg(false)
     setAnalysisError(null)
     setRunningAnalysis(true)
 
