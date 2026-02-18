@@ -26,7 +26,7 @@ import { ChurnModal, CHURN_CATEGORIES } from '@/components/dashboard/churn-modal
 import { useClient } from '@/hooks/use-client'
 import { Loader2, Plus, Search, Pencil } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { mockServices } from '@/lib/mock-data'
+
 import { AsaasCobrancaModal } from '@/components/integracoes/asaas-cobranca-modal'
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -80,13 +80,9 @@ function TabVisaoGeral({ client, refetch }: { client: Client; refetch: () => voi
   const [analysisMsg, setAnalysisMsg]         = useState('')
   const [analysisError, setAnalysisError]     = useState<string | null>(null)
   const [blockedMsg, setBlockedMsg]           = useState(false)
-  const credits = useAnalysisCredits('starter') // plano mockado
+  const credits = useAnalysisCredits()
 
   async function handleRunAnalysis() {
-    if (!credits.canAnalyze) { setBlockedMsg(true); return }
-    const ok = credits.consume()
-    if (!ok) { setBlockedMsg(true); return }
-
     setBlockedMsg(false)
     setAnalysisError(null)
     setRunningAnalysis(true)
@@ -94,8 +90,7 @@ function TabVisaoGeral({ client, refetch }: { client: Client; refetch: () => voi
     // Mensagens de progresso enquanto aguarda a análise
     const steps = [
       'Coletando dados financeiros…',
-      'Analisando WhatsApp…',
-      'Processando formulários…',
+      'Processando formulários NPS…',
       'Calculando health score…',
       'Gerando diagnóstico com IA…',
     ]
@@ -127,12 +122,20 @@ function TabVisaoGeral({ client, refetch }: { client: Client; refetch: () => voi
     }
   }
 
-  function toggleAction(id: string) {
+  async function toggleAction(id: string) {
+    // Atualiza estado local imediatamente (optimistic update)
+    const newDone = !actions.find(a => a.id === id)?.done
     setActions(prev => prev.map(a =>
       a.id === id
-        ? { ...a, done: !a.done, doneAt: !a.done ? new Date().toLocaleDateString('pt-BR') : undefined, doneBy: !a.done ? 'Você' : undefined }
+        ? { ...a, done: newDone, doneAt: newDone ? new Date().toLocaleDateString('pt-BR') : undefined, doneBy: newDone ? 'Você' : undefined }
         : a
     ))
+    // Persiste no banco (fire-and-forget — UI já foi atualizada otimisticamente)
+    fetch(`/api/clients/${client.id}/action-items`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemId: id, isDone: newDone }),
+    }).catch(err => console.warn('[action-items] falha ao persistir:', err))
   }
 
   const PILLARS = [
@@ -160,13 +163,8 @@ function TabVisaoGeral({ client, refetch }: { client: Client; refetch: () => voi
           O cliente foi cadastrado há menos de 60 dias. A primeira análise de health score será gerada em breve.
         </p>
         <div className="space-y-2 mt-2">
-          {!credits.unlimited && (
-            <p className={cn('text-xs text-center', credits.remaining > 0 ? 'text-zinc-500' : 'text-red-400')}>
-              ⚡ {credits.remaining}/{credits.total} análises disponíveis hoje
-            </p>
-          )}
           <Button size="sm" onClick={handleRunAnalysis}
-            disabled={runningAnalysis || !credits.canAnalyze}
+            disabled={runningAnalysis}
             className="bg-emerald-500 hover:bg-emerald-600 text-white gap-2 disabled:opacity-50">
             {runningAnalysis ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />{analysisMsg}</> : <><Zap className="w-3.5 h-3.5" />Rodar análise agora</>}
           </Button>
@@ -184,42 +182,20 @@ function TabVisaoGeral({ client, refetch }: { client: Client; refetch: () => voi
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <p className="text-zinc-500 text-xs">
-            Última análise: <span className="text-zinc-300">{fmtDate(hs.calculatedAt)}</span>
+            Última análise: <span className="text-zinc-300">{fmtDate(hs.analyzedAt ?? hs.calculatedAt)}</span>
             {' · '}<span className="text-zinc-400">{hs.triggeredBy === 'manual' ? 'Manual' : 'Automática'}</span>
           </p>
           <div className="flex items-center gap-2">
             {/* Indicador de créditos */}
-            {!credits.unlimited && (
-              <span className={cn('text-xs flex items-center gap-1 px-2 py-1 rounded-lg border',
-                credits.remaining > 0
-                  ? 'text-zinc-400 border-zinc-700 bg-zinc-800'
-                  : 'text-red-400 border-red-500/30 bg-red-500/10'
-              )}>
-                ⚡ {credits.remaining}/{credits.total} análises hoje
-              </span>
-            )}
             <Button size="sm" variant="outline" onClick={handleRunAnalysis}
-              disabled={runningAnalysis || !credits.canAnalyze}
-              className={cn('gap-1.5 text-xs', credits.canAnalyze
-                ? 'border-zinc-700 text-zinc-400 hover:text-white'
-                : 'border-red-500/30 text-red-400 cursor-not-allowed opacity-60')}>
+              disabled={runningAnalysis}
+              className="gap-1.5 text-xs border-zinc-700 text-zinc-400 hover:text-white">
               {runningAnalysis
                 ? <><RefreshCw className="w-3 h-3 animate-spin" />{analysisMsg}</>
                 : <><RefreshCw className="w-3 h-3" />Rodar análise</>}
             </Button>
           </div>
         </div>
-        {/* Aviso de créditos esgotados */}
-        {blockedMsg && (
-          <div className="flex items-center gap-2 bg-red-500/5 border border-red-500/20 rounded-lg px-3 py-2">
-            <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
-            <p className="text-red-300 text-xs">
-              Você usou todos os {credits.total} créditos de análise do dia.
-              Os créditos renovam à meia-noite ou você pode{' '}
-              <Link href="/configuracoes" className="text-emerald-400 underline hover:no-underline">fazer upgrade do plano</Link>.
-            </p>
-          </div>
-        )}
         {/* Erro de análise */}
         {analysisError && (
           <div className="flex items-center gap-2 bg-red-500/5 border border-red-500/20 rounded-lg px-3 py-2">
@@ -288,29 +264,50 @@ function TabVisaoGeral({ client, refetch }: { client: Client; refetch: () => voi
       {/* 4 Pilares */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {PILLARS.map(({ key, label, icon: Icon, color, weight }) => {
-          const pillar = hs.pillars?.[key]
-          const c = colorMap[color]
-          const pillarScore = pillar?.score ?? 0
+          const pillar  = hs.pillars?.[key]
+          const c       = colorMap[color]
+          const rawScore = pillar?.score ?? null
+          // Sem dados do banco: tenta pegar dos campos diretos do health score
+          const scoreFromHs = key === 'financial'  ? (hs.scoreFinanceiro  ?? null)
+                            : key === 'proximity'  ? (hs.scoreProximidade ?? null)
+                            : key === 'result'     ? (hs.scoreResultado   ?? null)
+                            : key === 'nps'        ? (hs.scoreNps         ?? null)
+                            : null
+          const pillarScore  = rawScore ?? scoreFromHs
+          const hasData      = pillarScore !== null
+          const displayScore = hasData ? pillarScore : 0
           const pillarContrib = pillar?.contribution ?? 0
           return (
-            <Card key={key} className={cn('border', c.border, 'bg-zinc-900')}>
+            <Card key={key} className={cn('border bg-zinc-900', hasData ? c.border : 'border-zinc-800 opacity-60')}>
               <CardContent className="p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center', c.bg)}>
-                    <Icon className={cn('w-4 h-4', c.text)} />
+                  <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center', hasData ? c.bg : 'bg-zinc-800')}>
+                    <Icon className={cn('w-4 h-4', hasData ? c.text : 'text-zinc-600')} />
                   </div>
                   <div className="flex items-center gap-1">
-                    <TrendIcon trend={pillar?.trend ?? 'stable'} />
+                    {hasData && <TrendIcon trend={pillar?.trend ?? 'stable'} />}
                     <Badge variant="outline" className="text-zinc-500 border-zinc-700 text-xs">{weight}</Badge>
                   </div>
                 </div>
                 <div>
                   <p className="text-zinc-400 text-xs">{label}</p>
-                  <p className={cn('text-2xl font-bold', c.text)}>{pillarScore}</p>
-                  <p className="text-zinc-600 text-xs">contribuição: {pillarContrib.toFixed(1)} pts</p>
+                  {hasData ? (
+                    <>
+                      <p className={cn('text-2xl font-bold', c.text)}>{displayScore}</p>
+                      {pillarContrib > 0 && <p className="text-zinc-600 text-xs">contribuição: {pillarContrib.toFixed(1)} pts</p>}
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-zinc-600 text-lg font-bold">—</p>
+                      <p className="text-zinc-600 text-xs">
+                        {key === 'proximity' ? 'WhatsApp não conectado' : 'Sem dados'}
+                      </p>
+                    </>
+                  )}
                 </div>
                 <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                  <div className={cn('h-full rounded-full', c.bar)} style={{ width: `${pillarScore}%` }} />
+                  <div className={cn('h-full rounded-full', hasData ? c.bar : 'bg-zinc-700')}
+                    style={{ width: `${displayScore}%` }} />
                 </div>
               </CardContent>
             </Card>
@@ -396,9 +393,9 @@ function TabVisaoGeral({ client, refetch }: { client: Client; refetch: () => voi
 function TabCadastro({ client }: { client: Client }) {
   const c = client as unknown as Record<string, unknown>
   const clientType  = client.clientType ?? 'mrr'
-  const service     = mockServices.find(s => s.id === client.serviceId)
-  const entregaveis = service?.entregaveis.filter(e => (client.entregaveisIncluidos ?? []).includes(e.id)) ?? []
-  const bonus       = service?.bonus?.filter(b => (client.bonusIncluidos ?? []).includes(b.id)) ?? []
+  // Entregáveis/bônus: armazenados como array de nomes (ou IDs resolvíveis via localStorage)
+  const entregaveis = (client.entregaveisIncluidos ?? []).map(v => typeof v === 'string' ? v : String(v)).filter(Boolean)
+  const bonus       = (client.bonusIncluidos ?? []).map(v => typeof v === 'string' ? v : String(v)).filter(Boolean)
   const mrrVal = client.mrrValue ?? client.contractValue
   const tcvVal = client.tcvValue ?? client.totalProjectValue
 
@@ -459,7 +456,6 @@ function TabCadastro({ client }: { client: Client }) {
 
       <S title="Contrato">
         <F label="Tipo" value={clientType === 'mrr' ? 'Recorrente mensal' : 'Projeto com valor fixo'} />
-        {service && <F label="Produto / Serviço" value={service.name} />}
         <F label="Início do contrato" value={fmtDate(client.contractStartDate)} />
         {clientType === 'mrr' && <F label="Mensalidade mensal"     value={fmtMoney(mrrVal)} />}
         {clientType === 'tcv' && <F label="Valor total do projeto" value={fmtMoney(tcvVal)} />}
@@ -472,10 +468,10 @@ function TabCadastro({ client }: { client: Client }) {
           <CardContent className="p-5 space-y-3">
             <h3 className="text-zinc-200 font-semibold text-sm">Entregáveis do contrato</h3>
             <ul className="space-y-1.5">
-              {entregaveis.map(e => (
-                <li key={e.id} className="flex items-start gap-2 text-sm text-zinc-300">
+              {entregaveis.map((name, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-zinc-300">
                   <span className="text-emerald-400 mt-0.5">✓</span>
-                  <span>{e.name}</span>
+                  <span>{name}</span>
                 </li>
               ))}
             </ul>
@@ -483,10 +479,10 @@ function TabCadastro({ client }: { client: Client }) {
               <>
                 <h4 className="text-zinc-400 text-xs font-medium pt-2">Bônus incluídos</h4>
                 <ul className="space-y-1">
-                  {bonus.map(b => (
-                    <li key={b.id} className="flex items-start gap-2 text-sm text-zinc-400">
+                  {bonus.map((name, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-zinc-400">
                       <span className="text-yellow-400 mt-0.5">★</span>
-                      <span>{b.name}</span>
+                      <span>{name}</span>
                     </li>
                   ))}
                 </ul>

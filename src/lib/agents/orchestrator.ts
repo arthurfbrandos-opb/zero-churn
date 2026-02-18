@@ -205,12 +205,27 @@ export async function runAnalysis(input: OrchestratorInput): Promise<Orchestrato
   agentsLog.nps        = npsResult
 
   // Proximidade (pode demorar mais — rodamos depois dos outros)
-  const proxResult = await runAgenteProximidade({
-    clientId,
-    groupId,
-    days:      60,
-    openaiKey: openaiKey ?? undefined,
-  })
+  // WhatsApp é OPCIONAL: se não conectado ou se a API falhar, o pilar
+  // retorna score null e é excluído do cálculo ponderado automaticamente.
+  let proxResult: AgentResult
+  try {
+    proxResult = await runAgenteProximidade({
+      clientId,
+      groupId,
+      days:      60,
+      openaiKey: openaiKey ?? undefined,
+    })
+  } catch (err) {
+    console.error('[orchestrator] runAgenteProximidade lançou exceção:', err)
+    proxResult = {
+      agent:   'proximidade',
+      score:   null,
+      flags:   [],
+      details: { error: String(err), reason: 'Erro inesperado no agente de proximidade' },
+      status:  'error',
+      error:   String(err),
+    }
+  }
   agentsLog.proximidade = proxResult
 
   // ── 7. Calcula score total ────────────────────────────────────

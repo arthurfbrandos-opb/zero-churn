@@ -13,7 +13,6 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { mockAlerts } from '@/lib/mock-data'
 import { Alert } from '@/types'
 import { cn } from '@/lib/utils'
 
@@ -53,17 +52,16 @@ function formatRelative(d: string) {
 // ─────────────────────────────────────────────────────────────────
 
 export default function AlertasPage() {
-  const [alerts, setAlerts] = useState<Alert[]>(mockAlerts)
+  const [alerts, setAlerts] = useState<Alert[]>([])
   const [loadingAlerts, setLoadingAlerts] = useState(true)
   const [severity, setSeverity] = useState<SeverityFilter>('all')
 
-  // Carrega alertas reais do banco + combina com mocks
+  // Carrega alertas reais do banco
   useEffect(() => {
     fetch('/api/alerts')
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (d?.alerts?.length) {
-          // Converte formato DB → formato Alert local
           const dbAlerts: Alert[] = d.alerts.map((a: {
             id: string; client_id: string | null; type: string; severity: string
             message: string; is_read: boolean; created_at: string
@@ -78,15 +76,10 @@ export default function AlertasPage() {
             isRead:     a.is_read,
             createdAt:  a.created_at,
           }))
-          // DB alerts têm prioridade; mocks ficam como complemento de demo
-          setAlerts(prev => {
-            const dbIds = new Set(dbAlerts.map(a => a.id))
-            const filtered = prev.filter(a => !dbIds.has(a.id))
-            return [...dbAlerts, ...filtered]
-          })
+          setAlerts(dbAlerts)
         }
       })
-      .catch(() => {/* mocks permanecem */})
+      .catch(() => { /* mantém array vazio */ })
       .finally(() => setLoadingAlerts(false))
   }, [])
 
