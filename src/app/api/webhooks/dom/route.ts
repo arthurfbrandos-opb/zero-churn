@@ -18,7 +18,7 @@ import {
   DOM_HIGH_SEVERITY_EVENTS,
   DOM_MEDIUM_SEVERITY_EVENTS,
   DOM_EVENT_LABELS,
-  domAmountToReal,
+
 } from '@/lib/dom/client'
 
 export async function POST(request: NextRequest) {
@@ -62,9 +62,9 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Processa o evento ──────────────────────────────────────
-    const transaction = data as DomTransaction
-    const valor       = transaction.amount ? domAmountToReal(transaction.amount) : null
-    const clientName  = transaction.customer?.name ?? 'cliente'
+    const transaction = data as unknown as DomTransaction
+    const valor       = transaction.amount ? Number(transaction.amount) : null
+    const clientName  = (transaction.customer_name as string | undefined) ?? 'cliente'
     const fmtValor    = valor ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor) : ''
 
     // Determina severidade
@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
     if (!SKIP_ALERT.has(event)) {
       // Tenta encontrar o client_id pelo document do customer
       let clientId: string | null = null
-      const document = transaction.customer?.document?.replace(/\D/g, '')
+      const document = (transaction.customer_document as string | undefined)?.replace(/\D/g, '')
       if (document) {
         const { data: clientMatch } = await supabase
           .from('clients')

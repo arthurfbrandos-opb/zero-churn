@@ -10,9 +10,7 @@ import { AsaasPayment, AsaasListResponse } from '@/lib/asaas/client'
 import {
   fetchPaidTransactions,
   DomCredentials,
-  domAmountToReal,
   domDateToISO,
-  domGetPaidAt,
   domStatusToInternal,
 } from '@/lib/dom/client'
 
@@ -308,38 +306,50 @@ export async function GET(request: NextRequest) {
         )
 
         for (const tx of domTxs) {
-          // Usa liquid_amount (valor líquido após taxas), não amount (bruto)
-          const valor = domAmountToReal(tx.liquid_amount)
+          // liquid_amount já vem em REAIS na API de listagem — sem divisão por 100
+          const valor = tx.liquid_amount
 
-          // Tenta identificar o cliente: 1º por CPF/CNPJ, 2º por e-mail
-          const doc = tx.customer?.document?.replace(/\D/g, '')
-          const email = tx.customer?.email?.toLowerCase().trim()
-          const cli = (doc ? docMap.get(doc) : null) ?? (email ? emailMap.get(email) : null) ?? null
+          // Identifica cliente: 1º por CPF/CNPJ, 2º por e-mail
+          // Campos PLANOS na resposta da lista: customer_document, customer_email
+          const doc   = tx.customer_document?.replace(/\D/g, '')
+          const email = tx.customer_email?.toLowerCase().trim()
+          const cli   = (doc ? docMap.get(doc) : null)
+                     ?? (email ? emailMap.get(email) : null)
+                     ?? null
 
           const status = domStatusToInternal(tx.status)
+          const data   = domDateToISO(tx.created_at)
 
           const cobranca = {
             id:         `dom_${tx.id}`,
             clientId:   cli?.id ?? '',
+            // Usa nome real do comprador da Dom (não '— Sem identificação —')
             clientName: cli
               ? (cli.nome_resumido ?? cli.name)
-              : (tx.customer?.name ?? '— Sem identificação —'),
+              : (tx.customer_name || '— Sem identificação —'),
             valor,
-            // Data de pagamento: liquidation[0].date (mais precisa) ou created_at
-            vencimento: domDateToISO(tx.created_at),
-            pagamento:  domGetPaidAt(tx),
+            vencimento:  data,
+            pagamento:   data,  // transações 'paid' já ocorreram
             status,
             tipo:        tx.payment_method,
-            descricao:   tx.product_first ?? tx.items?.[0]?.description ?? null,
+            descricao:   tx.product_first ?? null,
             invoiceUrl:  tx.boleto_url ?? null,
             fonte:       'dom',
             contaLabel:  'Dom Pagamentos',
-            // Campos extras Dom
-            parcelas:    tx.installments ? `${tx.installments}x` : null,
+            parcelas:    tx.installments > 1 ? `${tx.installments}x` : null,
             cartao:      tx.card_brand ?? null,
+            // Dados completos do comprador (para exibir mesmo sem vínculo)
+            domCliente: {
+              nome:     tx.customer_name,
+              documento: tx.customer_document,
+              email:    tx.customer_email,
+              telefone: tx.customer_phone ?? null,
+              produto:  tx.product_first  ?? null,
+            },
           }
 
-          const key = cli?.id ?? `__dom_${tx.id}`
+          // Agrupa por cliente cadastrado OU por CPF/CNPJ do comprador Dom
+          const key = cli?.id ?? `__dom_${doc ?? tx.id}`
           if (!porCliente.has(key)) {
             porCliente.set(key, {
               clientId:   cli?.id ?? '',
@@ -350,7 +360,6 @@ export async function GET(request: NextRequest) {
           const g = porCliente.get(key)!
           g.cobranças.push(cobranca)
 
-          // Transações pagas → sempre RECEIVED
           if (STATUS_RECEBIDO.has(status)) { g.recebido += valor; resumo.recebido += valor }
           else if (STATUS_PREVISTO.has(status)) { g.previsto += valor; resumo.previsto += valor }
           else if (STATUS_ATRASO.has(status))   { g.emAtraso += valor; resumo.emAtraso += valor }

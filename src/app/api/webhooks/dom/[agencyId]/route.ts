@@ -14,7 +14,7 @@ import {
   DOM_HIGH_SEVERITY_EVENTS,
   DOM_MEDIUM_SEVERITY_EVENTS,
   DOM_EVENT_LABELS,
-  domAmountToReal,
+
 } from '@/lib/dom/client'
 
 // ── GET — status para testar ───────────────────────────────────
@@ -108,9 +108,9 @@ export async function POST(
   const { event, data } = payload
   if (!event) return NextResponse.json({ received: true, warning: 'missing_event' })
 
-  const transaction = data as DomTransaction
-  const valor       = transaction.amount ? domAmountToReal(transaction.amount) : null
-  const clientName  = transaction.customer?.name ?? ''
+  const transaction = data as unknown as DomTransaction
+  const valor       = transaction.amount ? Number(transaction.amount) : null
+  const clientName  = (transaction.customer_name ?? '') as string
   const fmtValor    = valor
     ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor)
     : ''
@@ -148,7 +148,7 @@ export async function POST(
   if (!SKIP_ALERT.has(event)) {
     // Tenta encontrar o client_id pelo document (CPF/CNPJ)
     let clientId: string | null = null
-    const doc = transaction.customer?.document?.replace(/\D/g, '')
+    const doc = (transaction.customer_document as string | undefined)?.replace(/\D/g, '')
     if (doc) {
       const { data: match } = await supabase
         .from('clients')

@@ -1,18 +1,17 @@
 /**
- * Dom Pagamentos API Client v2 — campos corrigidos com base na estrutura real da API
+ * Dom Pagamentos API Client — v3 (mapeamento corrigido com dados reais)
  *
- * URL produção: https://apiv3.dompagamentos.com.br/checkout/production
- * URL sandbox:  https://hml-apiv3.dompagamentos.com.br/checkout/sandbox
- * Auth:         Authorization: Bearer {token}
+ * IMPORTANTE: O endpoint GET /transactions (lista) retorna estrutura DIFERENTE
+ * do endpoint GET /transactions/{id} (individual):
  *
- * Estrutura real da transação (descoberta via /api/dom/debug):
- *   status: "paid" | "pending" | "refused" | "refunded" | "chargeback" (LOWERCASE)
- *   amount: centavos (720000 = R$7.200,00)
- *   liquid_amount: valor líquido após taxas
- *   payment_method: "credit_card" | "boleto" | "pix" | "debit_card" (lowercase)
- *   customer.document_type: "CPF" | "CNPJ"
- *   installments: string ("12" = 12x no cartão)
- *   liquidation[0].date: data de liquidação
+ * Lista  → campos PLANOS: customer_name, customer_document, customer_email, customer_phone
+ *        → amount e liquid_amount já em REAIS (ex: 1500 = R$1.500, 1442.66 = R$1.442,66)
+ *        → installments: number (não string)
+ *        → SEM liquidation array, SEM fee_details, SEM items
+ *
+ * Individual → campos ANINHADOS: customer.name, customer.document, etc.
+ *            → amount e liquid_amount em CENTAVOS (ex: 720000 = R$7.200)
+ *            → COM liquidation, fee_details, items
  */
 
 const BASE_PROD    = 'https://apiv3.dompagamentos.com.br/checkout/production'
@@ -54,18 +53,19 @@ async function domRequest<T>(
   return res.json()
 }
 
-// ── Tipos reais (mapeados da API) ──────────────────────────────
+// ── Status reais da API ────────────────────────────────────────
 
-/** Status reais retornados pela Dom Pagamentos API */
 export type DomTransactionStatus =
-  | 'paid'           // aprovado e pago
-  | 'pending'        // aguardando pagamento
-  | 'refused'        // recusado (antifraude ou banco)
-  | 'refunded'       // estornado
-  | 'chargeback'     // chargeback
-  | 'expired'        // expirado
-  | 'authorized'     // pré-autorizado (cartão)
-  | 'cancelled'      // cancelado
+  | 'paid'
+  | 'pending'
+  | 'not_authorized'
+  | 'refused'
+  | 'refunded'
+  | 'chargeback'
+  | 'expired'
+  | 'authorized'
+  | 'cancelled'
+  | 'dispute'
 
 export type DomPaymentMethod =
   | 'credit_card'
@@ -73,65 +73,40 @@ export type DomPaymentMethod =
   | 'boleto'
   | 'pix'
 
-export interface DomLiquidation {
-  type:        string        // "CREDIT"
-  date:        string        // "YYYY-MM-DD" — data de liquidação
-  competence:  string        // "YYYY-MM-DD"
-  total_gross: number        // centavos
-  total_liquid: number       // centavos
-  installment: number        // número desta parcela
-  installments: number       // total de parcelas
-}
-
-export interface DomItem {
-  id:          string
-  description: string
-  price:       number        // centavos
-  quantity:    number
-}
-
+// ── Interface da LISTA (/transactions) — campos PLANOS ─────────
+// amount e liquid_amount já são REAIS (não centavos)
 export interface DomTransaction {
-  id:              string
-  created_at:      string   // "YYYY-MM-DD HH:MM:SS"
-  updated_at:      string
-  cod_external:    string | null
-  amount:          number   // centavos (dividir por 100 para reais)
-  liquid_amount:   number   // centavos após taxas
-  liquidation:     DomLiquidation[]
-  currency:        string   // "BRL"
-  status:          DomTransactionStatus
-  status_details:  string   // "Aprovado", "Recusado", etc.
-  payment_method:  DomPaymentMethod
-  installments:    string   // "12" = 12x no cartão (string!)
-  card_brand?:     string   // "MASTERCARD", "VISA", etc.
-  card_bin?:       string   // "555507******9510"
-  boleto_url?:     string | null
-  pix_qrcode?:     string | null
-  pix_qrcode_url?: string
-  product_first?:  string   // primeiro produto
-  items:           DomItem[]
-  customer: {
-    name:          string
-    email:         string
-    mobile_phone?: string
-    document:      string   // CPF ou CNPJ (somente dígitos)
-    document_type: 'CPF' | 'CNPJ'
-    birthdate?:    string | null
-  }
-  relations: {
-    id_invoice?:       string
-    id_link_payment?:  string
-    id_subscriber?:    string
-  }
-  fee_details?: {
-    amount:    number
-    fee_payer: string
-    type:      string
-  }
+  id:               string
+  type_operation:   string           // "online"
+  created_at:       string           // "YYYY-MM-DD HH:MM:SS"
+  updated_at:       string
+  cod_external:     string | null
+  amount:           number           // REAIS (ex: 1500 = R$1.500,00)
+  liquid_amount:    number           // REAIS (ex: 1442.66 = R$1.442,66)
+  status:           DomTransactionStatus
+  status_details:   string           // "Aprovado", "Não Autorizado", etc.
+  payment_method:   DomPaymentMethod
+  installments:     number           // número de parcelas
+  card_bin?:        string
+  card_brand?:      string
+  card_code_auth?:  string
+  boleto_url?:      string | null
+  boleto_digitable_line?: string | null
+  pix_qrcode?:      string | null
+  pix_content?:     string | null
+  pix_expire?:      string
+  // Dados do cliente — PLANOS (não aninhados!)
+  customer_name:    string
+  customer_document: string          // CPF ou CNPJ (somente dígitos)
+  customer_birthdate?: string | null
+  customer_email:   string
+  customer_phone?:  string
+  product_first?:   string           // descrição do produto
+  postbackUrl?:     string | null
 }
 
 export interface DomListResponse<T> {
-  data:       T[]
+  data?:      T[]       // pode vir direto no root ou em .data
   total?:     number
   page?:      number
   per_page?:  number
@@ -140,97 +115,86 @@ export interface DomListResponse<T> {
 
 // ── Helpers ────────────────────────────────────────────────────
 
-/** Centavos → Reais */
-export function domAmountToReal(cents: number): number {
-  return cents / 100
-}
-
-/** Data de pagamento: pega de liquidation[0].date ou created_at */
-export function domGetPaidAt(tx: DomTransaction): string | null {
-  return tx.liquidation?.[0]?.date ?? null
-}
-
-/** Data no formato "YYYY-MM-DD HH:MM:SS" → "YYYY-MM-DD" */
-export function domDateToISO(dt: string): string {
-  return dt.slice(0, 10)
-}
-
 /** Status Dom → status interno Zero Churn */
-export function domStatusToInternal(status: DomTransactionStatus): 'RECEIVED' | 'PENDING' | 'OVERDUE' | 'REFUNDED' {
+export function domStatusToInternal(
+  status: DomTransactionStatus
+): 'RECEIVED' | 'PENDING' | 'OVERDUE' | 'REFUNDED' {
   const map: Record<DomTransactionStatus, 'RECEIVED' | 'PENDING' | 'OVERDUE' | 'REFUNDED'> = {
-    paid:       'RECEIVED',
-    pending:    'PENDING',
-    authorized: 'PENDING',
-    refused:    'REFUNDED',
-    refunded:   'REFUNDED',
-    chargeback: 'REFUNDED',
-    expired:    'REFUNDED',
-    cancelled:  'REFUNDED',
+    paid:           'RECEIVED',
+    pending:        'PENDING',
+    authorized:     'PENDING',
+    not_authorized: 'REFUNDED',
+    refused:        'REFUNDED',
+    refunded:       'REFUNDED',
+    chargeback:     'REFUNDED',
+    expired:        'REFUNDED',
+    cancelled:      'REFUNDED',
+    dispute:        'REFUNDED',
   }
   return map[status] ?? 'PENDING'
 }
 
-/** Testa se o token é válido */
-export async function testCredentials(credentials: DomCredentials): Promise<boolean> {
-  try {
-    await listTransactions(credentials, { per_page: 1 })
-    return true
-  } catch {
-    return false
-  }
+/** Data no formato "YYYY-MM-DD HH:MM:SS" → "YYYY-MM-DD" */
+export function domDateToISO(dt: string): string {
+  return dt ? dt.slice(0, 10) : ''
 }
 
 // ── Endpoints ──────────────────────────────────────────────────
 
 /**
- * Lista transações com paginação.
- * IMPORTANTE: A Dom Pagamentos API retorna 500 se receber parâmetros inválidos
- * (status[], datas fora do range, etc). Enviamos apenas page + per_page
- * e fazemos todo o filtro client-side.
+ * Lista transações (sem filtros na URL — Dom retorna 500 com filtros).
+ * A resposta pode vir como array direto ou como { data: [], total: N }.
  */
 export async function listTransactions(
   credentials: DomCredentials,
-  params: {
-    page?:     number
-    per_page?: number
-  } = {}
-): Promise<DomListResponse<DomTransaction>> {
+  params: { page?: number; per_page?: number } = {}
+): Promise<{ data: DomTransaction[]; total?: number; last_page?: number }> {
   const qs = new URLSearchParams()
   if (params.page && params.page > 1) qs.set('page', String(params.page))
   qs.set('per_page', String(params.per_page ?? 100))
 
   const query = qs.toString()
-  return domRequest<DomListResponse<DomTransaction>>(
+  const raw = await domRequest<DomListResponse<DomTransaction> | DomTransaction[]>(
     `/transactions${query ? `?${query}` : ''}`,
     credentials
   )
+
+  // Normaliza: a API pode retornar array direto ou { data: [...], total: N }
+  if (Array.isArray(raw)) {
+    return { data: raw, total: raw.length }
+  }
+  return {
+    data:      raw.data ?? [],
+    total:     raw.total,
+    last_page: raw.last_page,
+  }
 }
 
 /**
- * Busca transações pagas (status: "paid") dentro de um intervalo de datas.
- * Filtragem feita client-side (a Dom API não suporta filtro por status/data sem 500).
- * Para na primeira página sem transações pagas no período ou quando acaba a paginação.
+ * Busca APENAS transações pagas dentro de um período.
+ * - Filtra status === 'paid' client-side
+ * - amounts já vêm em REAIS — sem divisão por 100
+ * - Para quando a data mais antiga da página já passou do início do período
  */
 export async function fetchPaidTransactions(
   credentials: DomCredentials,
   startDate:   string,   // YYYY-MM-DD
   endDate:     string,
 ): Promise<DomTransaction[]> {
-  const all: DomTransaction[] = []
+  const all:   DomTransaction[] = []
   const start = new Date(startDate).getTime()
   const end   = new Date(endDate + 'T23:59:59').getTime()
 
-  let page    = 1
-  let hasMore = true
-  let emptyPages = 0   // para evitar loop infinito em API sem paginação
+  let page       = 1
+  let hasMore    = true
+  let emptyPages = 0
 
   while (hasMore && page <= 30 && emptyPages < 3) {
-    const res = await listTransactions(credentials, { page, per_page: 100 })
+    const res  = await listTransactions(credentials, { page, per_page: 100 })
     const rows = res.data ?? []
 
     if (rows.length === 0) break
 
-    // Filtra: somente "paid" + dentro do período
     const paid = rows.filter(tx => {
       if (tx.status !== 'paid') return false
       const txDate = new Date(tx.created_at.replace(' ', 'T')).getTime()
@@ -239,11 +203,11 @@ export async function fetchPaidTransactions(
 
     all.push(...paid)
 
-    // Se nenhuma row desta página está no período E a mais antiga já está antes do início → para
+    // Se a mais antiga já está antes do início → não precisa continuar
     const oldest = rows[rows.length - 1]
     if (oldest) {
       const oldestDate = new Date(oldest.created_at.replace(' ', 'T')).getTime()
-      if (oldestDate < start) break   // passou do período — não precisa ir além
+      if (oldestDate < start) break
     }
 
     if (paid.length === 0) emptyPages++
@@ -257,12 +221,16 @@ export async function fetchPaidTransactions(
   return all
 }
 
-/** Busca uma transação específica */
+/**
+ * Busca uma transação específica (GET /transactions/{id}).
+ * ATENÇÃO: este endpoint retorna estrutura DIFERENTE da lista
+ * (campos aninhados, amounts em CENTAVOS).
+ */
 export async function getTransaction(
   credentials: DomCredentials,
   id: string
-): Promise<DomTransaction> {
-  return domRequest<DomTransaction>(`/transactions/${id}`, credentials)
+): Promise<Record<string, unknown>> {
+  return domRequest<Record<string, unknown>>(`/transactions/${id}`, credentials)
 }
 
 // ── Webhook ────────────────────────────────────────────────────
@@ -293,23 +261,17 @@ export type DomWebhookEvent =
 
 export interface DomWebhookPayload {
   event:      DomWebhookEvent
-  data:       DomTransaction | Record<string, unknown>
+  data:       Record<string, unknown>
   created_at?: string
 }
 
 export const DOM_HIGH_SEVERITY_EVENTS: DomWebhookEvent[] = [
-  'CHARGE-CHARGEBACK',
-  'CHARGE-DISPUT',
-  'CHARGE-REJECTED_ANTIFRAUD',
-  'SIGNATURE-CANCELLED',
-  'SIGNATURE-INVOICE-FAILED',
+  'CHARGE-CHARGEBACK', 'CHARGE-DISPUT', 'CHARGE-REJECTED_ANTIFRAUD',
+  'SIGNATURE-CANCELLED', 'SIGNATURE-INVOICE-FAILED',
 ]
 
 export const DOM_MEDIUM_SEVERITY_EVENTS: DomWebhookEvent[] = [
-  'CHARGE-REFUND',
-  'CHARGE-NOT_AUTHORIZED',
-  'CHARGE-EXPIRE',
-  'CHARGE-DISPUTE_PENDING',
+  'CHARGE-REFUND', 'CHARGE-NOT_AUTHORIZED', 'CHARGE-EXPIRE', 'CHARGE-DISPUTE_PENDING',
 ]
 
 export const DOM_EVENT_LABELS: Record<DomWebhookEvent, string> = {

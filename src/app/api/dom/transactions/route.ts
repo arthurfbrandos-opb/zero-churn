@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/supabase/encryption'
-import { fetchPaidTransactions, DomCredentials, domAmountToReal } from '@/lib/dom/client'
+import { fetchPaidTransactions, DomCredentials } from '@/lib/dom/client'
 
 export async function GET(request: NextRequest) {
   try {
@@ -33,8 +33,8 @@ export async function GET(request: NextRequest) {
     // Usa liquid_amount (valor líquido após taxas)
     const normalized = transactions.map(t => ({
       ...t,
-      amount:        domAmountToReal(t.amount),
-      liquid_amount: domAmountToReal(t.liquid_amount),
+      amount:        t.amount,
+      liquid_amount: t.liquid_amount,
     }))
 
     return NextResponse.json({ transactions: normalized })

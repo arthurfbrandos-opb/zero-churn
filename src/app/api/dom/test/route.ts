@@ -6,7 +6,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/supabase/encryption'
-import { listTransactions, DomCredentials, domAmountToReal } from '@/lib/dom/client'
+import { listTransactions, DomCredentials } from '@/lib/dom/client'
 
 export async function GET() {
   try {
@@ -54,22 +54,22 @@ export async function GET() {
     // Filtra client-side: pagas + nos últimos 30 dias
     const start = new Date(startDate).getTime()
     const end   = new Date(endDate + 'T23:59:59').getTime()
-    const paid  = rows.filter(tx => {
+    const paid = rows.filter(tx => {
       if (tx.status !== 'paid') return false
       const d = new Date(tx.created_at.replace(' ', 'T')).getTime()
       return d >= start && d <= end
     })
 
-    const totalPaid    = result.total ?? rows.length
-    const valorLiquido = paid.reduce((sum, tx) => sum + domAmountToReal(tx.liquid_amount), 0)
+    // liquid_amount já vem em REAIS — sem divisão por 100
+    const valorLiquido = paid.reduce((sum, tx) => sum + tx.liquid_amount, 0)
 
     return NextResponse.json({
       ok:                    true,
       message:               'Conexão estabelecida com sucesso!',
-      total_na_conta:        totalPaid,
+      total_na_conta:        result.total ?? rows.length,
       pagas_ultimos_30_dias: paid.length,
-      valor_liquido_amostra: valorLiquido,
-      note:                  'Valor líquido (após taxas Dom) das transações pagas nos últimos 30 dias (amostra)',
+      valor_liquido_amostra: `R$ ${valorLiquido.toFixed(2).replace('.', ',')}`,
+      note:                  'Valor líquido em reais (liquid_amount já vem em R$ pela API Dom)',
       environment:           creds.environment ?? 'production',
     })
   } catch (err) {
