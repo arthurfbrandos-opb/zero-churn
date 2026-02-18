@@ -132,9 +132,12 @@ export async function GET(request: NextRequest) {
     // ── 4. Para cada customer_id, busca pagamentos no Asaas ───────
     type CobrancaItem = {
       id: string; clientId: string; clientName: string
-      valor: number; vencimento: string; pagamento: string | null
+      valorTotal:  number   // bruto (antes das taxas)
+      valorLiquido: number  // líquido (o que cai na conta)
+      vencimento: string; pagamento: string | null
       status: string; tipo: string; descricao: string | null
       invoiceUrl: string | null; fonte: string; contaLabel: string
+      domCliente?: { nome: string; documento: string; email: string; telefone: string | null; produto: string | null } | null
     }
 
     const todasCobranças: CobrancaItem[] = []
@@ -153,18 +156,21 @@ export async function GET(request: NextRequest) {
       try {
         const payments = await fetchPaymentsByCustomer(apiKey, customerId, dataInicio, dataFim, hojeStr)
         for (const p of payments) {
+          // netValue = valor líquido Asaas; se null/0, usa value (sem desconto)
+          const valorLiquido = (p.netValue && p.netValue > 0) ? p.netValue : p.value
           todasCobranças.push({
-            id:         p.id,
-            clientId:   ci.client_id,
+            id:           p.id,
+            clientId:     ci.client_id,
             clientName,
-            valor:      p.value,
-            vencimento: p.dueDate,
-            pagamento:  p.paymentDate ?? null,
-            status:     p.status,
-            tipo:       p.billingType,
-            descricao:  p.description ?? null,
-            invoiceUrl: p.invoiceUrl ?? null,
-            fonte:      'asaas',
+            valorTotal:   p.value,
+            valorLiquido,
+            vencimento:   p.dueDate,
+            pagamento:    p.paymentDate ?? null,
+            status:       p.status,
+            tipo:         p.billingType,
+            descricao:    p.description ?? null,
+            invoiceUrl:   p.invoiceUrl ?? null,
+            fonte:        'asaas',
             contaLabel,
           })
         }
@@ -212,26 +218,30 @@ export async function GET(request: NextRequest) {
 
       semIdentificacao = customerDetails.map(c => {
         const group = semIdentMap.get(c.id)!
-        const pagamentos = group.payments.map(p => ({
-          id:         p.id,
-          clientId:   '',
-          clientName: c.name,
-          valor:      p.value,
-          vencimento: p.dueDate,
-          pagamento:  p.paymentDate ?? null,
-          status:     p.status,
-          tipo:       p.billingType,
-          descricao:  p.description ?? null,
-          invoiceUrl: p.invoiceUrl ?? null,
-          fonte:      'asaas',
-          contaLabel: 'Asaas',
-        }))
+        const pagamentos = group.payments.map(p => {
+          const liq = (p.netValue && p.netValue > 0) ? p.netValue : p.value
+          return {
+            id:           p.id,
+            clientId:     '',
+            clientName:   c.name,
+            valorTotal:   p.value,
+            valorLiquido: liq,
+            vencimento:   p.dueDate,
+            pagamento:    p.paymentDate ?? null,
+            status:       p.status,
+            tipo:         p.billingType,
+            descricao:    p.description ?? null,
+            invoiceUrl:   p.invoiceUrl ?? null,
+            fonte:        'asaas',
+            contaLabel:   'Asaas',
+          }
+        })
         return {
           customerId:   c.id,
           customerName: c.name,
           cpfCnpj:      c.cpfCnpj ?? null,
           email:        c.email ?? null,
-          totalValor:   pagamentos.reduce((s, p) => s + p.valor, 0),
+          totalValor:   pagamentos.reduce((s, p) => s + p.valorLiquido, 0),
           pagamentos,
         }
       })
@@ -244,12 +254,25 @@ export async function GET(request: NextRequest) {
 
     const resumo = todasCobranças.reduce(
       (acc, c) => {
-        if (STATUS_RECEBIDO.has(c.status)) acc.recebido      += c.valor
-        else if (STATUS_PREVISTO.has(c.status)) acc.previsto += c.valor
-        else if (STATUS_ATRASO.has(c.status))   acc.emAtraso += c.valor
+        // Usa valorLiquido nos acumuladores principais
+        if (STATUS_RECEBIDO.has(c.status)) {
+          acc.recebido        += c.valorLiquido
+          acc.recebidoBruto   += c.valorTotal
+        } else if (STATUS_PREVISTO.has(c.status)) {
+          acc.previsto        += c.valorLiquido
+          acc.previstobruto   += c.valorTotal
+        } else if (STATUS_ATRASO.has(c.status)) {
+          acc.emAtraso        += c.valorLiquido
+          acc.emAtrasoBruto   += c.valorTotal
+        }
         return acc
       },
-      { recebido: 0, previsto: 0, emAtraso: 0, semIdentificacao: 0 }
+      {
+        recebido: 0, recebidoBruto: 0,
+        previsto: 0, previstobruto: 0,
+        emAtraso: 0, emAtrasoBruto: 0,
+        semIdentificacao: 0,
+      }
     )
     resumo.semIdentificacao = semIdentificacao.reduce((s, c) => s + c.totalValor, 0)
 
@@ -268,9 +291,9 @@ export async function GET(request: NextRequest) {
       }
       const g = porCliente.get(c.clientId)!
       g.cobranças.push(c)
-      if (STATUS_RECEBIDO.has(c.status)) g.recebido      += c.valor
-      else if (STATUS_PREVISTO.has(c.status)) g.previsto += c.valor
-      else if (STATUS_ATRASO.has(c.status))   g.emAtraso += c.valor
+      if (STATUS_RECEBIDO.has(c.status)) g.recebido      += c.valorLiquido
+      else if (STATUS_PREVISTO.has(c.status)) g.previsto += c.valorLiquido
+      else if (STATUS_ATRASO.has(c.status))   g.emAtraso += c.valorLiquido
     }
 
     // ── Dom Pagamentos ────────────────────────────────────────────
@@ -306,8 +329,9 @@ export async function GET(request: NextRequest) {
         )
 
         for (const tx of domTxs) {
-          // liquid_amount já vem em REAIS na API de listagem — sem divisão por 100
-          const valor = tx.liquid_amount
+          // Ambos já em REAIS (sem divisão por 100)
+          const valorTotal   = tx.amount
+          const valorLiquido = tx.liquid_amount
 
           // Identifica cliente: 1º por CPF/CNPJ, 2º por e-mail
           // Campos PLANOS na resposta da lista: customer_document, customer_email
@@ -321,30 +345,29 @@ export async function GET(request: NextRequest) {
           const data   = domDateToISO(tx.created_at)
 
           const cobranca = {
-            id:         `dom_${tx.id}`,
-            clientId:   cli?.id ?? '',
-            // Usa nome real do comprador da Dom (não '— Sem identificação —')
-            clientName: cli
+            id:           `dom_${tx.id}`,
+            clientId:     cli?.id ?? '',
+            clientName:   cli
               ? (cli.nome_resumido ?? cli.name)
               : (tx.customer_name || '— Sem identificação —'),
-            valor,
-            vencimento:  data,
-            pagamento:   data,  // transações 'paid' já ocorreram
+            valorTotal,
+            valorLiquido,
+            vencimento:   data,
+            pagamento:    data,
             status,
-            tipo:        tx.payment_method,
-            descricao:   tx.product_first ?? null,
-            invoiceUrl:  tx.boleto_url ?? null,
-            fonte:       'dom',
-            contaLabel:  'Dom Pagamentos',
-            parcelas:    tx.installments > 1 ? `${tx.installments}x` : null,
-            cartao:      tx.card_brand ?? null,
-            // Dados completos do comprador (para exibir mesmo sem vínculo)
+            tipo:         tx.payment_method,
+            descricao:    tx.product_first ?? null,
+            invoiceUrl:   tx.boleto_url ?? null,
+            fonte:        'dom',
+            contaLabel:   'Dom Pagamentos',
+            parcelas:     tx.installments > 1 ? `${tx.installments}x` : null,
+            cartao:       tx.card_brand ?? null,
             domCliente: {
-              nome:     tx.customer_name,
+              nome:      tx.customer_name,
               documento: tx.customer_document,
-              email:    tx.customer_email,
-              telefone: tx.customer_phone ?? null,
-              produto:  tx.product_first  ?? null,
+              email:     tx.customer_email,
+              telefone:  tx.customer_phone ?? null,
+              produto:   tx.product_first  ?? null,
             },
           }
 
@@ -360,9 +383,16 @@ export async function GET(request: NextRequest) {
           const g = porCliente.get(key)!
           g.cobranças.push(cobranca)
 
-          if (STATUS_RECEBIDO.has(status)) { g.recebido += valor; resumo.recebido += valor }
-          else if (STATUS_PREVISTO.has(status)) { g.previsto += valor; resumo.previsto += valor }
-          else if (STATUS_ATRASO.has(status))   { g.emAtraso += valor; resumo.emAtraso += valor }
+          if (STATUS_RECEBIDO.has(status)) {
+            g.recebido        += valorLiquido; resumo.recebido        += valorLiquido
+            resumo.recebidoBruto += valorTotal
+          } else if (STATUS_PREVISTO.has(status)) {
+            g.previsto        += valorLiquido; resumo.previsto        += valorLiquido
+            resumo.previstobruto += valorTotal
+          } else if (STATUS_ATRASO.has(status)) {
+            g.emAtraso        += valorLiquido; resumo.emAtraso        += valorLiquido
+            resumo.emAtrasoBruto += valorTotal
+          }
         }
       } catch (domErr) {
         console.error('[financeiro] Dom Pagamentos error:', domErr)

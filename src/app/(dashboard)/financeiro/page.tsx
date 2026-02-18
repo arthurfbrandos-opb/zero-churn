@@ -20,9 +20,13 @@ import { cn } from '@/lib/utils'
 // ── Tipos ────────────────────────────────────────────────────────
 interface Cobranca {
   id: string; clientId: string; clientName: string
-  valor: number; vencimento: string; pagamento: string | null
+  valorTotal:  number   // bruto
+  valorLiquido: number  // líquido (o que cai na conta)
+  vencimento: string; pagamento: string | null
   status: string; tipo: string; descricao: string | null
   invoiceUrl: string | null; fonte: string; contaLabel: string
+  parcelas?: string | null; cartao?: string | null
+  domCliente?: { nome: string; documento: string; email: string; telefone: string | null; produto: string | null } | null
 }
 interface ClienteGroup {
   clientId: string; clientName: string
@@ -35,7 +39,10 @@ interface CustomerSemIdent {
   totalValor: number; pagamentos: Cobranca[]
 }
 interface Resumo {
-  recebido: number; previsto: number; emAtraso: number; semIdentificacao: number
+  recebido: number;     recebidoBruto: number
+  previsto: number;     previstobruto: number
+  emAtraso: number;     emAtrasoBruto: number
+  semIdentificacao: number
 }
 interface FinanceiroData {
   resumo: Resumo
@@ -123,25 +130,45 @@ function ResumoCard({ label, value, sub, icon: Icon, color, bg, border }: {
 
 // ── Linha de cobrança ─────────────────────────────────────────────
 function CobrancaRow({ c }: { c: Cobranca }) {
-  const tipo: Record<string, string> = { BOLETO: 'Boleto', PIX: 'Pix', CREDIT_CARD: 'Cartão', UNDEFINED: 'Bol/Pix' }
+  const tipoMap: Record<string, string> = {
+    BOLETO: 'Boleto', PIX: 'Pix', CREDIT_CARD: 'Cartão', DEBIT_CARD: 'Débito',
+    credit_card: 'Cartão', debit_card: 'Débito', boleto: 'Boleto', pix: 'Pix',
+    UNDEFINED: 'Bol/Pix',
+  }
+  const isPago    = ['RECEIVED','CONFIRMED','RECEIVED_IN_CASH','paid'].includes(c.status)
+  const isAtraso  = c.status === 'OVERDUE'
+  const temDesconto = c.valorTotal !== c.valorLiquido
+
   return (
-    <div className="flex items-center gap-3 py-2.5 border-b border-zinc-800/50 last:border-0">
+    <div className="flex items-start gap-3 py-2.5 border-b border-zinc-800/50 last:border-0">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <StatusBadge status={c.status} />
-          <span className="text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-full">{tipo[c.tipo] ?? c.tipo}</span>
+          <span className="text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-full">
+            {tipoMap[c.tipo] ?? c.tipo}{c.parcelas ? ` ${c.parcelas}` : ''}{c.cartao ? ` · ${c.cartao}` : ''}
+          </span>
           {c.descricao && <span className="text-zinc-500 text-xs truncate max-w-[180px]">{c.descricao}</span>}
+          {c.fonte === 'dom' && c.domCliente && (
+            <span className="text-violet-400/70 text-xs truncate max-w-[160px]">{c.domCliente.nome}</span>
+          )}
         </div>
-        <div className="flex items-center gap-3 mt-1 text-xs text-zinc-500">
+        <div className="flex items-center gap-3 mt-1 text-xs text-zinc-600">
           <span>Venc: {fmtDate(c.vencimento)}</span>
           {c.pagamento && <span>Pago: {fmtDate(c.pagamento)}</span>}
+          {c.fonte === 'dom' && c.domCliente?.documento && (
+            <span>{c.domCliente.documento}</span>
+          )}
         </div>
       </div>
-      <div className="text-right shrink-0">
+      <div className="text-right shrink-0 min-w-[90px]">
+        {/* Valor líquido — principal */}
         <p className={cn('font-semibold text-sm tabular-nums',
-          ['RECEIVED','CONFIRMED','RECEIVED_IN_CASH'].includes(c.status) ? 'text-emerald-400'
-          : c.status === 'OVERDUE' ? 'text-red-400' : 'text-zinc-300'
-        )}>{fmt(c.valor)}</p>
+          isPago ? 'text-emerald-400' : isAtraso ? 'text-red-400' : 'text-zinc-300'
+        )}>{fmt(c.valorLiquido)}</p>
+        {/* Valor bruto — só aparece se diferente do líquido */}
+        {temDesconto && (
+          <p className="text-zinc-600 text-[11px] tabular-nums line-through">{fmt(c.valorTotal)}</p>
+        )}
         {c.invoiceUrl && (
           <a href={c.invoiceUrl} target="_blank" rel="noopener noreferrer"
             className="text-xs text-zinc-600 hover:text-zinc-400 flex items-center gap-0.5 justify-end mt-0.5">
@@ -156,7 +183,9 @@ function CobrancaRow({ c }: { c: Cobranca }) {
 // ── Bloco por cliente cadastrado ──────────────────────────────────
 function ClienteBlock({ grupo }: { grupo: ClienteGroup }) {
   const [open, setOpen] = useState(grupo.emAtraso > 0)
-  const total = grupo.recebido + grupo.previsto + grupo.emAtraso
+  const totalLiquido = grupo.recebido + grupo.previsto + grupo.emAtraso
+  const totalBruto   = grupo.cobranças.reduce((s, c) => s + c.valorTotal, 0)
+  const temDesconto  = Math.abs(totalBruto - totalLiquido) > 0.01
   return (
     <div className={cn('rounded-xl border overflow-hidden',
       grupo.emAtraso > 0 ? 'border-red-500/20 bg-red-500/3' : 'border-zinc-800 bg-zinc-900/40'
@@ -181,8 +210,11 @@ function ClienteBlock({ grupo }: { grupo: ClienteGroup }) {
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <div className="text-right hidden sm:block">
-            <p className="text-zinc-500 text-xs">Total</p>
-            <p className="text-zinc-200 text-sm font-semibold tabular-nums">{fmt(total)}</p>
+            <p className="text-zinc-500 text-xs">Total líquido</p>
+            <p className="text-zinc-200 text-sm font-semibold tabular-nums">{fmt(totalLiquido)}</p>
+            {temDesconto && (
+              <p className="text-zinc-600 text-[11px] tabular-nums">bruto {fmt(totalBruto)}</p>
+            )}
           </div>
           {grupo.clientId && (
             <Link href={`/clientes/${grupo.clientId}?tab=financeiro`} onClick={e => e.stopPropagation()}
@@ -462,7 +494,12 @@ export default function FinanceiroPage() {
     return true
   })
 
-  const resumo       = dados?.resumo ?? { recebido: 0, previsto: 0, emAtraso: 0, semIdentificacao: 0 }
+  const resumo = dados?.resumo ?? {
+    recebido: 0, recebidoBruto: 0,
+    previsto: 0, previstobruto: 0,
+    emAtraso: 0, emAtrasoBruto: 0,
+    semIdentificacao: 0,
+  }
   const inadimplentes = dados?.cobrancasPorCliente.filter(g => g.emAtraso > 0).length ?? 0
   const semIdent      = dados?.semIdentificacao ?? []
 
@@ -545,14 +582,24 @@ export default function FinanceiroPage() {
           <>
             {/* Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <ResumoCard label="Recebido" value={resumo.recebido}
-                sub={getMesLabel(mesSelecionado)} icon={CheckCircle2}
+              <ResumoCard label="Recebido (líquido)" value={resumo.recebido}
+                sub={resumo.recebidoBruto > resumo.recebido
+                  ? `bruto ${fmt(resumo.recebidoBruto)}`
+                  : getMesLabel(mesSelecionado)}
+                icon={CheckCircle2}
                 color="text-emerald-400" bg="bg-emerald-500/5" border="border-emerald-500/20" />
-              <ResumoCard label="Previsto a receber" value={resumo.previsto}
-                sub="cobranças em aberto" icon={TrendingUp}
+              <ResumoCard label="Previsto (líquido)" value={resumo.previsto}
+                sub={resumo.previstobruto > resumo.previsto
+                  ? `bruto ${fmt(resumo.previstobruto)}`
+                  : 'cobranças em aberto'}
+                icon={TrendingUp}
                 color="text-blue-400" bg="bg-blue-500/5" border="border-blue-500/20" />
-              <ResumoCard label="Em atraso" value={resumo.emAtraso}
-                sub={inadimplentes > 0 ? `${inadimplentes} cliente${inadimplentes > 1 ? 's' : ''}` : 'nenhum'}
+              <ResumoCard label="Em atraso (líquido)" value={resumo.emAtraso}
+                sub={resumo.emAtraso > 0
+                  ? (resumo.emAtrasoBruto > resumo.emAtraso
+                    ? `bruto ${fmt(resumo.emAtrasoBruto)}`
+                    : `${inadimplentes} cliente${inadimplentes > 1 ? 's' : ''}`)
+                  : 'nenhum'}
                 icon={AlertTriangle}
                 color={resumo.emAtraso > 0 ? 'text-red-400' : 'text-zinc-500'}
                 bg={resumo.emAtraso > 0 ? 'bg-red-500/5' : 'bg-zinc-900'}
