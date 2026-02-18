@@ -1228,15 +1228,32 @@ function ApiKeyField({ label, placeholder }: { label: string; placeholder: strin
 
 function EvolutionIntegCard() {
   type ViewState = 'loading' | 'connected' | 'disconnected' | 'qrcode' | 'error'
+  type Group = { id: string; name: string; participants: number }
 
-  const [view,       setView]       = useState<ViewState>('loading')
-  const [phone,      setPhone]      = useState<string | null>(null)
-  const [qrCode,     setQrCode]     = useState<string | null>(null)
-  const [qrAge,      setQrAge]      = useState(0)       // segundos desde o último QR
-  const [errMsg,     setErrMsg]     = useState('')
-  const [connecting, setConnecting] = useState(false)
-  const [polling,    setPolling]    = useState(false)
+  const [view,          setView]          = useState<ViewState>('loading')
+  const [phone,         setPhone]         = useState<string | null>(null)
+  const [qrCode,        setQrCode]        = useState<string | null>(null)
+  const [qrAge,         setQrAge]         = useState(0)
+  const [errMsg,        setErrMsg]        = useState('')
+  const [connecting,    setConnecting]    = useState(false)
+  const [polling,       setPolling]       = useState(false)
+  const [groups,        setGroups]        = useState<Group[] | null>(null)
+  const [loadingGroups, setLoadingGroups] = useState(false)
+  const [groupSearch,   setGroupSearch]   = useState('')
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  async function handleLoadGroups() {
+    setLoadingGroups(true)
+    try {
+      const r = await fetch('/api/whatsapp/groups')
+      const d = await r.json()
+      setGroups(d.groups ?? [])
+    } catch {
+      setGroups([])
+    } finally {
+      setLoadingGroups(false)
+    }
+  }
 
   // Verifica status inicial
   useEffect(() => {
@@ -1328,7 +1345,7 @@ function EvolutionIntegCard() {
 
       {/* Conectado */}
       {view === 'connected' && (
-        <div className="space-y-2 pt-1">
+        <div className="space-y-3 pt-1">
           <p className="text-emerald-400 text-xs flex items-center gap-1.5 font-medium">
             <Check className="w-3.5 h-3.5" />
             Número conectado{phone ? `: +${phone}` : ''}
@@ -1338,8 +1355,65 @@ function EvolutionIntegCard() {
             Vincule cada grupo no cadastro do cliente em{' '}
             <span className="text-zinc-300">Clientes → Integrações</span>.
           </p>
+
+          {/* Botão ver grupos */}
+          {groups === null ? (
+            <Button size="sm" variant="outline" onClick={handleLoadGroups}
+              disabled={loadingGroups}
+              className="border-zinc-600 text-zinc-300 hover:text-white text-xs gap-1.5 w-full">
+              {loadingGroups
+                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Carregando grupos...</>
+                : <><MessageCircle className="w-3.5 h-3.5" /> Ver grupos ativos</>}
+            </Button>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-400 text-xs font-medium">
+                  {groups.length} grupo{groups.length !== 1 ? 's' : ''} encontrado{groups.length !== 1 ? 's' : ''}
+                </span>
+                <button onClick={() => setGroups(null)}
+                  className="text-zinc-600 hover:text-zinc-400 text-xs">ocultar</button>
+              </div>
+
+              {/* Busca */}
+              {groups.length > 5 && (
+                <input
+                  type="text"
+                  placeholder="Buscar grupo..."
+                  value={groupSearch}
+                  onChange={e => setGroupSearch(e.target.value)}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-md px-2.5 py-1.5 text-xs text-zinc-200 placeholder-zinc-600 outline-none focus:border-zinc-500"
+                />
+              )}
+
+              {/* Lista */}
+              <div className="max-h-48 overflow-y-auto space-y-1 pr-0.5">
+                {groups
+                  .filter(g => !groupSearch || g.name.toLowerCase().includes(groupSearch.toLowerCase()))
+                  .map(g => (
+                    <div key={g.id}
+                      className="flex items-center justify-between bg-zinc-800/60 rounded-md px-2.5 py-1.5 text-xs">
+                      <span className="text-zinc-200 truncate flex-1">{g.name}</span>
+                      <span className="text-zinc-500 ml-2 shrink-0">{g.participants} membros</span>
+                    </div>
+                  ))}
+                {groups.filter(g => !groupSearch || g.name.toLowerCase().includes(groupSearch.toLowerCase())).length === 0 && (
+                  <p className="text-zinc-600 text-xs text-center py-2">Nenhum grupo encontrado</p>
+                )}
+              </div>
+
+              <Button size="sm" variant="outline" onClick={handleLoadGroups}
+                disabled={loadingGroups}
+                className="border-zinc-700 text-zinc-500 hover:text-zinc-300 text-xs gap-1 w-full">
+                {loadingGroups
+                  ? <><Loader2 className="w-3 h-3 animate-spin" /> Atualizando...</>
+                  : <><RefreshCw className="w-3 h-3" /> Atualizar lista</>}
+              </Button>
+            </div>
+          )}
+
           <Button size="sm" variant="outline" onClick={handleDisconnect}
-            className="border-red-500/30 text-red-400 hover:text-red-300 hover:border-red-500/50 text-xs gap-1">
+            className="border-red-500/30 text-red-400 hover:text-red-300 hover:border-red-500/50 text-xs gap-1 w-full">
             Desconectar número
           </Button>
         </div>
