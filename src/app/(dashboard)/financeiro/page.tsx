@@ -465,17 +465,44 @@ function SemIdentCard({
             {customer.cpfCnpj && <span>{fmtDoc(customer.cpfCnpj)}</span>}
             {customer.email   && <span>{customer.email}</span>}
           </div>
-          {/* Linha 3: valor + toggle de pagamentos */}
-          <div className="flex items-center gap-2 mt-1.5">
-            <span className="text-emerald-400 text-xs font-semibold">{fmt(customer.totalValor)}</span>
-            <button
-              onClick={() => setOpenPags(o => !o)}
-              className="text-zinc-600 hover:text-zinc-400 text-xs flex items-center gap-1 transition-colors"
-            >
-              {customer.pagamentos.length} pagamento{customer.pagamentos.length > 1 ? 's' : ''}
-              {openPags ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-            </button>
-          </div>
+          {/* Linha 3: breakdown por status + toggle de pagamentos */}
+          {(() => {
+            const recebido = customer.pagamentos
+              .filter(p => ['RECEIVED','CONFIRMED','RECEIVED_IN_CASH'].includes(p.status))
+              .reduce((s, p) => s + p.valorLiquido, 0)
+            const previsto = customer.pagamentos
+              .filter(p => p.status === 'PENDING')
+              .reduce((s, p) => s + p.valorLiquido, 0)
+            const emAtraso = customer.pagamentos
+              .filter(p => p.status === 'OVERDUE')
+              .reduce((s, p) => s + p.valorLiquido, 0)
+            return (
+              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                {recebido > 0 && (
+                  <span className="text-emerald-400 text-xs font-semibold">{fmt(recebido)}</span>
+                )}
+                {previsto > 0 && (
+                  <span className="text-zinc-400 text-xs">
+                    {recebido > 0 && '· '}{fmt(previsto)}
+                    <span className="text-zinc-600 ml-0.5">previsto</span>
+                  </span>
+                )}
+                {emAtraso > 0 && (
+                  <span className="text-red-400 text-xs font-medium">
+                    {(recebido > 0 || previsto > 0) && '· '}{fmt(emAtraso)}
+                    <span className="text-red-500/70 font-normal ml-0.5">atrasado</span>
+                  </span>
+                )}
+                <button
+                  onClick={() => setOpenPags(o => !o)}
+                  className="text-zinc-600 hover:text-zinc-400 text-xs flex items-center gap-1 transition-colors"
+                >
+                  {customer.pagamentos.length} pgto{customer.pagamentos.length > 1 ? 's' : ''}
+                  {openPags ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                </button>
+              </div>
+            )
+          })()}
         </div>
 
         {/* Ações — modo idle */}
@@ -767,12 +794,25 @@ export default function FinanceiroPage() {
                 color={resumo.emAtraso > 0 ? 'text-red-400' : 'text-zinc-500'}
                 bg={resumo.emAtraso > 0 ? 'bg-red-500/5' : 'bg-zinc-900'}
                 border={resumo.emAtraso > 0 ? 'border-red-500/20' : 'border-zinc-800'} />
-              <ResumoCard label="Sem identificação" value={resumo.semIdentificacao}
-                sub={semIdent.length > 0 ? `${semIdent.length} transação${semIdent.length > 1 ? 'ões' : ''} não reconhecida${semIdent.length > 1 ? 's' : ''}` : 'todos identificados'}
-                icon={HelpCircle}
-                color={semIdent.length > 0 ? 'text-yellow-400' : 'text-zinc-500'}
-                bg={semIdent.length > 0 ? 'bg-yellow-500/5' : 'bg-zinc-900'}
-                border={semIdent.length > 0 ? 'border-yellow-500/20' : 'border-zinc-800'} />
+              {(() => {
+                const nRec = semIdent.reduce((s, c) => s + c.pagamentos.filter(p => ['RECEIVED','CONFIRMED','RECEIVED_IN_CASH'].includes(p.status)).length, 0)
+                const nPrev = semIdent.reduce((s, c) => s + c.pagamentos.filter(p => p.status === 'PENDING').length, 0)
+                const nAtras = semIdent.reduce((s, c) => s + c.pagamentos.filter(p => p.status === 'OVERDUE').length, 0)
+                const parts = [
+                  nRec   > 0 ? `${nRec} recebido${nRec > 1 ? 's' : ''}`    : '',
+                  nPrev  > 0 ? `${nPrev} previsto${nPrev > 1 ? 's' : ''}`   : '',
+                  nAtras > 0 ? `${nAtras} atrasado${nAtras > 1 ? 's' : ''}` : '',
+                ].filter(Boolean)
+                const sub = semIdent.length > 0 ? parts.join(' · ') || 'não reconhecidos' : 'todos identificados'
+                return (
+                  <ResumoCard label="Não reconhecidos" value={resumo.semIdentificacao}
+                    sub={sub}
+                    icon={HelpCircle}
+                    color={semIdent.length > 0 ? 'text-yellow-400' : 'text-zinc-500'}
+                    bg={semIdent.length > 0 ? 'bg-yellow-500/5' : 'bg-zinc-900'}
+                    border={semIdent.length > 0 ? 'border-yellow-500/20' : 'border-zinc-800'} />
+                )
+              })()}
             </div>
 
             {/* Barra de composição */}
@@ -819,7 +859,7 @@ export default function FinanceiroPage() {
                   <div className="flex items-center gap-2 px-1 flex-wrap">
                     <HelpCircle className="w-4 h-4 text-yellow-400" />
                     <span className="text-yellow-300 text-sm font-semibold">
-                      Recebimentos não reconhecidos
+                      Não reconhecidos
                     </span>
                     {nAsaas > 0 && (
                       <Badge className="bg-blue-500/15 text-blue-400 border-blue-500/30 text-xs gap-1">
@@ -833,7 +873,7 @@ export default function FinanceiroPage() {
                     )}
                   </div>
                   <p className="text-zinc-500 text-xs px-1">
-                    Transações recebidas que não estão vinculadas a nenhum cliente cadastrado.
+                    Pagamentos recebidos, previstos ou em atraso de compradores não vinculados a nenhum cliente cadastrado.
                     Vincule a um cliente existente ou cadastre um novo.
                   </p>
                   <div className="space-y-2">

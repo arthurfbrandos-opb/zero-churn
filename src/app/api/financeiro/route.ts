@@ -244,20 +244,42 @@ export async function GET(request: NextRequest) {
           } catch { /* cliente com erro no Asaas — ignora */ }
         }))
 
-        // ── Recebimentos sem identificação (Asaas) ────────────────
+        // ── Pagamentos sem identificação (Asaas) — todos os status ──
+        // Busca recebidos, previstos e atrasados do período para
+        // descobrir clientes que pagaram mas não estão cadastrados.
         try {
-          const allReceived = await asaasGet<AsaasListResponse<AsaasPayment>>(
-            `/payments?paymentDate[ge]=${dataInicio}&paymentDate[le]=${dataFim}&status=RECEIVED,CONFIRMED,RECEIVED_IN_CASH&limit=100`,
-            apiKey
-          )
+          const maxFim = dataFim < hojeStr ? dataFim : hojeStr
+          const [receivedRes, pendingRes, overdueRes] = await Promise.allSettled([
+            asaasGet<AsaasListResponse<AsaasPayment>>(
+              `/payments?paymentDate[ge]=${dataInicio}&paymentDate[le]=${dataFim}&status=RECEIVED,CONFIRMED,RECEIVED_IN_CASH&limit=100`,
+              apiKey
+            ),
+            asaasGet<AsaasListResponse<AsaasPayment>>(
+              `/payments?dueDate[ge]=${dataInicio}&dueDate[le]=${dataFim}&status=PENDING&limit=100`,
+              apiKey
+            ),
+            asaasGet<AsaasListResponse<AsaasPayment>>(
+              `/payments?dueDate[ge]=${dataInicio}&dueDate[le]=${maxFim}&status=OVERDUE&limit=100`,
+              apiKey
+            ),
+          ])
+
+          // Merge deduplicado — filtra só os de clientes não cadastrados
+          const seenIds = new Set<string>()
           const semIdentMap = new Map<string, { payments: AsaasPayment[] }>()
-          for (const p of allReceived.data) {
-            if (!customerIdsConhecidos.has(p.customer)) {
+
+          for (const res of [receivedRes, pendingRes, overdueRes]) {
+            if (res.status !== 'fulfilled') continue
+            for (const p of res.value.data) {
+              if (seenIds.has(p.id)) continue
+              seenIds.add(p.id)
+              if (customerIdsConhecidos.has(p.customer)) continue
               if (!semIdentMap.has(p.customer)) semIdentMap.set(p.customer, { payments: [] })
               semIdentMap.get(p.customer)!.payments.push(p)
             }
           }
-          const customerIds = [...semIdentMap.keys()].slice(0, 20)
+
+          const customerIds = [...semIdentMap.keys()].slice(0, 25)
           const customerDetails = await Promise.all(
             customerIds.map(async id => {
               try {
@@ -267,6 +289,7 @@ export async function GET(request: NextRequest) {
               } catch { return { id, name: 'Desconhecido', cpfCnpj: null, email: null } }
             })
           )
+
           for (const c of customerDetails) {
             const group = semIdentMap.get(c.id)!
             const pagamentos = group.payments.map(p => {
@@ -279,6 +302,11 @@ export async function GET(request: NextRequest) {
                 descricao: p.description ?? null, invoiceUrl: p.invoiceUrl ?? null,
                 fonte: 'asaas' as const, contaLabel: 'Asaas',
               }
+            })
+            // Ordena: atrasados → previstos → recebidos
+            pagamentos.sort((a, b) => {
+              const order = { OVERDUE: 0, PENDING: 1, RECEIVED: 2, CONFIRMED: 2, RECEIVED_IN_CASH: 2 }
+              return (order[a.status as keyof typeof order] ?? 3) - (order[b.status as keyof typeof order] ?? 3)
             })
             const total = pagamentos.reduce((s, p) => s + p.valorLiquido, 0)
             semIdentificacao.push({
