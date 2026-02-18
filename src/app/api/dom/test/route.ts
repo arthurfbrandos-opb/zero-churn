@@ -47,28 +47,30 @@ export async function GET() {
     const startDate = h30dias.toISOString().slice(0, 10)
     const endDate   = hoje.toISOString().slice(0, 10)
 
-    // Busca apenas transações pagas nos últimos 30 dias
-    const result = await listTransactions(creds, {
-      start_date: startDate,
-      end_date:   endDate,
-      status:     'paid',
-      per_page:   5,
+    // Busca a primeira página (sem filtros — Dom retorna 500 com filtros)
+    const result = await listTransactions(creds, { per_page: 10 })
+    const rows   = result.data ?? []
+
+    // Filtra client-side: pagas + nos últimos 30 dias
+    const start = new Date(startDate).getTime()
+    const end   = new Date(endDate + 'T23:59:59').getTime()
+    const paid  = rows.filter(tx => {
+      if (tx.status !== 'paid') return false
+      const d = new Date(tx.created_at.replace(' ', 'T')).getTime()
+      return d >= start && d <= end
     })
 
-    const paid  = (result.data ?? []).filter(tx => tx.status === 'paid')
-    const total = result.total ?? paid.length
-
-    // Soma o valor líquido das transações pagas na amostra
+    const totalPaid    = result.total ?? rows.length
     const valorLiquido = paid.reduce((sum, tx) => sum + domAmountToReal(tx.liquid_amount), 0)
 
     return NextResponse.json({
-      ok:                 true,
-      message:            'Conexão estabelecida com sucesso!',
-      transactions_found: total,
+      ok:                    true,
+      message:               'Conexão estabelecida com sucesso!',
+      total_na_conta:        totalPaid,
+      pagas_ultimos_30_dias: paid.length,
       valor_liquido_amostra: valorLiquido,
-      note:               'Valor líquido (após taxas Dom) das primeiras 5 transações pagas',
-      period:             `${startDate} → ${endDate}`,
-      environment:        creds.environment ?? 'production',
+      note:                  'Valor líquido (após taxas Dom) das transações pagas nos últimos 30 dias (amostra)',
+      environment:           creds.environment ?? 'production',
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

@@ -182,55 +182,72 @@ export async function testCredentials(credentials: DomCredentials): Promise<bool
 
 // ── Endpoints ──────────────────────────────────────────────────
 
+/**
+ * Lista transações com paginação.
+ * IMPORTANTE: A Dom Pagamentos API retorna 500 se receber parâmetros inválidos
+ * (status[], datas fora do range, etc). Enviamos apenas page + per_page
+ * e fazemos todo o filtro client-side.
+ */
 export async function listTransactions(
   credentials: DomCredentials,
   params: {
-    start_date?: string     // YYYY-MM-DD
-    end_date?:   string
-    status?:     DomTransactionStatus | DomTransactionStatus[]
-    page?:       number
-    per_page?:   number
+    page?:     number
+    per_page?: number
   } = {}
 ): Promise<DomListResponse<DomTransaction>> {
   const qs = new URLSearchParams()
-  if (params.start_date) qs.set('start_date', params.start_date)
-  if (params.end_date)   qs.set('end_date',   params.end_date)
-  if (params.page)       qs.set('page',        String(params.page))
+  if (params.page && params.page > 1) qs.set('page', String(params.page))
   qs.set('per_page', String(params.per_page ?? 100))
 
-  const statuses = Array.isArray(params.status)
-    ? params.status
-    : params.status ? [params.status] : []
-  statuses.forEach(s => qs.append('status[]', s))
-
+  const query = qs.toString()
   return domRequest<DomListResponse<DomTransaction>>(
-    `/transactions?${qs.toString()}`,
+    `/transactions${query ? `?${query}` : ''}`,
     credentials
   )
 }
 
-/** Busca APENAS transações pagas (status: "paid") com paginação automática */
+/**
+ * Busca transações pagas (status: "paid") dentro de um intervalo de datas.
+ * Filtragem feita client-side (a Dom API não suporta filtro por status/data sem 500).
+ * Para na primeira página sem transações pagas no período ou quando acaba a paginação.
+ */
 export async function fetchPaidTransactions(
   credentials: DomCredentials,
-  startDate:   string,
+  startDate:   string,   // YYYY-MM-DD
   endDate:     string,
 ): Promise<DomTransaction[]> {
   const all: DomTransaction[] = []
-  let page = 1
-  let hasMore = true
+  const start = new Date(startDate).getTime()
+  const end   = new Date(endDate + 'T23:59:59').getTime()
 
-  while (hasMore && page <= 20) {
-    const res = await listTransactions(credentials, {
-      start_date: startDate,
-      end_date:   endDate,
-      status:     'paid',   // ← SOMENTE APROVADAS
-      page,
-      per_page:   100,
+  let page    = 1
+  let hasMore = true
+  let emptyPages = 0   // para evitar loop infinito em API sem paginação
+
+  while (hasMore && page <= 30 && emptyPages < 3) {
+    const res = await listTransactions(credentials, { page, per_page: 100 })
+    const rows = res.data ?? []
+
+    if (rows.length === 0) break
+
+    // Filtra: somente "paid" + dentro do período
+    const paid = rows.filter(tx => {
+      if (tx.status !== 'paid') return false
+      const txDate = new Date(tx.created_at.replace(' ', 'T')).getTime()
+      return txDate >= start && txDate <= end
     })
 
-    // Filtra client-side também (garante que só "paid" entra)
-    const paid = (res.data ?? []).filter(tx => tx.status === 'paid')
     all.push(...paid)
+
+    // Se nenhuma row desta página está no período E a mais antiga já está antes do início → para
+    const oldest = rows[rows.length - 1]
+    if (oldest) {
+      const oldestDate = new Date(oldest.created_at.replace(' ', 'T')).getTime()
+      if (oldestDate < start) break   // passou do período — não precisa ir além
+    }
+
+    if (paid.length === 0) emptyPages++
+    else emptyPages = 0
 
     const lastPage = res.last_page ?? 1
     hasMore = page < lastPage

@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/supabase/encryption'
 import { DomCredentials, getTransaction, listTransactions } from '@/lib/dom/client'
 
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -34,13 +35,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Sem ID: retorna as 3 primeiras transações para ver a estrutura
-    const hoje   = new Date()
-    const h30    = new Date(hoje); h30.setDate(h30.getDate() - 30)
-    const result = await listTransactions(creds, {
-      start_date: h30.toISOString().slice(0, 10),
-      end_date:   hoje.toISOString().slice(0, 10),
-      per_page:   3,
-    })
+    const result = await listTransactions(creds, { per_page: 3 })
 
     return NextResponse.json({
       total:        result.total,
