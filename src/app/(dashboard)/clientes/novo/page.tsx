@@ -597,7 +597,12 @@ function NovoClientePageInner() {
 
   // ── Step Integrações ──────────────────────────────────────────
   type LinkedAsaas = { id: string; name: string }
-  const [asaasLinked, setAsaasLinked] = useState<LinkedAsaas | null>(null)
+  // Pré-vincula conta Asaas se vindo do "Cadastrar" na seção sem-ident
+  const [asaasLinked, setAsaasLinked] = useState<LinkedAsaas | null>(() => {
+    const asaasId = searchParams.get('asaas_customer_id')
+    const nome    = searchParams.get('nome')
+    return asaasId ? { id: asaasId, name: nome || 'Customer Asaas' } : null
+  })
   const [showCobranca, setShowCobranca] = useState(false)
   // Sub-estados do modal de busca inline
   const [showLinkSearch, setShowLinkSearch] = useState(false)

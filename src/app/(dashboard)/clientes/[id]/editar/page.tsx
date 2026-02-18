@@ -880,7 +880,7 @@ export default function EditarClientePage() {
       // Identificação
       razaoSocial:      client.razaoSocial    ?? client.name ?? '',
       nomeResumido:     client.nomeResumido   ?? '',
-      cnpjCpf:          client.cnpj           ?? '',
+      cnpjCpf:          maskCpfCnpj(client.cnpj ?? ''),
       nomeDecisor:      client.nomeDecisor    ?? '',
       email:            client.email          ?? '',
       telefone:         client.telefone       ?? '',
@@ -951,7 +951,7 @@ export default function EditarClientePage() {
       ...prev,
       razaoSocial:    c.name,
       nomeResumido:   words.slice(0, 2).join(' '),
-      cnpjCpf:        c.cpfCnpj ?? '',
+      cnpjCpf:        maskCpfCnpj(c.cpfCnpj ?? ''),
       email:          emailPrincipal,
       emailFinanceiro,
       telefone,

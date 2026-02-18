@@ -767,6 +767,14 @@ function EditablePayRow({
   )
 }
 
+// ─── Tipos Dom para TabFinanceiro ────────────────────────────────
+interface DomTx {
+  id: string; data: string; status: string
+  valorTotal: number; valorLiquido: number
+  tipo: string; parcelas: string | null; cartao: string | null
+  descricao: string | null; comprador: string; documento: string; email: string
+}
+
 // ─── TabFinanceiro ────────────────────────────────────────────────
 function TabFinanceiro({ client }: { client: Client }) {
   const [payments,      setPayments]      = useState<PaymentWithAccount[]>([])
@@ -776,6 +784,10 @@ function TabFinanceiro({ client }: { client: Client }) {
   const [error,         setError]         = useState<string | null>(null)
   const [showAll,       setShowAll]       = useState(false)
   const [cobrancaTarget, setCobrancaTarget] = useState<{ id: string; name: string } | null>(null)
+
+  // Dom Pagamentos
+  const [domTxs,     setDomTxs]     = useState<DomTx[]>([])
+  const [loadingDom, setLoadingDom] = useState(false)
 
   function loadPayments() {
     setLoading(true)
@@ -791,7 +803,16 @@ function TabFinanceiro({ client }: { client: Client }) {
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { loadPayments() }, [client.id])
+  function loadDomPayments() {
+    setLoadingDom(true)
+    fetch(`/api/dom/payments?clientId=${client.id}&months=3`)
+      .then(r => r.json())
+      .then(d => { if (!d.error) setDomTxs(d.transactions ?? []) })
+      .catch(() => {})
+      .finally(() => setLoadingDom(false))
+  }
+
+  useEffect(() => { loadPayments(); loadDomPayments() }, [client.id])
 
   // Callbacks — atualização local sem re-fetch completo
   function handleUpdated(id: string, value: number, dueDate: string) {
@@ -824,14 +845,25 @@ function TabFinanceiro({ client }: { client: Client }) {
       <CardContent className="p-6 text-center"><p className="text-zinc-500 text-sm">{error}</p></CardContent>
     </Card>
   )
-  if (accounts.length === 0) return (
+  // Se não tem Asaas mas tem Dom, mostra só Dom
+  const hasAsaas = accounts.length > 0
+  const hasDom   = domTxs.length > 0
+
+  const fmt = (v: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
+  const fmtDt = (s: string) => s ? new Date(s + 'T00:00:00').toLocaleDateString('pt-BR') : '—'
+  const TIPO: Record<string, string> = {
+    credit_card: 'Cartão', debit_card: 'Débito', boleto: 'Boleto', pix: 'Pix',
+  }
+
+  if (!hasAsaas && !hasDom && !loadingDom) return (
     <Card className="bg-zinc-900 border-zinc-800">
       <CardContent className="p-8 flex flex-col items-center gap-3 text-center">
         <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center">
           <CreditCard className="w-6 h-6 text-zinc-600" />
         </div>
-        <p className="text-zinc-400 text-sm font-medium">Nenhuma conta Asaas vinculada</p>
-        <p className="text-zinc-600 text-xs">Vincule uma conta na aba Integrações para visualizar o histórico financeiro.</p>
+        <p className="text-zinc-400 text-sm font-medium">Nenhuma integração financeira vinculada</p>
+        <p className="text-zinc-600 text-xs">Vincule Asaas ou Dom Pagamentos na aba Integrações.</p>
       </CardContent>
     </Card>
   )
@@ -949,6 +981,62 @@ function TabFinanceiro({ client }: { client: Client }) {
           className="w-full border-zinc-700 text-zinc-400 hover:text-white gap-2">
           <Plus className="w-4 h-4" /> Nova cobrança
         </Button>
+      )}
+
+      {/* ── Dom Pagamentos ──────────────────────────────────────── */}
+      {(loadingDom || domTxs.length > 0) && (
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-5 space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
+                <CreditCard className="w-3.5 h-3.5 text-violet-400" />
+              </div>
+              <div>
+                <p className="text-zinc-200 text-sm font-semibold">Dom Pagamentos</p>
+                <p className="text-zinc-500 text-xs">Últimos 3 meses</p>
+              </div>
+              {loadingDom && <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-600 ml-auto" />}
+            </div>
+
+            {domTxs.length === 0 && !loadingDom && (
+              <p className="text-zinc-600 text-sm text-center py-3">Nenhuma transação encontrada no período.</p>
+            )}
+
+            <div className="divide-y divide-zinc-800/50">
+              {domTxs.map(tx => {
+                const temTaxa = Math.abs(tx.valorTotal - tx.valorLiquido) >= 0.01
+                return (
+                  <div key={tx.id} className="flex items-start gap-3 py-2.5">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">Recebido</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
+                          {TIPO[tx.tipo] ?? tx.tipo}{tx.parcelas ? ` ${tx.parcelas}` : ''}{tx.cartao ? ` · ${tx.cartao}` : ''}
+                        </span>
+                        {tx.descricao && <span className="text-zinc-500 text-xs truncate max-w-[140px]">{tx.descricao}</span>}
+                      </div>
+                      <p className="text-zinc-600 text-xs mt-0.5">
+                        {fmtDt(tx.data)} · {tx.comprador}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      {temTaxa ? (
+                        <>
+                          <p className="text-zinc-500 text-[11px] tabular-nums">total {fmt(tx.valorTotal)}</p>
+                          <p className="text-emerald-400 text-sm font-semibold tabular-nums">
+                            {fmt(tx.valorLiquido)}<span className="text-[10px] font-normal opacity-50 ml-0.5">líq.</span>
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-emerald-400 text-sm font-semibold tabular-nums">{fmt(tx.valorTotal)}</p>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   )
