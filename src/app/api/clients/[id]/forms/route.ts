@@ -11,10 +11,10 @@ import { createClient } from '@/lib/supabase/server'
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id: clientId } = await params
   const supabase = await createClient()
-  const clientId = params.id
 
   // Valida sessão
   const { data: { user } } = await supabase.auth.getUser()
@@ -91,10 +91,10 @@ export async function GET(
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id: clientId } = await params
   const supabase = await createClient()
-  const clientId = params.id
 
   // Valida sessão
   const { data: { user } } = await supabase.auth.getUser()

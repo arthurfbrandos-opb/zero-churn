@@ -18,8 +18,9 @@ import { runAnalysis } from '@/lib/agents/orchestrator'
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { clientId: string } }
+  { params }: { params: Promise<{ clientId: string }> }
 ) {
+  const { clientId } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
@@ -32,7 +33,7 @@ export async function GET(
       flags, triggered_by, tokens_used, cost_brl, analyzed_at,
       action_items ( id, text, is_done, done_at )
     `)
-    .eq('client_id', params.clientId)
+    .eq('client_id', clientId)
     .order('analyzed_at', { ascending: false })
     .limit(12)
 
@@ -47,8 +48,9 @@ export async function GET(
 
 export async function POST(
   _req: NextRequest,
-  { params }: { params: { clientId: string } }
+  { params }: { params: Promise<{ clientId: string }> }
 ) {
+  const { clientId } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
@@ -66,7 +68,7 @@ export async function POST(
 
   try {
     const result = await runAnalysis({
-      clientId:    params.clientId,
+      clientId:    clientId,
       agencyId:    au.agency_id,
       triggeredBy: 'manual',
     })

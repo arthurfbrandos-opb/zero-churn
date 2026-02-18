@@ -13,8 +13,9 @@ import { validateGroup } from '@/lib/evolution/client'
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { clientId: string } }
+  { params }: { params: Promise<{ clientId: string }> }
 ) {
+  const { clientId } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
@@ -22,7 +23,7 @@ export async function GET(
   const { data: client } = await supabase
     .from('clients')
     .select('id, whatsapp_group_id')
-    .eq('id', params.clientId)
+    .eq('id', clientId)
     .maybeSingle()
 
   if (!client) return NextResponse.json({ error: 'Cliente não encontrado' }, { status: 404 })
@@ -39,8 +40,9 @@ export async function GET(
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { clientId: string } }
+  { params }: { params: Promise<{ clientId: string }> }
 ) {
+  const { clientId } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
@@ -70,7 +72,7 @@ export async function POST(
   const { error } = await supabase
     .from('clients')
     .update({ whatsapp_group_id: groupId })
-    .eq('id', params.clientId)
+    .eq('id', clientId)
 
   if (error) {
     console.error('[whatsapp/connect POST]', error)
@@ -81,7 +83,7 @@ export async function POST(
   await supabase
     .from('client_integrations')
     .upsert({
-      client_id:  params.clientId,
+      client_id:  clientId,
       type:       'whatsapp',
       status:     'connected',
       last_sync_at: new Date().toISOString(),
@@ -100,8 +102,9 @@ export async function POST(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { clientId: string } }
+  { params }: { params: Promise<{ clientId: string }> }
 ) {
+  const { clientId } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
@@ -110,7 +113,7 @@ export async function DELETE(
   const { error } = await supabase
     .from('clients')
     .update({ whatsapp_group_id: null })
-    .eq('id', params.clientId)
+    .eq('id', clientId)
 
   if (error) {
     console.error('[whatsapp/connect DELETE]', error)
@@ -121,7 +124,7 @@ export async function DELETE(
   await supabase
     .from('client_integrations')
     .update({ status: 'disconnected' })
-    .eq('client_id', params.clientId)
+    .eq('client_id', clientId)
     .eq('type', 'whatsapp')
 
   return NextResponse.json({ connected: false })
