@@ -71,28 +71,58 @@ function TrendIcon({ trend }: { trend: Trend }) {
 // ─────────────────────────────────────────────────────────────────
 // TAB 1 — VISÃO GERAL
 // ─────────────────────────────────────────────────────────────────
-function TabVisaoGeral({ client }: { client: Client }) {
+function TabVisaoGeral({ client, refetch }: { client: Client; refetch: () => void }) {
   const hs = client.healthScore
   const [actions, setActions] = useState<ActionItem[]>(hs?.actionPlan ?? [])
   const [runningAnalysis, setRunningAnalysis] = useState(false)
-  const [analysisMsg, setAnalysisMsg] = useState('')
-  const [blockedMsg, setBlockedMsg] = useState(false)
+  const [analysisMsg, setAnalysisMsg]         = useState('')
+  const [analysisError, setAnalysisError]     = useState<string | null>(null)
+  const [blockedMsg, setBlockedMsg]           = useState(false)
   const credits = useAnalysisCredits('starter') // plano mockado
 
   async function handleRunAnalysis() {
     if (!credits.canAnalyze) { setBlockedMsg(true); return }
     const ok = credits.consume()
     if (!ok) { setBlockedMsg(true); return }
+
     setBlockedMsg(false)
+    setAnalysisError(null)
     setRunningAnalysis(true)
-    setAnalysisMsg('Coletando dados do cliente...')
-    await new Promise(r => setTimeout(r, 1000))
-    setAnalysisMsg('Processando integrações...')
-    await new Promise(r => setTimeout(r, 1200))
-    setAnalysisMsg('Gerando diagnóstico...')
-    await new Promise(r => setTimeout(r, 1000))
-    setRunningAnalysis(false)
-    setAnalysisMsg('')
+
+    // Mensagens de progresso enquanto aguarda a análise
+    const steps = [
+      'Coletando dados financeiros…',
+      'Analisando WhatsApp…',
+      'Processando formulários…',
+      'Calculando health score…',
+      'Gerando diagnóstico com IA…',
+    ]
+    let stepIdx = 0
+    setAnalysisMsg(steps[0])
+    const interval = setInterval(() => {
+      stepIdx = (stepIdx + 1) % steps.length
+      setAnalysisMsg(steps[stepIdx])
+    }, 3000)
+
+    try {
+      const res  = await fetch(`/api/analysis/${client.id}`, { method: 'POST' })
+      const data = await res.json()
+
+      if (!res.ok) {
+        setAnalysisError(data.error ?? 'Erro ao executar análise')
+      } else if (data.skipped) {
+        setAnalysisError(data.skipReason ?? 'Análise pulada')
+      } else {
+        // Recarrega o perfil do cliente para exibir o novo score
+        refetch()
+      }
+    } catch (err) {
+      setAnalysisError(err instanceof Error ? err.message : 'Erro inesperado')
+    } finally {
+      clearInterval(interval)
+      setRunningAnalysis(false)
+      setAnalysisMsg('')
+    }
   }
 
   function toggleAction(id: string) {
@@ -186,6 +216,13 @@ function TabVisaoGeral({ client }: { client: Client }) {
               Os créditos renovam à meia-noite ou você pode{' '}
               <Link href="/configuracoes" className="text-emerald-400 underline hover:no-underline">fazer upgrade do plano</Link>.
             </p>
+          </div>
+        )}
+        {/* Erro de análise */}
+        {analysisError && (
+          <div className="flex items-center gap-2 bg-red-500/5 border border-red-500/20 rounded-lg px-3 py-2">
+            <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+            <p className="text-red-300 text-xs">{analysisError}</p>
           </div>
         )}
       </div>
@@ -2228,7 +2265,7 @@ function ClientePerfilInner() {
 
       {/* Conteúdo da tab */}
       <div className="p-4 lg:p-6 max-w-4xl">
-        {activeTab === 'visao-geral' && <TabVisaoGeral client={client} />}
+        {activeTab === 'visao-geral' && <TabVisaoGeral client={client} refetch={refetch} />}
         {activeTab === 'cadastro'    && <TabCadastro client={client} />}
         {activeTab === 'financeiro'  && <TabFinanceiro client={client} />}
         {activeTab === 'integracoes' && <TabIntegracoes client={client} refetch={refetch} />}
