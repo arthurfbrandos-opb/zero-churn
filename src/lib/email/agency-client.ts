@@ -1,3 +1,4 @@
+import { toErrorMsg } from '@/lib/utils'
 /**
  * Helper para obter o cliente Resend configurado por agência.
  *
@@ -88,7 +89,7 @@ async function sendWith(
     if (error) return { ok: false as const, error: error.message }
     return { ok: true as const, id: data?.id }
   } catch (err) {
-    return { ok: false as const, error: err instanceof Error ? err.message : String(err) }
+    return { ok: false as const, error: toErrorMsg(err) }
   }
 }
 

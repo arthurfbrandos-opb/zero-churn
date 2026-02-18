@@ -1,3 +1,4 @@
+import { toErrorMsg } from '@/lib/utils'
 /**
  * POST /api/analysis/[clientId]
  *
@@ -90,7 +91,7 @@ export async function POST(
       result:     result.result,
     })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
     console.error('[analysis/POST]', msg)
     return NextResponse.json({ error: msg }, { status: 500 })
   }

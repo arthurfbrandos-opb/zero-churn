@@ -1,3 +1,4 @@
+import { toErrorMsg } from '@/lib/utils'
 /**
  * GET /api/asaas/customers
  * Retorna todos os customers + quais estão ativos (pagamento nos últimos 90 dias)
@@ -25,7 +26,7 @@ export async function DELETE(request: NextRequest) {
     const result = await deleteCustomer(api_key, customerId)
     return NextResponse.json({ deleted: result.deleted ?? true })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
     console.error('[DELETE /api/asaas/customers]', msg)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
@@ -70,7 +71,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ customer })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
     console.error('[POST /api/asaas/customers]', msg)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
@@ -127,7 +128,7 @@ export async function GET() {
       activeCount: activeIds.size,
     })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
     console.error('[GET /api/asaas/customers]', msg)
     return NextResponse.json({ error: msg }, { status: 500 })
   }

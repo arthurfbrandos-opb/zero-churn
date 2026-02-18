@@ -1,3 +1,4 @@
+import { toErrorMsg } from '@/lib/utils'
 /**
  * GET /api/dom/test
  * Testa as credenciais Dom Pagamentos salvas fazendo uma chamada real à API.
@@ -73,7 +74,7 @@ export async function GET() {
       environment:           creds.environment ?? 'production',
     })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
 
     // Mensagens de erro mais amigáveis
     let friendly = msg

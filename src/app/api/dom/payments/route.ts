@@ -1,3 +1,4 @@
+import { toErrorMsg } from '@/lib/utils'
 /**
  * GET /api/dom/payments?clientId=xxx&months=3
  *
@@ -85,7 +86,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ transactions, documents: docs })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

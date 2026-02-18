@@ -1,3 +1,4 @@
+import { toErrorMsg } from '@/lib/utils'
 /**
  * POST /api/asaas/payments/batch
  * Cria múltiplas cobranças avulsas em paralelo (para lançamentos futuros periódicos)
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
     const failed  = results.filter(r => !r.ok).length
     return NextResponse.json({ created, failed, results })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
     console.error('[POST /api/asaas/payments/batch]', msg)
     return NextResponse.json({ error: msg }, { status: 500 })
   }

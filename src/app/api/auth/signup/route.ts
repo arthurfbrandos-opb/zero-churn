@@ -1,3 +1,4 @@
+import { toErrorMsg } from '@/lib/utils'
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { sendEmailConfirmation } from '@/lib/email/resend'
@@ -113,7 +114,7 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('[signup] erro inesperado:', error)
-    const msg = error instanceof Error ? error.message : String(error)
+    const msg = toErrorMsg(error)
     return NextResponse.json({ error: 'Erro interno: ' + msg }, { status: 500 })
   }
 }

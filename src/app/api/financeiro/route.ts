@@ -1,3 +1,4 @@
+import { toErrorMsg } from '@/lib/utils'
 /**
  * GET /api/financeiro?mes=2026-02
  *
@@ -471,7 +472,7 @@ export async function GET(request: NextRequest) {
       fontes,
     })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

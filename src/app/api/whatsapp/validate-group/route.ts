@@ -1,3 +1,4 @@
+import { toErrorMsg } from '@/lib/utils'
 /**
  * POST /api/whatsapp/validate-group
  *
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
       participants: group.participants.length,
     })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
     return NextResponse.json({ valid: false, error: msg }, { status: 422 })
   }
 }

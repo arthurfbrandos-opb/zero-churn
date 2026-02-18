@@ -1,3 +1,4 @@
+import { toErrorMsg } from '@/lib/utils'
 /**
  * GET    /api/dom/sync/[clientId]               — lista documentos CPF/CNPJ vinculados
  * POST   /api/dom/sync/[clientId]               — vincula um CPF/CNPJ + atualiza payment_status
@@ -61,7 +62,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     if (error) throw error
     return NextResponse.json({ integrations: integrations ?? [] })
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    return NextResponse.json({ error: toErrorMsg(err) }, { status: 500 })
   }
 }
 
@@ -172,7 +173,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     return NextResponse.json({ success: true, integration, document: formatted, paymentStatus })
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    return NextResponse.json({ error: toErrorMsg(err) }, { status: 500 })
   }
 }
 
@@ -291,7 +292,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       foundTransactions,
     })
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    return NextResponse.json({ error: toErrorMsg(err) }, { status: 500 })
   }
 }
 
@@ -318,6 +319,6 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     if (error) throw error
     return NextResponse.json({ success: true })
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    return NextResponse.json({ error: toErrorMsg(err) }, { status: 500 })
   }
 }

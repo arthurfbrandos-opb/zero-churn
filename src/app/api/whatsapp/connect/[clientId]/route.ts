@@ -1,3 +1,4 @@
+import { toErrorMsg } from '@/lib/utils'
 /**
  * GET    /api/whatsapp/connect/[clientId] — retorna status da conexão WhatsApp do cliente
  * POST   /api/whatsapp/connect/[clientId] — conecta (salva group_id validado)
@@ -62,7 +63,7 @@ export async function POST(
       const group = await validateGroup(groupId)
       groupName = group.subject
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = toErrorMsg(err)
       return NextResponse.json({ error: `Grupo inválido: ${msg}` }, { status: 422 })
     }
   }

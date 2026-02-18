@@ -1,3 +1,4 @@
+import { toErrorMsg } from '@/lib/utils'
 /**
  * Agente Proximidade — Sprint 3, Tasks S3-07, S3-08, S3-09, S3-10
  *
@@ -311,7 +312,7 @@ export async function runAgenteProximidade(input: ProximidadeInput): Promise<Age
       durationMs: Date.now() - startMs,
     }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
     return {
       agent:      'proximidade',
       score:      null,

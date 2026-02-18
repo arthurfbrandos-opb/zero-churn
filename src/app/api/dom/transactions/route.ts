@@ -1,3 +1,4 @@
+import { toErrorMsg } from '@/lib/utils'
 /**
  * GET /api/dom/transactions?clientId=xxx&startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
  * Retorna transações Dom Pagamentos de um cliente específico
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ transactions: normalized })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

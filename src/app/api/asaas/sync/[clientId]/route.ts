@@ -1,3 +1,4 @@
+import { toErrorMsg } from '@/lib/utils'
 /**
  * POST /api/asaas/sync/[clientId] — vincula cliente ao Asaas e sincroniza
  * GET  /api/asaas/sync/[clientId] — retorna lista de integrações + resumo financeiro
@@ -40,7 +41,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
     return NextResponse.json({ integrations: integrations ?? [] })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
@@ -113,7 +114,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     return NextResponse.json({ success: true, integration, summary })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
@@ -196,7 +197,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     return NextResponse.json({ success: true, summary })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
@@ -224,7 +225,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
 
     return NextResponse.json({ success: true })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

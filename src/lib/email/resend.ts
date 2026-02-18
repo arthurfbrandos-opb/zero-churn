@@ -1,3 +1,4 @@
+import { toErrorMsg } from '@/lib/utils'
 /**
  * Cliente Resend para e-mails transacionais.
  *
@@ -59,7 +60,7 @@ async function sendEmail(payload: {
 
     return { ok: true, id: data?.id }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
     console.error('[email] Unexpected error:', msg)
     return { ok: false, error: msg }
   }

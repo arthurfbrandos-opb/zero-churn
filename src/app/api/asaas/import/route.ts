@@ -1,3 +1,4 @@
+import { toErrorMsg } from '@/lib/utils'
 /**
  * POST /api/asaas/import
  * Aceita os dados completos dos customers já selecionados no browser.
@@ -207,7 +208,7 @@ export async function POST(req: NextRequest) {
         }
 
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
+        const msg = toErrorMsg(err)
         console.error('[import] erro cliente', c.id, err)
         results.errors++
         results.errorDetails.push(`${customerName}: ${msg}`)
@@ -240,7 +241,7 @@ export async function POST(req: NextRequest) {
     })
 
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
     console.error('[POST /api/asaas/import]', msg)
     return NextResponse.json({ error: msg }, { status: 500 })
   }

@@ -1,3 +1,4 @@
+import { toErrorMsg } from '@/lib/utils'
 /**
  * GET /api/cron/check-integrations
  *
@@ -60,7 +61,7 @@ async function testAsaasKey(apiKey: string): Promise<{ ok: boolean; msg?: string
     }
     return { ok: true }
   } catch (e) {
-    return { ok: false, msg: e instanceof Error ? e.message : String(e) }
+    return { ok: false, msg: toErrorMsg(e) }
   }
 }
 
@@ -80,7 +81,7 @@ async function testDomToken(token: string, env: string): Promise<{ ok: boolean; 
     }
     return { ok: true }
   } catch (e) {
-    return { ok: false, msg: e instanceof Error ? e.message : String(e) }
+    return { ok: false, msg: toErrorMsg(e) }
   }
 }
 
@@ -126,7 +127,7 @@ export async function GET(req: NextRequest) {
         agencyKeyStatus.set(mapKey, result)
       }
     } catch (e) {
-      agencyKeyStatus.set(mapKey, { ok: false, msg: e instanceof Error ? e.message : String(e) })
+      agencyKeyStatus.set(mapKey, { ok: false, msg: toErrorMsg(e) })
     }
   }
 

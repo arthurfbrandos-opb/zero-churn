@@ -1,3 +1,4 @@
+import { toErrorMsg } from '@/lib/utils'
 /**
  * GET  /api/alerts          — lista alertas da agência (não lidos primeiro)
  * PATCH /api/alerts?id=xxx  — marca como lido
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ alerts: data ?? [] })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
@@ -72,7 +73,7 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ ok: true })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

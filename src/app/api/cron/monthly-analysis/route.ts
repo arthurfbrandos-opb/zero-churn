@@ -1,3 +1,4 @@
+import { toErrorMsg } from '@/lib/utils'
 /**
  * GET /api/cron/monthly-analysis
  *
@@ -151,7 +152,7 @@ export async function GET(req: NextRequest) {
       } catch (err) {
         agencyFailed++
         totalFailed++
-        console.error(`[cron]   ❌ Exceção: ${err instanceof Error ? err.message : String(err)}`)
+        console.error(`[cron]   ❌ Exceção: ${toErrorMsg(err)}`)
       }
 
       // Pequena pausa entre clientes para não sobrecarregar APIs externas

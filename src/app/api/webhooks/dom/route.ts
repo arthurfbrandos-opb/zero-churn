@@ -1,3 +1,4 @@
+import { toErrorMsg } from '@/lib/utils'
 /**
  * POST /api/webhooks/dom
  *
@@ -147,7 +148,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ received: true, event, agency: agencyId })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
     // Sempre retorna 200 para a Dom não tentar reenviar
     return NextResponse.json({ received: true, error: msg })
   }

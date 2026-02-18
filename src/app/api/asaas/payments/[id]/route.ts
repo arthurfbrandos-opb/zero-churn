@@ -1,3 +1,4 @@
+import { toErrorMsg } from '@/lib/utils'
 /**
  * PATCH /api/asaas/payments/[id]  — atualiza valor e/ou data de vencimento
  * DELETE /api/asaas/payments/[id] — cancela (cancela cobrança pendente/vencida no Asaas)
@@ -40,7 +41,7 @@ export async function PATCH(
     const payment = await updatePayment(auth.apiKey, id, { value, dueDate, description })
     return NextResponse.json({ payment })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
     console.error(`[PATCH /api/asaas/payments/${id}]`, msg)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
@@ -59,7 +60,7 @@ export async function DELETE(
     const result = await cancelPayment(auth.apiKey, id)
     return NextResponse.json({ deleted: result.deleted ?? true })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
     console.error(`[DELETE /api/asaas/payments/${id}]`, msg)
     return NextResponse.json({ error: msg }, { status: 500 })
   }

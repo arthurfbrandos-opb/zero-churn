@@ -1,3 +1,4 @@
+import { toErrorMsg } from '@/lib/utils'
 /**
  * GET  /api/agency/integrations  — lista integrações da agência (sem expor as chaves)
  * POST /api/agency/integrations  — salva/atualiza uma integração (criptografa a chave)
@@ -69,7 +70,7 @@ export async function POST(req: NextRequest) {
           )
         }
       } catch (testErr) {
-        const msg = testErr instanceof Error ? testErr.message : String(testErr)
+        const msg = toErrorMsg(testErr)
         console.error('[integrations] asaas test failed:', msg)
         // Se for timeout/rede, salva mesmo assim — não bloqueia o usuário
         if (msg.includes('timeout') || msg.includes('fetch')) {
@@ -98,7 +99,7 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: `Chave Resend inválida: ${msg}` }, { status: 400 })
         }
       } catch (testErr) {
-        const msg = testErr instanceof Error ? testErr.message : String(testErr)
+        const msg = toErrorMsg(testErr)
         if (msg.includes('timeout') || msg.includes('fetch')) {
           console.warn('[integrations] Resend: salvando sem validação (problema de rede)')
         } else {
@@ -131,7 +132,7 @@ export async function POST(req: NextRequest) {
           )
         }
       } catch (testErr) {
-        const msg = testErr instanceof Error ? testErr.message : String(testErr)
+        const msg = toErrorMsg(testErr)
         console.error('[integrations] dom test failed:', msg)
         // Se for timeout/rede, salva mesmo assim — não bloqueia o usuário
         if (msg.includes('timeout') || msg.includes('fetch')) {
@@ -174,7 +175,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, status: 'active' })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
     console.error('[POST /api/agency/integrations]', msg)
     return NextResponse.json({ error: msg }, { status: 500 })
   }

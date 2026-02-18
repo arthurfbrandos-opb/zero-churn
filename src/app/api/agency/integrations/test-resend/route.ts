@@ -1,3 +1,4 @@
+import { toErrorMsg } from '@/lib/utils'
 /**
  * GET /api/agency/integrations/test-resend
  *
@@ -59,7 +60,7 @@ export async function GET() {
 
     return NextResponse.json({ ok: true, domains, from_email: creds.from_email })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
     console.error('[test-resend]', msg)
     return NextResponse.json({ ok: false, error: msg }, { status: 500 })
   }

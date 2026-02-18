@@ -1,3 +1,4 @@
+import { toErrorMsg } from '@/lib/utils'
 /**
  * GET  /api/asaas/subscriptions?customer=cus_xxx  — lista assinaturas ativas do customer
  * POST /api/asaas/subscriptions                   — cria assinatura recorrente no Asaas
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
     const data = await getActiveSubscriptions(apiKey, customerId)
     return NextResponse.json({ subscriptions: data.data, total: data.data.length })
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 })
+    return NextResponse.json({ error: toErrorMsg(err) }, { status: 500 })
   }
 }
 
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
     const subscription = await createSubscription(creds.api_key, { customer, billingType, value, nextDueDate, endDate, cycle, description })
     return NextResponse.json({ subscription })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
     console.error('[POST /api/asaas/subscriptions]', msg)
     return NextResponse.json({ error: msg }, { status: 500 })
   }

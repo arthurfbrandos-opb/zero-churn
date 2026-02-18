@@ -1,3 +1,4 @@
+import { toErrorMsg } from '@/lib/utils'
 /**
  * GET  /api/asaas/payments?clientId=xxx — lista pagamentos + assinaturas de todos os customers Asaas do cliente
  * POST /api/asaas/payments              — cria uma cobrança avulsa no Asaas
@@ -66,7 +67,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ payments: allPayments, subscriptions: allSubscriptions, accounts })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
     console.error('[GET /api/asaas/payments]', msg)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
@@ -96,7 +97,7 @@ export async function POST(request: NextRequest) {
     const payment = await createPayment(creds.api_key, { customer, billingType, value, dueDate, description })
     return NextResponse.json({ payment })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMsg(err)
     console.error('[POST /api/asaas/payments]', msg)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
