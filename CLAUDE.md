@@ -109,8 +109,11 @@ zero-churn/
 | `sendPaymentAlert` | Flag de inadimplência/vencimento | cron `monthly-analysis` |
 | `sendIntegrationAlert` | Asaas/Dom/WhatsApp offline | cron `check-integrations` |
 
-Remetente: `FROM_EMAIL` = `process.env.RESEND_FROM_EMAIL` ?? `'Zero Churn <notificacoes@zerochurn.app>'`
-Variáveis necessárias: `RESEND_API_KEY`, `RESEND_FROM_EMAIL` (opcional)
+**Integração por agência:** cada agência configura sua própria chave Resend + remetente em `agency_integrations` (type=`resend`, campos: `api_key`, `from_email`).
+Helper: `src/lib/email/agency-client.ts` → `getAgencyEmailClient(supabase, agencyId)` — usa chave da agência se configurada, fallback para env vars do sistema.
+Validação: `POST /api/agency/integrations` valida Resend via `GET /domains` (não envia e-mail).
+Teste: `GET /api/agency/integrations/test-resend` — retorna `{ ok, domains, from_email }`.
+Variáveis de fallback: `RESEND_API_KEY`, `RESEND_FROM_EMAIL` (usadas se agência não configurou Resend).
 
 ## Crons (vercel.json)
 ```json

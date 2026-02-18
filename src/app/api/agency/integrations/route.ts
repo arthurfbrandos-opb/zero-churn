@@ -37,9 +37,10 @@ export async function POST(req: NextRequest) {
 
     const { type, credentials } = await req.json()
 
-    // Aceita api_key (Asaas) ou token (Dom Pagamentos)
+    // Aceita api_key (Asaas / Resend) ou token (Dom Pagamentos)
     const hasKey = credentials?.api_key || credentials?.token
-    if (!type || !hasKey) {
+    const VALID_TYPES = ['asaas', 'dom_pagamentos', 'resend']
+    if (!type || !VALID_TYPES.includes(type) || !hasKey) {
       return NextResponse.json({ error: 'Tipo e credencial são obrigatórios' }, { status: 400 })
     }
 
@@ -75,6 +76,33 @@ export async function POST(req: NextRequest) {
           console.warn('[integrations] Salvando sem validação (problema de rede)')
         } else {
           return NextResponse.json({ error: `Erro ao testar: ${msg}` }, { status: 400 })
+        }
+      }
+    }
+
+    if (type === 'resend') {
+      const apiKey    = credentials.api_key
+      const fromEmail = credentials.from_email
+      if (!apiKey || !fromEmail) {
+        return NextResponse.json({ error: 'API Key e e-mail remetente são obrigatórios' }, { status: 400 })
+      }
+      // Valida a chave chamando GET /domains (não envia nenhum e-mail)
+      try {
+        const testRes = await fetch('https://api.resend.com/domains', {
+          headers: { 'Authorization': `Bearer ${apiKey}` },
+          signal: AbortSignal.timeout(8000),
+        })
+        if (!testRes.ok) {
+          const body = await testRes.json().catch(() => ({}))
+          const msg = body?.message ?? body?.name ?? `HTTP ${testRes.status}`
+          return NextResponse.json({ error: `Chave Resend inválida: ${msg}` }, { status: 400 })
+        }
+      } catch (testErr) {
+        const msg = testErr instanceof Error ? testErr.message : String(testErr)
+        if (msg.includes('timeout') || msg.includes('fetch')) {
+          console.warn('[integrations] Resend: salvando sem validação (problema de rede)')
+        } else {
+          return NextResponse.json({ error: `Erro ao testar Resend: ${msg}` }, { status: 400 })
         }
       }
     }
