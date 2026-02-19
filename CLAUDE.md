@@ -23,6 +23,7 @@ SaaS B2B para agências digitais. Monitora saúde dos clientes via **Health Scor
 ## ⚠️ Regras críticas
 - **NUNCA criar `middleware.ts`** — Next.js 16 usa `src/proxy.ts`
 - Migrações: `supabase/migrations/NNN_descricao.sql` — próxima = `014_`
+- **Queries SQL de debug/investigação:** Sempre salvar em `supabase/migrations/DEBUG_NNN_descricao.sql` (não executar automaticamente, apenas documentação/organização)
 
 ## Estado Sprint 4 — ✅ (19/02/2026)
 
