@@ -1290,11 +1290,43 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
   const [showDomForm, setShowDomForm]       = useState(false)
 
   // WhatsApp
-  const [wppGroupId,    setWppGroupId]    = useState(client.whatsappGroupId ?? '')
-  const [wppConnected,  setWppConnected]  = useState(!!client.whatsappGroupId)
-  const [wppConnecting, setWppConnecting] = useState(false)
-  const [wppError,      setWppError]      = useState<string | null>(null)
-  const [wppEditing,    setWppEditing]    = useState(false)
+  type WppGroup = { id: string; name: string }
+  const [wppGroupId,       setWppGroupId]       = useState(client.whatsappGroupId ?? '')
+  const [wppConnected,     setWppConnected]      = useState(!!client.whatsappGroupId)
+  const [wppConnecting,    setWppConnecting]     = useState(false)
+  const [wppError,         setWppError]          = useState<string | null>(null)
+  const [wppEditing,       setWppEditing]        = useState(false)
+  // Seletor de grupos
+  const [wppGroups,        setWppGroups]         = useState<WppGroup[] | null>(null)
+  const [wppGroupsLoading, setWppGroupsLoading]  = useState(false)
+  const [wppGroupsError,   setWppGroupsError]    = useState<string | null>(null)
+  const [wppSearch,        setWppSearch]         = useState('')
+  const [wppGroupName,     setWppGroupName]      = useState<string | null>(null)
+
+  async function loadWppGroups() {
+    setWppGroupsLoading(true); setWppGroupsError(null)
+    try {
+      const r = await fetch('/api/whatsapp/groups')
+      const d = await r.json()
+      if (!r.ok) { setWppGroupsError(d.error ?? 'Erro ao carregar grupos'); return }
+      setWppGroups(d.groups ?? [])
+    } catch { setWppGroupsError('Erro de rede') }
+    finally { setWppGroupsLoading(false) }
+  }
+
+  async function handleWppConnect(groupId: string, groupName?: string) {
+    setWppConnecting(true); setWppError(null)
+    const res = await fetch(`/api/whatsapp/connect/${client.id}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ groupId: groupId.trim() }),
+    })
+    const d = await res.json()
+    if (res.ok) {
+      setWppConnected(true); setWppEditing(false); setWppGroupId(groupId)
+      setWppGroupName(groupName ?? null); setWppGroups(null); refetch()
+    } else { setWppError(d.error ?? 'Erro ao conectar') }
+    setWppConnecting(false)
+  }
 
   async function loadAccounts() {
     setLoadingAccounts(true)
@@ -1709,26 +1741,33 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
               </p>
             </div>
 
-            {/* Conectado — exibe group_id mascarado + botão desconectar */}
+            {/* ── Conectado ── */}
             {wppConnected && !wppEditing && (
               <div className="space-y-2">
-                <div className="flex items-center gap-2 bg-zinc-800/60 border border-zinc-700/50 rounded-xl px-3 py-2.5">
+                <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3 py-2.5">
                   <MessageCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <p className="flex-1 text-zinc-300 text-sm font-mono truncate">
-                    {client.whatsappGroupId?.slice(0, 6)}···{client.whatsappGroupId?.slice(-5)}
-                  </p>
+                  <div className="flex-1 min-w-0">
+                    {wppGroupName
+                      ? <p className="text-emerald-300 text-sm font-medium truncate">{wppGroupName}</p>
+                      : <p className="text-zinc-300 text-sm font-mono truncate">
+                          {client.whatsappGroupId?.slice(0, 6)}···{client.whatsappGroupId?.slice(-5)}
+                        </p>
+                    }
+                    <p className="text-zinc-500 text-xs">Grupo monitorado</p>
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   <Button size="sm" variant="outline"
-                    onClick={() => { setWppEditing(true); setWppGroupId(client.whatsappGroupId ?? '') }}
+                    onClick={() => { setWppEditing(true); setWppGroups(null); setWppSearch('') }}
                     className="border-zinc-700 text-zinc-400 hover:text-white gap-1.5 text-xs">
-                    <Pencil className="w-3.5 h-3.5" /> Alterar
+                    <Pencil className="w-3.5 h-3.5" /> Alterar grupo
                   </Button>
                   <Button size="sm" variant="outline"
                     onClick={async () => {
+                      if (!confirm('Desconectar este grupo? O monitoramento será interrompido.')) return
                       setWppConnecting(true); setWppError(null)
                       const res = await fetch(`/api/whatsapp/connect/${client.id}`, { method: 'DELETE' })
-                      if (res.ok) { setWppConnected(false); setWppGroupId(''); refetch() }
+                      if (res.ok) { setWppConnected(false); setWppGroupId(''); setWppGroupName(null); refetch() }
                       else { const d = await res.json(); setWppError(d.error ?? 'Erro ao desconectar') }
                       setWppConnecting(false)
                     }}
@@ -1741,55 +1780,87 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
               </div>
             )}
 
-            {/* Desconectado ou editando — exibe form */}
+            {/* ── Seletor de grupo ── */}
             {(!wppConnected || wppEditing) && (
               <div className="space-y-3">
-                <div>
-                  <p className="text-zinc-400 text-xs mb-1.5 font-medium">ID do grupo de WhatsApp</p>
-                  <p className="text-zinc-600 text-xs mb-2">
-                    Ex: 120363xxxxxxxxxx ou 120363xxxxxxxxxx@g.us
-                  </p>
-                  <input
-                    value={wppGroupId}
-                    onChange={e => setWppGroupId(e.target.value)}
-                    placeholder="120363xxxxxxxxxx@g.us"
-                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 placeholder:text-zinc-600 text-sm font-mono focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
                 {wppError && (
                   <p className="text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
                     {wppError}
                   </p>
                 )}
-                <div className="flex gap-2">
-                  <Button size="sm"
-                    onClick={async () => {
-                      if (!wppGroupId.trim()) return
-                      setWppConnecting(true); setWppError(null)
-                      const res = await fetch(`/api/whatsapp/connect/${client.id}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ groupId: wppGroupId.trim() }),
-                      })
-                      const d = await res.json()
-                      if (res.ok) {
-                        setWppConnected(true); setWppEditing(false); refetch()
-                      } else {
-                        setWppError(d.error ?? 'Erro ao conectar')
-                      }
-                      setWppConnecting(false)
-                    }}
-                    disabled={wppConnecting || !wppGroupId.trim()}
-                    className="bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5 text-sm">
-                    {wppConnecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                    Conectar
+
+                {/* Nenhum grupo carregado ainda */}
+                {!wppGroups && !wppGroupsLoading && (
+                  <Button size="sm" variant="outline" onClick={loadWppGroups}
+                    className="border-zinc-600 text-zinc-300 hover:text-white gap-1.5 w-full text-xs">
+                    <MessageCircle className="w-3.5 h-3.5" /> Carregar grupos do WhatsApp
                   </Button>
-                  {wppEditing && (
-                    <Button size="sm" variant="ghost"
-                      onClick={() => { setWppEditing(false); setWppError(null) }}
-                      className="text-zinc-500 text-xs">Cancelar</Button>
-                  )}
-                </div>
+                )}
+
+                {/* Carregando */}
+                {wppGroupsLoading && (
+                  <div className="flex items-center gap-2 text-zinc-500 text-xs py-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Carregando grupos (pode levar ~30s com muitos grupos)...
+                  </div>
+                )}
+
+                {/* Erro ao carregar */}
+                {wppGroupsError && !wppGroupsLoading && (
+                  <div className="space-y-2">
+                    <p className="text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                      {wppGroupsError}
+                    </p>
+                    <Button size="sm" variant="outline" onClick={loadWppGroups}
+                      className="border-zinc-700 text-zinc-400 text-xs gap-1">
+                      <RefreshCw className="w-3 h-3" /> Tentar novamente
+                    </Button>
+                  </div>
+                )}
+
+                {/* Lista de grupos */}
+                {wppGroups && !wppGroupsLoading && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-zinc-400 text-xs">{wppGroups.length} grupos disponíveis</span>
+                      <button onClick={() => { setWppGroups(null); setWppSearch('') }}
+                        className="text-zinc-600 hover:text-zinc-400 text-xs">limpar</button>
+                    </div>
+                    <input
+                      type="text" autoFocus
+                      placeholder="Buscar grupo do cliente..."
+                      value={wppSearch}
+                      onChange={e => setWppSearch(e.target.value)}
+                      className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 outline-none focus:border-emerald-500"
+                    />
+                    <div className="max-h-52 overflow-y-auto space-y-1 pr-0.5">
+                      {wppGroups
+                        .filter(g => !wppSearch || g.name.toLowerCase().includes(wppSearch.toLowerCase()))
+                        .map(g => (
+                          <button key={g.id}
+                            onClick={() => handleWppConnect(g.id, g.name)}
+                            disabled={wppConnecting}
+                            className="w-full flex items-center gap-2.5 bg-zinc-800/60 hover:bg-zinc-700/60 border border-zinc-700/50 hover:border-zinc-600 rounded-lg px-3 py-2 text-left transition-colors disabled:opacity-50">
+                            <MessageCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                            <span className="text-zinc-200 text-xs truncate flex-1">{g.name}</span>
+                            {wppConnecting && wppGroupId === g.id
+                              ? <Loader2 className="w-3 h-3 animate-spin text-emerald-400 shrink-0" />
+                              : <ChevronRight className="w-3 h-3 text-zinc-600 shrink-0" />
+                            }
+                          </button>
+                        ))}
+                      {wppGroups.filter(g => !wppSearch || g.name.toLowerCase().includes(wppSearch.toLowerCase())).length === 0 && (
+                        <p className="text-zinc-600 text-xs text-center py-3">Nenhum grupo encontrado</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {wppEditing && (
+                  <Button size="sm" variant="ghost"
+                    onClick={() => { setWppEditing(false); setWppError(null); setWppGroups(null); setWppSearch('') }}
+                    className="text-zinc-500 text-xs">Cancelar</Button>
+                )}
               </div>
             )}
           </CardContent>

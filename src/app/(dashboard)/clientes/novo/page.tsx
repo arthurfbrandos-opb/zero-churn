@@ -17,7 +17,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useCep } from '@/hooks/use-cep'
-import { mockServices } from '@/lib/mock-data'
 import { ServiceItem } from '@/types'
 import { cn } from '@/lib/utils'
 import { AsaasCobrancaModal } from '@/components/integracoes/asaas-cobranca-modal'
@@ -578,6 +577,16 @@ function NovoClientePageInner() {
   const searchParams = useSearchParams()
   const [step, setStep] = useState(0)
 
+  // Serviços da agência — lê do localStorage (mesma chave do Configurações)
+  type AgencyService = { id: string; name: string; type: string; isActive: boolean; entregaveis: ServiceItem[]; bonus: ServiceItem[] }
+  const [agencyServices, setAgencyServices] = useState<AgencyService[]>([])
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('zc_servicos_v1')
+      if (raw) setAgencyServices(JSON.parse(raw))
+    } catch { /* ignore */ }
+  }, [])
+
   // Pré-preenche campos quando vindo do "Cadastrar" no Financeiro (sem-ident)
   const [form, setForm] = useState<FormData>(() => {
     const nome      = searchParams.get('nome')      ?? ''
@@ -747,13 +756,13 @@ function NovoClientePageInner() {
     set('parcelas', form.parcelas.map(p => p.id === id ? { ...p, [field]: value } : p))
   }
 
-  // Serviços filtrados pelo tipo de contrato
-  const servicesForType = mockServices.filter(s => s.isActive && s.type === form.clientType)
-  const selectedService = mockServices.find(s => s.id === form.serviceId)
+  // Serviços filtrados pelo tipo de contrato (lidos do localStorage via agencyServices)
+  const servicesForType = agencyServices.filter(s => s.isActive && s.type === form.clientType)
+  const selectedService = agencyServices.find(s => s.id === form.serviceId)
 
   // Ao selecionar um método: pré-marca todos entregáveis e bônus
   function handleSelectService(id: string) {
-    const svc = mockServices.find(s => s.id === id)
+    const svc = agencyServices.find(s => s.id === id)
     if (svc) {
       setForm(prev => ({
         ...prev,
