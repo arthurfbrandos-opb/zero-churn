@@ -1403,9 +1403,8 @@ function EvolutionIntegCard() {
                   .filter(g => !groupSearch || g.name.toLowerCase().includes(groupSearch.toLowerCase()))
                   .map(g => (
                     <div key={g.id}
-                      className="flex items-center justify-between bg-zinc-800/60 rounded-md px-2.5 py-1.5 text-xs">
-                      <span className="text-zinc-200 truncate flex-1">{g.name}</span>
-                      <span className="text-zinc-500 ml-2 shrink-0">{g.participants} membros</span>
+                      className="bg-zinc-800/60 rounded-md px-2.5 py-1.5 text-xs">
+                      <span className="text-zinc-200 truncate block">{g.name}</span>
                     </div>
                   ))}
                 {groups.filter(g => !groupSearch || g.name.toLowerCase().includes(groupSearch.toLowerCase())).length === 0 && (
