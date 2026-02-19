@@ -44,7 +44,7 @@ const TABS = [
   { id: 'visao-geral',  label: 'Visão Geral',  icon: Activity    },
   { id: 'cadastro',     label: 'Cadastro',     icon: Building2   },
   { id: 'financeiro',   label: 'Financeiro',   icon: CreditCard  },
-  { id: 'pasta',        label: 'Pasta',        icon: FolderOpen  },
+  { id: 'pasta',        label: 'Contrato',     icon: FileText    },
   { id: 'integracoes',  label: 'Integrações',  icon: Plug        },
   { id: 'formularios',  label: 'Formulários',  icon: FileText    },
   { id: 'historico',    label: 'Histórico',    icon: History     },
@@ -1141,8 +1141,8 @@ function TabPasta({ client, refetch }: { client: Client; refetch: () => void }) 
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-white font-semibold text-base">Pasta do cliente</h2>
-          <p className="text-zinc-500 text-xs mt-0.5">Documentos e contrato vinculado a este cliente</p>
+          <h2 className="text-white font-semibold text-base">Contrato do cliente</h2>
+          <p className="text-zinc-500 text-xs mt-0.5">Arquivo do contrato firmado com o cliente · Futura integração com Autentique</p>
         </div>
       </div>
 
@@ -1248,17 +1248,6 @@ function TabPasta({ client, refetch }: { client: Client; refetch: () => void }) 
               Substituir contrato
             </label>
           )}
-        </CardContent>
-      </Card>
-
-      {/* Área para futuros documentos */}
-      <Card className="bg-zinc-900 border-zinc-800 border-dashed opacity-50">
-        <CardContent className="p-5 flex items-center gap-3">
-          <FolderOpen className="w-5 h-5 text-zinc-600" />
-          <div>
-            <p className="text-zinc-500 text-sm">Outros documentos</p>
-            <p className="text-zinc-700 text-xs">Em breve — propostas, atas de reunião, relatórios</p>
-          </div>
         </CardContent>
       </Card>
     </div>
