@@ -59,8 +59,16 @@ async function fetchAsaasPayments(
 
       const seen = new Set<string>()
       for (const res of [receivedRes, pendingRes, overdueRes]) {
-        if (res.status !== 'fulfilled' || !res.value.ok) continue
+        if (res.status !== 'fulfilled') {
+          console.warn('[data-fetcher] Asaas fetch failed:', res.reason)
+          continue
+        }
+        if (!res.value.ok) {
+          console.warn('[data-fetcher] Asaas HTTP error:', res.value.status, await res.value.text().catch(() => ''))
+          continue
+        }
         const data = await res.value.json()
+        console.log(`[data-fetcher] Asaas batch: ${(data.data ?? []).length} pagamentos`)
         for (const p of (data.data ?? [])) {
           if (seen.has(p.id)) continue
           seen.add(p.id)
@@ -75,6 +83,7 @@ async function fetchAsaasPayments(
           })
         }
       }
+      console.log(`[data-fetcher] Total Asaas payments collected: ${payments.length}`)
     } catch { /* ignora erros individuais */ }
   }
 
@@ -135,6 +144,9 @@ export async function fetchPaymentsByCustomerFromDb(
 ): Promise<{ asaasPayments: NormalizedPayment[]; domPayments: NormalizedPayment[] }> {
   const endDate   = new Date().toISOString().slice(0, 10)
   const startDate = new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10)
+  
+  console.log(`[data-fetcher] START: clientId=${clientId}, period=${startDate} to ${endDate}`)
+  console.log(`[data-fetcher] asaasIntegs=${asaasIntegs.length}, domIntegs=${domIntegs.length}`)
 
   // Busca chaves da agência
   const { data: agencyAsaas } = await supabase
