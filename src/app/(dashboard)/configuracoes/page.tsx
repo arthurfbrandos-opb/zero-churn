@@ -196,8 +196,8 @@ function ServicosSection() {
       {/* Lista de serviços */}
       <div className="space-y-0">
         {items.map(item => (
-          <Card key={item.id} className={cn('bg-zinc-900 border-zinc-800 rounded-none first:rounded-t-lg last:rounded-b-lg border-b-0 last:border-b', !item.isActive && 'opacity-50')}>
-            <CardContent className="p-2.5">
+          <Card key={item.id} className={cn('bg-zinc-900 border-zinc-800 rounded-none first:rounded-t-lg last:rounded-b-lg border-b-0 last:border-b py-0 gap-0', !item.isActive && 'opacity-50')}>
+            <CardContent className="p-2.5 px-3">
               {editingId === item.id ? (
                 <div className="space-y-2">
                   <div className="flex gap-2">
@@ -490,8 +490,8 @@ function ProdutosSection() {
           const isExpanded = expandedId === p.id
           const isEditing  = editingId  === p.id
           return (
-            <Card key={p.id} className={cn('bg-zinc-900 border-zinc-800 rounded-none first:rounded-t-lg last:rounded-b-lg border-b-0 last:border-b', !p.isActive && 'opacity-50')}>
-              <CardContent className="p-2.5">
+            <Card key={p.id} className={cn('bg-zinc-900 border-zinc-800 rounded-none first:rounded-t-lg last:rounded-b-lg border-b-0 last:border-b py-0 gap-0', !p.isActive && 'opacity-50')}>
+              <CardContent className="p-2.5 px-3">
                 {/* Cabeçalho */}
                 <div className="flex items-start gap-2">
                   <button onClick={() => !isEditing && setExpandedId(isExpanded ? null : p.id)}
@@ -776,8 +776,8 @@ function EmailTemplatesSection() {
         {templates.map(t => {
           const vars = TEMPLATE_VARS[t.id] ?? []
           return (
-            <Card key={t.id} className={cn('bg-zinc-900 rounded-none first:rounded-t-lg last:rounded-b-lg border-b-0 last:border-b', editingId === t.id ? 'border-emerald-500/30' : 'border-zinc-800')}>
-              <CardContent className="p-3 space-y-2.5">
+            <Card key={t.id} className={cn('bg-zinc-900 rounded-none first:rounded-t-lg last:rounded-b-lg border-b-0 last:border-b py-0 gap-0', editingId === t.id ? 'border-emerald-500/30' : 'border-zinc-800')}>
+              <CardContent className="p-2.5 px-3 space-y-2">
                 {/* Cabeçalho */}
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -948,8 +948,8 @@ function FormularioSection() {
         </p>
         <div className="space-y-0">
         {MANDATORY_QUESTIONS.map((q, i) => (
-          <Card key={q.id} className="bg-zinc-900 border-zinc-800 rounded-none first:rounded-t-lg last:rounded-b-lg border-b-0 last:border-b">
-            <CardContent className="p-3">
+          <Card key={q.id} className="bg-zinc-900 border-zinc-800 rounded-none first:rounded-t-lg last:rounded-b-lg border-b-0 last:border-b py-0 gap-0">
+            <CardContent className="p-2.5 px-3">
               <div className="flex items-start gap-3">
                 <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center text-zinc-400 text-xs font-bold shrink-0 mt-0.5">
                   {i + 1}
@@ -987,8 +987,8 @@ function FormularioSection() {
 
         <div className="space-y-0">
         {customQuestions.map((q, i) => (
-          <Card key={q.id} className="bg-zinc-900 border-zinc-800 rounded-none first:rounded-t-lg last:rounded-b-lg border-b-0 last:border-b">
-            <CardContent className="p-3">
+          <Card key={q.id} className="bg-zinc-900 border-zinc-800 rounded-none first:rounded-t-lg last:rounded-b-lg border-b-0 last:border-b py-0 gap-0">
+            <CardContent className="p-2.5 px-3">
               <div className="flex items-start gap-3">
                 <div className="w-6 h-6 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-500 text-xs font-bold shrink-0 mt-0.5">
                   {MANDATORY_QUESTIONS.length + i + 1}
