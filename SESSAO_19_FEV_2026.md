@@ -112,38 +112,55 @@
 2. ⚠️ Campo `credentials` (jsonb) pode estar vazio no banco
 3. ⚠️ `customer_id` pode não estar sendo salvo em `credentials` durante o import
 
-**Próximos passos (investigação manual):**
-1. **Verificar no Supabase SQL Editor:**
-   ```sql
-   SELECT 
-     id, type, status, label,
-     credentials,
-     credentials_enc,
-     last_sync_at
-   FROM client_integrations
-   WHERE client_id = '226cca28-d8f3-4dc5-8c92-6c9e4753a1ce'
-     AND type = 'asaas';
+**Resultados da investigação SQL:**
+
+✅ **Query 1 - Credentials do cliente:**
+```json
+{
+  "customer_id": "cus_000155163105",
+  "customer_name": "ODONTOLOGIA INTEGRADA ALCANCAR LTDA"
+}
+```
+**Resultado:** CORRETO ✅
+
+✅ **Query 2 - API key da agência:**
+```
+| status | tem_chave_criptografada |
+| active | true                    |
+```
+**Resultado:** CORRETO ✅
+
+**Conclusão:** O bug NÃO está nas credentials nem na API key!
+
+---
+
+**Nova hipótese: Cliente pode realmente não ter pagamentos nos últimos 60 dias**
+
+O período de análise é:
+- **Início:** 2025-12-21
+- **Fim:** 2026-02-19 (hoje)
+
+**Próximos passos:**
+1. **Verificar no painel do Asaas** se há pagamentos deste cliente no período
+2. **Ou executar endpoint de debug** (quando deploy completar): 
    ```
-
-2. **Se `credentials` estiver vazio:**
-   - Problema está no `/api/asaas/import` que não está salvando `customer_id` corretamente
-   - Verificar linha 207 do arquivo `src/app/api/asaas/import/route.ts`
-
-3. **Se `credentials` tiver dados:**
-   - Problema está no `data-fetcher.ts` que não está lendo `credentials` corretamente
-   - Verificar linha 41: `const creds = integ.credentials as Record<string, string> | null`
-
-4. **Solução temporária (se credentials estiver vazio):**
-   ```sql
-   UPDATE client_integrations
-   SET credentials = jsonb_build_object(
-     'customer_id', 'cus_000155163105',
-     'customer_name', 'ODONTOLOGIA INTEGRADA'
-   )
-   WHERE client_id = '226cca28-d8f3-4dc5-8c92-6c9e4753a1ce'
-     AND type = 'asaas';
+   GET /api/debug/test-asaas-payments
    ```
-   Depois executar análise novamente.
+   Esse endpoint testa a API Asaas diretamente e retorna:
+   - Pagamentos recebidos
+   - Pagamentos pendentes  
+   - Pagamentos atrasados
+   - Todos os pagamentos do customer
+
+3. **Se API Asaas retornar 0 pagamentos:**
+   - Flag `no_payment_data` está **CORRETO**!
+   - Cliente realmente não tem dados financeiros recentes
+   - Sistema funcionando como esperado
+
+4. **Se API Asaas retornar pagamentos:**
+   - Bug confirmado no `data-fetcher.ts`
+   - Verificar logs do Vercel (console.log adicionados)
+   - Verificar descriptografia da API key
 
 ## 📦 Commits deployados (ordem cronológica)
 
