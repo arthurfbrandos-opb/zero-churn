@@ -75,12 +75,17 @@ export async function runAgenteFinanceiro(input: FinanceiroInput): Promise<Agent
     domPayments: input.domPayments.length,
     period: `${input.startDate} to ${input.endDate}`
   })
+  
+  console.log(`[financeiro] 🔍 DETAILED INPUT:`)
+  console.log(`  Asaas payments (${input.asaasPayments.length}):`, JSON.stringify(input.asaasPayments, null, 2))
+  console.log(`  Dom payments (${input.domPayments.length}):`, JSON.stringify(input.domPayments, null, 2))
 
   const allPayments = [...input.asaasPayments, ...input.domPayments]
 
   // Sem dados: retorna score null + flag
   if (allPayments.length === 0) {
-    console.warn(`[financeiro] No payment data found for client ${input.clientId}`)
+    console.warn(`[financeiro] ❌ No payment data found for client ${input.clientId}`)
+    console.warn(`[financeiro] ❌ This will trigger no_payment_data flag`)
     return {
       agent:   'financeiro',
       score:   null,
@@ -90,6 +95,8 @@ export async function runAgenteFinanceiro(input: FinanceiroInput): Promise<Agent
       durationMs: Date.now() - startMs,
     }
   }
+  
+  console.log(`[financeiro] ✅ Total payments to analyze: ${allPayments.length}`)
 
   let score      = 100
   const flags:   string[] = []

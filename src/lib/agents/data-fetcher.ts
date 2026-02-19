@@ -62,33 +62,51 @@ async function fetchAsaasPayments(
     try {
       // Busca pagamentos RECEBIDOS por dueDate (vencimento) em vez de paymentDate
       // Isso garante que pegamos todos os pagamentos do período, independente de quando foram pagos
+      const receivedUrl = `${ASAAS_BASE}/payments?customer=${customerId}&dueDate[ge]=${startDate}&dueDate[le]=${endDate}&status=RECEIVED,CONFIRMED,RECEIVED_IN_CASH&limit=100`
+      const pendingUrl = `${ASAAS_BASE}/payments?customer=${customerId}&dueDate[ge]=${startDate}&dueDate[le]=${endDate}&status=PENDING&limit=100`
+      const overdueUrl = `${ASAAS_BASE}/payments?customer=${customerId}&dueDate[ge]=${startDate}&dueDate[le]=${endDate}&status=OVERDUE,CHARGEBACK_REQUESTED,CHARGEBACK_DISPUTE&limit=100`
+      
+      console.log(`[data-fetcher] 🔍 ASAAS API CALLS:`)
+      console.log(`  RECEIVED: ${receivedUrl}`)
+      console.log(`  PENDING: ${pendingUrl}`)
+      console.log(`  OVERDUE: ${overdueUrl}`)
+      
       const [receivedRes, pendingRes, overdueRes] = await Promise.allSettled([
-        fetch(`${ASAAS_BASE}/payments?customer=${customerId}&dueDate[ge]=${startDate}&dueDate[le]=${endDate}&status=RECEIVED,CONFIRMED,RECEIVED_IN_CASH&limit=100`, {
+        fetch(receivedUrl, {
           headers: { 'access_token': agencyApiKey },
           next: { revalidate: 0 },
         }),
-        fetch(`${ASAAS_BASE}/payments?customer=${customerId}&dueDate[ge]=${startDate}&dueDate[le]=${endDate}&status=PENDING&limit=100`, {
+        fetch(pendingUrl, {
           headers: { 'access_token': agencyApiKey },
           next: { revalidate: 0 },
         }),
-        fetch(`${ASAAS_BASE}/payments?customer=${customerId}&dueDate[ge]=${startDate}&dueDate[le]=${endDate}&status=OVERDUE,CHARGEBACK_REQUESTED,CHARGEBACK_DISPUTE&limit=100`, {
+        fetch(overdueUrl, {
           headers: { 'access_token': agencyApiKey },
           next: { revalidate: 0 },
         }),
       ])
 
       const seen = new Set<string>()
-      for (const res of [receivedRes, pendingRes, overdueRes]) {
+      const resNames = ['RECEIVED', 'PENDING', 'OVERDUE']
+      for (let i = 0; i < 3; i++) {
+        const res = [receivedRes, pendingRes, overdueRes][i]
+        const name = resNames[i]
+        
+        console.log(`[data-fetcher] 📡 Processing ${name} response...`)
+        
         if (res.status !== 'fulfilled') {
-          console.warn('[data-fetcher] Asaas fetch failed:', res.reason)
+          console.warn(`[data-fetcher] ❌ ${name} fetch failed:`, res.reason)
           continue
         }
         if (!res.value.ok) {
-          console.warn('[data-fetcher] Asaas HTTP error:', res.value.status, await res.value.text().catch(() => ''))
+          const errText = await res.value.text().catch(() => '')
+          console.warn(`[data-fetcher] ❌ ${name} HTTP error:`, res.value.status, errText)
           continue
         }
         const data = await res.value.json()
-        console.log(`[data-fetcher] Asaas batch: ${(data.data ?? []).length} pagamentos`)
+        console.log(`[data-fetcher] ✅ ${name} batch: ${(data.data ?? []).length} pagamentos`)
+        console.log(`[data-fetcher] 📦 ${name} raw response:`, JSON.stringify(data, null, 2))
+        
         for (const p of (data.data ?? [])) {
           if (seen.has(p.id)) continue
           seen.add(p.id)
@@ -101,6 +119,7 @@ async function fetchAsaasPayments(
             netValue:    p.netValue && p.netValue > 0 ? p.netValue : (p.value ?? 0),
             fonte:       'asaas',
           })
+          console.log(`[data-fetcher] 💰 Payment added: ${p.id}, status=${p.status}, dueDate=${p.dueDate}, value=${p.value}`)
         }
       }
       console.log(`[data-fetcher] Total Asaas payments collected for customer ${customerId}: ${payments.length}`)
