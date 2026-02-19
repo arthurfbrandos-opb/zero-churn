@@ -46,7 +46,14 @@ export async function GET(_req: NextRequest) {
     }, { status: 500 })
   }
 
-  const results: Record<string, unknown> = {
+  const results: {
+    clientId: string
+    customerId: string
+    period: { start: string; end: string }
+    tests: Record<string, unknown>
+    diagnosis?: string
+    summary?: Record<string, unknown>
+  } = {
     clientId: CLIENT_ID,
     customerId: CUSTOMER_ID,
     period: { start: startDate, end: endDate },
