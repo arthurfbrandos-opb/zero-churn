@@ -130,6 +130,8 @@ export interface Client {
   serviceId?: string
   entregaveisIncluidos?: string[]
   bonusIncluidos?: string[]
+  entregaveisCustomizados?: ServiceItem[]  // entregáveis personalizados (fora do produto)
+  bonusCustomizados?: ServiceItem[]        // bônus personalizados (fora do produto)
   // Contrato MRR
   contractMonths?: number
   hasImplementationFee?: boolean
