@@ -69,6 +69,8 @@ interface FormData {
   serviceId: string
   entregaveisIncluidos: string[]   // ids dos entregáveis que ficaram no contrato
   bonusIncluidos: string[]          // ids dos bônus incluídos
+  entregaveisCustomizados: ServiceItem[]  // entregáveis personalizados (fora do produto)
+  bonusCustomizados: ServiceItem[]        // bônus personalizados (fora do produto)
   // Compartilhado MRR + TCV
   contractStartDate: string
   // MRR
@@ -105,6 +107,7 @@ const INITIAL: FormData = {
   cep: '', logradouro: '', numero: '', complemento: '',
   bairro: '', cidade: '', estado: '',
   clientType: 'mrr', serviceId: '', entregaveisIncluidos: [], bonusIncluidos: [],
+  entregaveisCustomizados: [], bonusCustomizados: [],
   contractStartDate: '',
   contractValue: '', contractMonths: '12',
   hasImplementationFee: false, implementationFeeValue: '', implementationFeeDate: '',
@@ -832,6 +835,8 @@ function NovoClientePageInner() {
         service_id:            form.serviceId            || null,
         entregaveis_incluidos: form.entregaveisIncluidos,
         bonus_incluidos:       form.bonusIncluidos,
+        entregaveis_customizados: form.entregaveisCustomizados,
+        bonus_customizados:       form.bonusCustomizados,
         client_type:           form.clientType,
         mrr_value:             form.clientType === 'mrr' ? parseMoney(form.contractValue)       : null,
         tcv_value:             form.clientType === 'tcv' ? parseMoney(form.totalProjectValue)   : null,
@@ -1237,6 +1242,143 @@ function NovoClientePageInner() {
                     )}
                   </div>
                 )}
+
+                {/* Entregáveis e Bônus Personalizados */}
+                <div className="p-3 border-t border-zinc-800 space-y-3">
+                  <p className="text-zinc-400 text-xs font-semibold uppercase tracking-wider px-1">Adicionar itens personalizados</p>
+                  
+                  {/* Adicionar Entregável Customizado */}
+                  <div className="space-y-2">
+                    <div className="flex items-end gap-2">
+                      <div className="flex-1">
+                        <Label className="text-zinc-400 text-xs">Novo entregável</Label>
+                        <Input
+                          id="new-entregavel"
+                          placeholder="Ex: Consultoria personalizada"
+                          className={cn(inputCls, 'text-sm')}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              const input = e.currentTarget
+                              const nome = input.value.trim()
+                              if (nome) {
+                                setForm(prev => ({
+                                  ...prev,
+                                  entregaveisCustomizados: [...prev.entregaveisCustomizados, { id: `custom-e-${Date.now()}`, name: nome }]
+                                }))
+                                input.value = ''
+                              }
+                            }
+                          }}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          const input = document.getElementById('new-entregavel') as HTMLInputElement
+                          const nome = input.value.trim()
+                          if (nome) {
+                            setForm(prev => ({
+                              ...prev,
+                              entregaveisCustomizados: [...prev.entregaveisCustomizados, { id: `custom-e-${Date.now()}`, name: nome }]
+                            }))
+                            input.value = ''
+                          }
+                        }}
+                        className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1">
+                        <Plus className="w-3.5 h-3.5" /> Adicionar
+                      </Button>
+                    </div>
+
+                    {/* Lista de entregáveis customizados */}
+                    {form.entregaveisCustomizados.length > 0 && (
+                      <div className="space-y-1">
+                        {form.entregaveisCustomizados.map((item) => (
+                          <div key={item.id} className="flex items-center gap-2 px-3 py-2 bg-emerald-500/5 border border-emerald-500/20 rounded-lg">
+                            <Check className="w-3 h-3 text-emerald-400 shrink-0" />
+                            <span className="text-zinc-200 text-sm flex-1">{item.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => setForm(prev => ({
+                                ...prev,
+                                entregaveisCustomizados: prev.entregaveisCustomizados.filter(e => e.id !== item.id)
+                              }))}
+                              className="text-zinc-600 hover:text-red-400 transition-colors">
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Adicionar Bônus Customizado */}
+                  <div className="space-y-2">
+                    <div className="flex items-end gap-2">
+                      <div className="flex-1">
+                        <Label className="text-zinc-400 text-xs">Novo bônus</Label>
+                        <Input
+                          id="new-bonus"
+                          placeholder="Ex: Suporte prioritário"
+                          className={cn(inputCls, 'text-sm')}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              const input = e.currentTarget
+                              const nome = input.value.trim()
+                              if (nome) {
+                                setForm(prev => ({
+                                  ...prev,
+                                  bonusCustomizados: [...prev.bonusCustomizados, { id: `custom-b-${Date.now()}`, name: nome }]
+                                }))
+                                input.value = ''
+                              }
+                            }
+                          }}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          const input = document.getElementById('new-bonus') as HTMLInputElement
+                          const nome = input.value.trim()
+                          if (nome) {
+                            setForm(prev => ({
+                              ...prev,
+                              bonusCustomizados: [...prev.bonusCustomizados, { id: `custom-b-${Date.now()}`, name: nome }]
+                            }))
+                            input.value = ''
+                          }
+                        }}
+                        className="bg-yellow-500 hover:bg-yellow-600 text-white gap-1">
+                        <Plus className="w-3.5 h-3.5" /> Adicionar
+                      </Button>
+                    </div>
+
+                    {/* Lista de bônus customizados */}
+                    {form.bonusCustomizados.length > 0 && (
+                      <div className="space-y-1">
+                        {form.bonusCustomizados.map((item) => (
+                          <div key={item.id} className="flex items-center gap-2 px-3 py-2 bg-yellow-500/5 border border-yellow-500/20 rounded-lg">
+                            <span className="text-yellow-400 shrink-0">⭐</span>
+                            <span className="text-zinc-200 text-sm flex-1">{item.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => setForm(prev => ({
+                                ...prev,
+                                bonusCustomizados: prev.bonusCustomizados.filter(b => b.id !== item.id)
+                              }))}
+                              className="text-zinc-600 hover:text-red-400 transition-colors">
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </CardContent>
             </Card>
 
