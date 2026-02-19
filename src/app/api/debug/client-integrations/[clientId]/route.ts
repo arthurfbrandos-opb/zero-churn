@@ -12,9 +12,9 @@ import { decrypt } from '@/lib/supabase/encryption'
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ clientId: string }> }
+  context: { params: Promise<{ clientId: string }> }
 ) {
-  const { clientId } = await params
+  const { clientId } = await context.params
   const supabase = await createClient()
   
   const { data: { user } } = await supabase.auth.getUser()
