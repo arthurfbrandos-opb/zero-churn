@@ -6,6 +6,9 @@
  * a análise.
  *
  * Se os dados estiverem stale (> 24h), faz novo sync antes de retornar.
+ * 
+ * IMPORTANTE: Usa dueDate (vencimento) em vez de paymentDate para todos os filtros
+ * de status, garantindo consistência na análise financeira.
  */
 
 import { fetchPaidTransactions, DomCredentials, domDateToISO, domStatusToInternal } from '@/lib/dom/client'
