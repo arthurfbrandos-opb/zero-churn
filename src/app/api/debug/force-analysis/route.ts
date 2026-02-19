@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { runFullAnalysis } from '@/lib/agents/orchestrator'
+import { runAnalysis } from '@/lib/agents/orchestrator'
 import { NextRequest, NextResponse } from 'next/server'
 
 /**
@@ -34,7 +34,11 @@ export async function GET(req: NextRequest) {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
 
     // Executa análise (sem cache - revalidate: 0)
-    const result = await runFullAnalysis(supabase, clientId, client.agency_id)
+    const result = await runAnalysis({ 
+      clientId, 
+      agencyId: client.agency_id,
+      triggeredBy: 'manual'
+    })
 
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
     console.log('📊 RESULTADO DA ANÁLISE')
