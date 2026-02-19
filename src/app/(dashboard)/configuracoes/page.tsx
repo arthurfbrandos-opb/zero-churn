@@ -194,10 +194,10 @@ function ServicosSection() {
       </div>
 
       {/* Lista de serviços */}
-      <div className="space-y-2">
+      <div className="space-y-1">
         {items.map(item => (
           <Card key={item.id} className={cn('bg-zinc-900 border-zinc-800', !item.isActive && 'opacity-50')}>
-            <CardContent className="p-3">
+            <CardContent className="p-2.5">
               {editingId === item.id ? (
                 <div className="space-y-2">
                   <div className="flex gap-2">
@@ -214,12 +214,12 @@ function ServicosSection() {
                     placeholder="Descrição (opcional)" className={cn(inputCls, 'text-sm')} />
                 </div>
               ) : (
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2.5">
                   <div className="flex-1 min-w-0">
-                    <p className="text-zinc-200 text-sm font-medium">{item.name}</p>
-                    {item.description && <p className="text-zinc-500 text-xs">{item.description}</p>}
+                    <p className="text-zinc-200 text-sm font-medium leading-tight">{item.name}</p>
+                    {item.description && <p className="text-zinc-500 text-xs mt-0.5">{item.description}</p>}
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <button onClick={() => startEdit(item)} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">Editar</button>
                     <button onClick={() => setItems(prev => prev.map(i => i.id === item.id ? { ...i, isActive: !i.isActive } : i))}
                       className={cn('w-9 h-5 rounded-full transition-all relative', item.isActive ? 'bg-emerald-500' : 'bg-zinc-700')}>
@@ -485,24 +485,24 @@ function ProdutosSection() {
       )}
 
       {/* Lista de produtos */}
-      <div className="space-y-3">
+      <div className="space-y-1.5">
         {produtos.map(p => {
           const isExpanded = expandedId === p.id
           const isEditing  = editingId  === p.id
           return (
             <Card key={p.id} className={cn('bg-zinc-900 border-zinc-800', !p.isActive && 'opacity-50')}>
-              <CardContent className="p-4">
+              <CardContent className="p-3">
                 {/* Cabeçalho */}
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-2.5">
                   <button onClick={() => !isEditing && setExpandedId(isExpanded ? null : p.id)}
                     className="flex-1 text-left min-w-0">
-                    <p className="text-zinc-200 text-sm font-semibold">{isEditing ? editName : p.name}</p>
-                    <p className="text-zinc-500 text-xs mt-0.5">
+                    <p className="text-zinc-200 text-sm font-semibold leading-tight">{isEditing ? editName : p.name}</p>
+                    <p className="text-zinc-500 text-xs mt-0.5 leading-tight">
                       {(isEditing ? editEntregs : p.entregaveis).length} entregável{(isEditing ? editEntregs : p.entregaveis).length !== 1 ? 'is' : ''}
                       {(isEditing ? editBonus : p.bonus).length > 0 && ` · ${(isEditing ? editBonus : p.bonus).length} bônus`}
                     </p>
                   </button>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <button onClick={() => isEditing ? setEditingId(null) : startEdit(p)}
                       className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-1">
                       {isEditing ? 'Cancelar' : 'Editar'}
