@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ sent: 0, skipped: 0, reason: 'Sem clientes ativos' })
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://zero-churn.vercel.app'
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://zero-churn-git-main-arthurfbrandos-opbs-projects.vercel.app'
 
   let sent = 0
   let skipped = 0

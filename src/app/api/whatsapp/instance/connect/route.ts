@@ -73,7 +73,7 @@ export async function POST() {
     }
 
     // Registra webhook (se ainda não registrado)
-    const appUrl     = process.env.NEXT_PUBLIC_APP_URL ?? 'https://zero-churn.vercel.app'
+    const appUrl     = process.env.NEXT_PUBLIC_APP_URL ?? 'https://zero-churn-git-main-arthurfbrandos-opbs-projects.vercel.app'
     const webhookUrl = `${appUrl}/api/whatsapp/webhook`
     try { await registerWebhook(config, webhookUrl) } catch { /* ignora */ }
 

@@ -3,7 +3,7 @@ import { toErrorMsg } from '@/lib/utils'
  * POST /api/webhooks/dom
  *
  * Recebe eventos em tempo real da Dom Pagamentos.
- * URL a cadastrar no painel Dom: https://zero-churn.vercel.app/api/webhooks/dom
+ * URL a cadastrar no painel Dom: https://zero-churn-git-main-arthurfbrandos-opbs-projects.vercel.app/api/webhooks/dom
  *
  * Fluxo:
  *  1. Dom envia POST com { event, webhook_code, data }
