@@ -52,27 +52,38 @@
 - Ícone maior (8x8) com fundo mais destacado
 - Commit: `51a62cd`
 
-## 🔧 Debug iniciado (não concluído)
+## 🔧 Debug em andamento
 
 ### Bug P0: `no_payment_data` mesmo com Asaas conectado
-**Status:** Investigação em andamento.
+**Status:** Logs detalhados adicionados, pronto para teste.
 
-**Ações:**
-- Logs adicionados no `data-fetcher.ts`:
-  - Log do período de análise (startDate/endDate)
-  - Contador de integrações (asaasIntegs/domIntegs)
-  - Logs de cada batch da API Asaas
-  - Total de pagamentos coletados
-- Commit: `0b3eaec`
+**Ações realizadas:**
 
-**Descobertas:**
+1. **Logs detalhados no `data-fetcher.ts`** (commit `35f9a1a`):
+   - Início da função `fetchAsaasPayments`: quantidade de integrações, período, presença de API key
+   - Para cada integração Asaas: type, status, credentials, customer_id, motivo de skip
+   - Para cada batch da API Asaas: quantidade de pagamentos retornados
+   - Total final de pagamentos coletados
+   - Erros detalhados em cada etapa
+
+2. **Scripts de teste criados** (commit `8add7cd`):
+   - `test-analysis.sh`: script bash interativo para disparar análise via curl
+   - `TEST_ANALYSIS.md`: guia completo com instruções de uso e troubleshooting
+   - `test-analysis.js`: script Node.js (fallback)
+
+**Descobertas até agora:**
 - Cliente ID: `226cca28-d8f3-4dc5-8c92-6c9e4753a1ce`
 - Asaas customer: `cus_000155163105`
 - **API key da agência foi descriptografada com sucesso**
 - **Teste manual da API Asaas funcionou:** retornou 1 pagamento (R$ 2.500, status RECEIVED)
 - Período de 60 dias: 2025-12-20 até 2026-02-19
 
-**Próximo passo:** Rodar análise manual para ver os logs do data-fetcher no Vercel.
+**Próximo passo:** 
+1. Obter token de autenticação do browser
+2. Executar `bash test-analysis.sh`
+3. Analisar logs no Vercel: https://vercel.com/arthurfbrandos-opb/zero-churn/logs
+4. Buscar por `[data-fetcher]` nos logs
+5. Verificar se `customer_id` está sendo lido corretamente
 
 ## 📦 Commits deployados (ordem cronológica)
 
@@ -85,6 +96,8 @@
 | `51a62cd` | feat: destaca nome do grupo WhatsApp nas integrações |
 | `763cf38` | feat: migration 013 — whatsapp_group_name column + persistence |
 | `4c779ba` | docs: CLAUDE.md atualizado - migration 013, grupo persiste |
+| `35f9a1a` | debug: logs detalhados no data-fetcher para rastrear customer_id e integrações |
+| `8add7cd` | docs: scripts e guia para teste de análise manual (debug no_payment_data) |
 
 ## 🗂️ Migrações aplicadas
 

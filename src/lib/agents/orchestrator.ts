@@ -168,6 +168,18 @@ export async function runAnalysis(input: OrchestratorInput): Promise<Orchestrato
   const domInteg = ((client.client_integrations as Array<Record<string, unknown>>) ?? [])
     .filter(i => i.type === 'dom_pagamentos')
 
+  console.log(`[orchestrator] Client integrations found:`, {
+    total: client.client_integrations?.length ?? 0,
+    asaas: asaasInteg.length,
+    dom: domInteg.length,
+    asaasDetails: asaasInteg.map(i => ({ 
+      type: i.type, 
+      status: i.status, 
+      hasCredentials: !!i.credentials,
+      credentials: i.credentials 
+    }))
+  })
+
   // Formulários (últimos 90 dias)
   const cutoff90 = new Date(Date.now() - 90 * 86400000).toISOString()
   const { data: submissions } = await supabase
@@ -178,9 +190,11 @@ export async function runAnalysis(input: OrchestratorInput): Promise<Orchestrato
     .order('submitted_at', { ascending: false })
 
   // ── 5. Coleta pagamentos do banco ────────────────────────────
+  console.log(`[orchestrator] Calling fetchPaymentsByCustomerFromDb...`)
   const { asaasPayments, domPayments } = await fetchPaymentsByCustomerFromDb(
     supabase, clientId, agencyId, asaasInteg, domInteg
   )
+  console.log(`[orchestrator] Payments fetched:`, { asaas: asaasPayments.length, dom: domPayments.length })
 
   const endDate   = new Date().toISOString().slice(0, 10)
   const startDate = new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10)

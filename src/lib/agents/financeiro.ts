@@ -69,10 +69,18 @@ function isOverdue(status: string): boolean {
 export async function runAgenteFinanceiro(input: FinanceiroInput): Promise<AgentResult> {
   const startMs = Date.now()
 
+  console.log(`[financeiro] Input received:`, {
+    clientId: input.clientId,
+    asaasPayments: input.asaasPayments.length,
+    domPayments: input.domPayments.length,
+    period: `${input.startDate} to ${input.endDate}`
+  })
+
   const allPayments = [...input.asaasPayments, ...input.domPayments]
 
   // Sem dados: retorna score null + flag
   if (allPayments.length === 0) {
+    console.warn(`[financeiro] No payment data found for client ${input.clientId}`)
     return {
       agent:   'financeiro',
       score:   null,
