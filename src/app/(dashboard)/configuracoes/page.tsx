@@ -1373,7 +1373,7 @@ function EvolutionIntegCard() {
               disabled={loadingGroups}
               className="border-zinc-600 text-zinc-300 hover:text-white text-xs gap-1.5 w-full">
               {loadingGroups
-                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Carregando grupos...</>
+                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Carregando grupos (pode levar ~30s)...</>
                 : <><MessageCircle className="w-3.5 h-3.5" /> Ver grupos ativos</>}
             </Button>
           ) : (

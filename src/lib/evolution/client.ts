@@ -171,28 +171,45 @@ export async function registerWebhook(config: EvolutionConfig, webhookUrl: strin
 
 /**
  * Lista todos os grupos que a instância participa.
+ * Usa /group/fetchAllGroups (endpoint correto v2.x).
+ * Sem participants para performance (168+ grupos = ~25s com participants).
  */
 export async function listGroups(config: EvolutionConfig): Promise<EvolutionGroupInfo[]> {
-  const data = await evo<EvolutionGroupInfo[] | { groups: EvolutionGroupInfo[] }>(
-    config, 'GET',
-    `/group/findGroupInfos/${config.instanceName}`,
+  const res = await fetch(
+    `${config.url}/group/fetchAllGroups/${config.instanceName}?getParticipants=false`,
+    {
+      headers: { apikey: config.apiKey, 'Content-Type': 'application/json' },
+      signal:  AbortSignal.timeout(45_000), // 45s — número pode ter 100+ grupos
+      next:    { revalidate: 0 },
+    },
   )
-  return Array.isArray(data) ? data : (data as { groups?: EvolutionGroupInfo[] }).groups ?? []
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(`Evolution ${res.status}: ${JSON.stringify(err).slice(0, 200)}`)
+  }
+  const data = await res.json() as EvolutionGroupInfo[] | { groups?: EvolutionGroupInfo[] }
+  return Array.isArray(data) ? data : data.groups ?? []
 }
 
 /**
  * Valida se um group_id existe e a instância tem acesso.
+ * Usa findGroupInfos com groupJid específico (endpoint correto para busca individual).
  */
 export async function validateGroup(groupId: string, config: EvolutionConfig): Promise<EvolutionGroupInfo> {
   const jid  = groupId.includes('@g.us') ? groupId : `${groupId}@g.us`
-  const data = await evo<EvolutionGroupInfo[] | { groups: EvolutionGroupInfo[] }>(
+  const data = await evo<EvolutionGroupInfo | EvolutionGroupInfo[]>(
     config, 'GET',
     `/group/findGroupInfos/${config.instanceName}?groupJid=${encodeURIComponent(jid)}`,
   )
-  const groups = Array.isArray(data) ? data : (data as { groups?: EvolutionGroupInfo[] }).groups ?? []
-  const group  = groups.find(g => g.id === jid || g.id === groupId)
-  if (!group) throw new Error(`Grupo "${groupId}" não encontrado. Verifique se o número está neste grupo.`)
-  return group
+  // findGroupInfos retorna objeto único ou array
+  if (Array.isArray(data)) {
+    const group = data.find(g => g.id === jid || g.id === groupId)
+    if (!group) throw new Error(`Grupo "${groupId}" não encontrado. Verifique se o número está neste grupo.`)
+    return group
+  }
+  // objeto único
+  if ((data as EvolutionGroupInfo).id) return data as EvolutionGroupInfo
+  throw new Error(`Grupo "${groupId}" não encontrado. Verifique se o número está neste grupo.`)
 }
 
 // ── Mensagens ─────────────────────────────────────────────────────

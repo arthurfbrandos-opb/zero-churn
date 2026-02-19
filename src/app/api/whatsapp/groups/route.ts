@@ -2,7 +2,10 @@
  * GET /api/whatsapp/groups
  *
  * Lista todos os grupos WhatsApp que a instância da agência participa.
- * Usado na aba Integrações do cliente para buscar e vincular um grupo.
+ * Usado na aba Integrações do cliente para buscar e vincular um grupo,
+ * e em Configurações → WhatsApp para "Ver grupos ativos".
+ *
+ * ⚠️ maxDuration=60: fetchAllGroups pode demorar 25-45s com 100+ grupos.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -10,6 +13,9 @@ import { createClient } from '@/lib/supabase/server'
 import { getAgencyEvolutionConfig } from '@/lib/evolution/agency-config'
 import { listGroups } from '@/lib/evolution/client'
 import { toErrorMsg } from '@/lib/utils'
+
+// Aumenta o timeout desta rota para 60s (Vercel default é 10s)
+export const maxDuration = 60
 
 export async function GET(req: NextRequest) {
   try {
@@ -26,7 +32,7 @@ export async function GET(req: NextRequest) {
     const config = await getAgencyEvolutionConfig(supabase, agencyUser.agency_id)
     if (!config) {
       return NextResponse.json(
-        { error: 'Evolution API não configurada. Acesse Configurações → Integrações.' },
+        { error: 'WhatsApp não conectado. Acesse Configurações → Integrações.' },
         { status: 400 }
       )
     }
@@ -45,7 +51,7 @@ export async function GET(req: NextRequest) {
         participants: g.participants?.length ?? 0,
       }))
 
-    return NextResponse.json({ groups: filtered })
+    return NextResponse.json({ groups: filtered, total: groups.length })
   } catch (err) {
     const msg = toErrorMsg(err)
     console.error('[GET /api/whatsapp/groups]', msg)
