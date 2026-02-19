@@ -22,72 +22,91 @@ SaaS B2B para agências digitais. Monitora saúde dos clientes via **Health Scor
 
 ## ⚠️ Regras críticas
 - **NUNCA criar `middleware.ts`** — Next.js 16 usa `src/proxy.ts`
-- Migrações: `supabase/migrations/NNN_descricao.sql` — próxima = `013_`
+- Migrações: `supabase/migrations/NNN_descricao.sql` — próxima = `014_`
 
-## Estado Sprint 4 — ✅ STRESS TEST COMPLETO (19/02/2026)
+## Estado Sprint 4 — ✅ (19/02/2026)
 
 ### O que funciona 100%
+✅ **Tab "Contrato"** (renomeado de "Pasta") — foco exclusivo em contrato, futura integração Autentique
+✅ **Nome do grupo WhatsApp persiste** — salvo em `whatsapp_group_name`, exibido em destaque nas integrações
+✅ **Destaque visual do grupo monitorado** — layout melhorado, nome em verde, sublabel informativo
 ✅ Login/autenticação
-✅ Dashboard com métricas reais (R$ 7.500 recorrente, 2 clientes)
+✅ Dashboard com métricas reais
 ✅ Lista de clientes com filtros
-✅ **Seletor de grupos WhatsApp** — dropdown com busca, 168 grupos em ~30s, 1 click para conectar
-✅ **Conectar grupo ao cliente** — conectou "[ACL.GPS] Elite Agência" com sucesso
-✅ **Análise manual** — gerou Health Score 50 em ~40s
-✅ **Webhook Evolution** — re-registrado para `zerochurn.brandosystem.com`
-✅ **Campo "Produto vendido"** — corrigido (produtos agora persistem e aparecem no select)
+✅ Seletor de grupos WhatsApp — dropdown com busca, 1 click para conectar
+✅ Análise manual — Health Score gerado em ~40s
+✅ Webhook Evolution — `zerochurn.brandosystem.com/api/whatsapp/webhook`
+✅ Campo "Produto vendido" — produtos persistem em localStorage
 
-### Bugs corrigidos (19/02)
-| Bug | Commit | Status |
-|-----|--------|--------|
-| Produtos não aparecem ao cadastrar cliente | `74c2f68` | ✅ **RESOLVIDO** — agora lê produtos (não serviços) de `localStorage` |
-| Webhook Evolution com URL antiga | `3bec7fa` | ✅ **RESOLVIDO** — re-registrado manualmente |
-| Serviços em vez de produtos | `74c2f68` | ✅ **RESOLVIDO** — `zc_produtos_v1` com persistência |
+### Últimas mudanças (19/02/2026)
+| Commit | Descrição |
+|--------|-----------|
+| `763cf38` | **Migration 013**: coluna `whatsapp_group_name` — persiste nome do grupo WhatsApp |
+| `51a62cd` | feat: destaca nome do grupo WhatsApp nas integrações (layout melhorado) |
+| `e3a1f76` | refactor: renomeia "Pasta" → "Contrato" + menção Autentique |
+| `74c2f68` | fix: produtos agora persistem em localStorage e aparecem no select |
+| `0b3eaec` | debug: logs no data-fetcher para investigar `no_payment_data` |
 
 ### Bugs conhecidos (aguardando correção)
 | Bug | Severidade | Próxima ação |
 |-----|------------|--------------|
-| `no_payment_data` mesmo com Asaas conectado | 🔴 P0 | Investigar orchestrator/data-fetcher |
+| `no_payment_data` mesmo com Asaas conectado | 🔴 P0 | Investigar orchestrator/data-fetcher (logs adicionados) |
 | "Renova em: NaN dias" | 🟡 P1 | Adicionar `contract_end_date` no cadastro |
-| Nome do grupo desaparece ao reload | 🟡 P2 | Migração 013: coluna `whatsapp_group_name` |
 
-### Próximos passos
-**P0 — Bloqueantes:**
-1. **Fix orchestrator** — não está buscando dados do Asaas
-2. **Verificar mensagens webhook** — testar se mensagens reais chegam no banco
+### Teste para reconectar grupo (manual)
+Para salvar o nome do grupo em clientes existentes:
+1. Ir em Cliente → Integrações → WhatsApp
+2. Clicar em "Desconectar" (confirma no dialog)
+3. Clicar em "Carregar grupos do WhatsApp"
+4. Buscar e clicar no grupo "[ACL.GPS] Elite Agência"
+5. **Agora o nome ficará salvo permanentemente**
 
-**P1 — Importantes:**
-3. Migração 013: `whatsapp_group_name` em `clients`
-4. Contract end date no cadastro de cliente
-5. Email templates persistence
+## Migrações aplicadas
+- `001`–`012`: base system + analytics
+- **`013_whatsapp_group_name.sql`** ✅ **APLICADA** — adiciona coluna `whatsapp_group_name TEXT NULL` em `clients`
 
-## WhatsApp — infra
+## Integrações WhatsApp
 
-### Endpoint correto v2.3.0
+### Nome do grupo
+- **Coluna:** `clients.whatsapp_group_name`
+- **Salvo em:** `POST /api/whatsapp/connect/[clientId]` (valida via Evolution e salva nome)
+- **Exibido em:** Tab Integrações do cliente — card verde com destaque
+- **Persiste:** Mesmo após reload da página
+
+### Endpoint Evolution
 ```
 GET /group/fetchAllGroups/{instanceName}?getParticipants=false
 ```
 
 ### Webhook
 - **URL:** `https://zerochurn.brandosystem.com/api/whatsapp/webhook`
-- **Status:** ✅ Ativo (atualizado 19/02/2026)
+- **Status:** ✅ Ativo
 - **Events:** `MESSAGES_UPSERT`, `CONNECTION_UPDATE`
 
-### Fluxo
-```
-WhatsApp → Evolution webhook → whatsapp_messages → análise lê do DB
-```
+## Contrato (ex-Pasta)
+
+### Mudanças
+- **Tab renomeada:** "Pasta" → "Contrato"
+- **Ícone:** `FolderOpen` → `FileText`
+- **Foco:** Exclusivamente contrato (não outros documentos)
+- **Futuro:** Integração com [Autentique](https://painel.autentique.com.br/) para envio de contratos
+
+### Funcionalidades atuais
+- Upload de contrato (PDF/DOC/DOCX, máx. 10MB)
+- Download de contrato
+- Substituir contrato
+- Excluir contrato
 
 ## Produtos vs Serviços
 
 ### Serviços (localStorage: `zc_servicos_v1`)
 - Componentes individuais (ex: "SEO On-page", "Gestão de Redes Sociais")
-- Sem campo `type` (genéricos)
 - Gerenciados em: Configurações → Serviços
 
 ### Produtos (localStorage: `zc_produtos_v1`)
 - Pacotes que agrupam serviços (ex: "Tríade Gestão Comercial")
-- Têm `entregaveis` e `bonus` (listas de ServiceItem)
 - **Aparecem no campo "Método / Produto vendido"** ao cadastrar cliente
+- Persistem em localStorage
 - Gerenciados em: Configurações → Produtos
 
 ## Crons (4 total)
@@ -104,10 +123,16 @@ NEXT_PUBLIC_APP_URL=https://zerochurn.brandosystem.com
 EVOLUTION_API_URL=https://evolution-zc.emadigital.com.br
 EVOLUTION_API_KEY=0e32e814b9136e33bbfcd634e2931f693057bddb
 OPENAI_API_KEY=(internalized)
+ENCRYPTION_SECRET=76978de91a26509ba098eab5f281a050524ed7d64f8cdaa5cc1c2a6661de21b8
 + Supabase, Resend, CRON_SECRET
 ```
 
-## Últimos commits
-- `74c2f68` — fix: campo Produto vendido vazio (produtos agora persistem)
-- `3bec7fa` — feat: seletor de grupo WhatsApp + webhook corrigido
-- `4cf34d7` — docs: stress test completo
+## Últimos commits (reverse chronological)
+- `763cf38` — feat: whatsapp_group_name column + persistence (migration 013)
+- `51a62cd` — feat: destaca nome do grupo WhatsApp nas integrações
+- `e3a1f76` — refactor: "Pasta" → "Contrato" + Autentique mention
+- `74c2f68` — fix: produtos vazio resolvido (localStorage persistence)
+- `0b3eaec` — debug: logs data-fetcher (investigate no_payment_data)
+- `acf245e` — docs: CLAUDE.md updated
+- `4cf34d7` — docs: stress test complete
+- `3bec7fa` — feat: WhatsApp group selector + critical fixes
