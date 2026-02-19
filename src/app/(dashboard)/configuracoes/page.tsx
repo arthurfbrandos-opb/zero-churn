@@ -194,10 +194,10 @@ function ServicosSection() {
       </div>
 
       {/* Lista de serviços */}
-      <div className="space-y-0.5">
+      <div className="space-y-0">
         {items.map(item => (
-          <Card key={item.id} className={cn('bg-zinc-900 border-zinc-800', !item.isActive && 'opacity-50')}>
-            <CardContent className="p-1.5">
+          <Card key={item.id} className={cn('bg-zinc-900 border-zinc-800 rounded-none first:rounded-t-lg last:rounded-b-lg border-b-0 last:border-b', !item.isActive && 'opacity-50')}>
+            <CardContent className="p-2.5">
               {editingId === item.id ? (
                 <div className="space-y-2">
                   <div className="flex gap-2">
@@ -485,13 +485,13 @@ function ProdutosSection() {
       )}
 
       {/* Lista de produtos */}
-      <div className="space-y-0.5">
+      <div className="space-y-0">
         {produtos.map(p => {
           const isExpanded = expandedId === p.id
           const isEditing  = editingId  === p.id
           return (
-            <Card key={p.id} className={cn('bg-zinc-900 border-zinc-800', !p.isActive && 'opacity-50')}>
-              <CardContent className="p-1.5">
+            <Card key={p.id} className={cn('bg-zinc-900 border-zinc-800 rounded-none first:rounded-t-lg last:rounded-b-lg border-b-0 last:border-b', !p.isActive && 'opacity-50')}>
+              <CardContent className="p-2.5">
                 {/* Cabeçalho */}
                 <div className="flex items-start gap-2">
                   <button onClick={() => !isEditing && setExpandedId(isExpanded ? null : p.id)}
@@ -772,12 +772,12 @@ function EmailTemplatesSection() {
         </div>
       )}
 
-      <div className="space-y-3">
+      <div className="space-y-0">
         {templates.map(t => {
           const vars = TEMPLATE_VARS[t.id] ?? []
           return (
-            <Card key={t.id} className={cn('bg-zinc-900', editingId === t.id ? 'border-emerald-500/30' : 'border-zinc-800')}>
-              <CardContent className="p-4 space-y-3">
+            <Card key={t.id} className={cn('bg-zinc-900 rounded-none first:rounded-t-lg last:rounded-b-lg border-b-0 last:border-b', editingId === t.id ? 'border-emerald-500/30' : 'border-zinc-800')}>
+              <CardContent className="p-3 space-y-2.5">
                 {/* Cabeçalho */}
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -942,13 +942,14 @@ function FormularioSection() {
       </p>
 
       {/* Perguntas obrigatórias */}
-      <div className="space-y-3">
+      <div className="space-y-2">
         <p className="text-zinc-400 text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5">
           <Lock className="w-3.5 h-3.5" /> Perguntas obrigatórias
         </p>
+        <div className="space-y-0">
         {MANDATORY_QUESTIONS.map((q, i) => (
-          <Card key={q.id} className="bg-zinc-900 border-zinc-800">
-            <CardContent className="p-4">
+          <Card key={q.id} className="bg-zinc-900 border-zinc-800 rounded-none first:rounded-t-lg last:rounded-b-lg border-b-0 last:border-b">
+            <CardContent className="p-3">
               <div className="flex items-start gap-3">
                 <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center text-zinc-400 text-xs font-bold shrink-0 mt-0.5">
                   {i + 1}
@@ -969,10 +970,11 @@ function FormularioSection() {
             </CardContent>
           </Card>
         ))}
+        </div>
       </div>
 
       {/* Perguntas customizadas */}
-      <div className="space-y-3">
+      <div className="space-y-2">
         <div className="flex items-center justify-between">
           <p className="text-zinc-400 text-xs font-semibold uppercase tracking-wider">
             Perguntas adicionais ({customQuestions.length})
@@ -983,9 +985,10 @@ function FormularioSection() {
           <p className="text-zinc-600 text-xs italic">Nenhuma pergunta adicional. Adicione abaixo.</p>
         )}
 
+        <div className="space-y-0">
         {customQuestions.map((q, i) => (
-          <Card key={q.id} className="bg-zinc-900 border-zinc-800">
-            <CardContent className="p-4">
+          <Card key={q.id} className="bg-zinc-900 border-zinc-800 rounded-none first:rounded-t-lg last:rounded-b-lg border-b-0 last:border-b">
+            <CardContent className="p-3">
               <div className="flex items-start gap-3">
                 <div className="w-6 h-6 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-500 text-xs font-bold shrink-0 mt-0.5">
                   {MANDATORY_QUESTIONS.length + i + 1}
@@ -1034,6 +1037,7 @@ function FormularioSection() {
             </CardContent>
           </Card>
         ))}
+        </div>
 
         {/* Formulário de nova pergunta */}
         {addingType ? (
@@ -2037,9 +2041,9 @@ function UsuariosSection() {
       <SectionTitle>Equipe</SectionTitle>
 
       {/* Membros */}
-      <div className="space-y-2">
+      <div className="space-y-0">
         {team.map(u => (
-          <div key={u.id} className="flex items-center gap-3 p-3 rounded-xl bg-zinc-900 border border-zinc-800">
+          <div key={u.id} className="flex items-center gap-3 p-2.5 bg-zinc-900 border border-zinc-800 rounded-none first:rounded-t-lg last:rounded-b-lg border-b-0 last:border-b">
             <div className="w-9 h-9 rounded-full bg-zinc-700 flex items-center justify-center text-zinc-300 text-xs font-bold shrink-0">
               {u.initials}
             </div>
@@ -2355,9 +2359,9 @@ function NotificacoesSection() {
         Controle quais eventos geram alertas na Central de Alertas e notificações no sistema.
       </p>
 
-      <div className="space-y-2">
+      <div className="space-y-0">
         {ITEMS.map(item => (
-          <div key={item.key} className="flex items-center justify-between p-3.5 rounded-xl bg-zinc-900 border border-zinc-800">
+          <div key={item.key} className="flex items-center justify-between p-2.5 bg-zinc-900 border border-zinc-800 rounded-none first:rounded-t-lg last:rounded-b-lg border-b-0 last:border-b">
             <div>
               <p className="text-zinc-200 text-sm">{item.label}</p>
               <p className="text-zinc-500 text-xs">{item.sub}</p>
