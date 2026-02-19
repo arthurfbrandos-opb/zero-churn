@@ -31,7 +31,12 @@ async function fetchAsaasPayments(
   startDate: string,
   endDate:   string,
 ): Promise<NormalizedPayment[]> {
-  if (!agencyApiKey) return []
+  console.log(`[data-fetcher] fetchAsaasPayments: ${integrations.length} integrations, period=${startDate} to ${endDate}`)
+  
+  if (!agencyApiKey) {
+    console.warn('[data-fetcher] No agencyApiKey provided')
+    return []
+  }
 
   const ASAAS_BASE = process.env.ASAAS_API_URL ?? 'https://api.asaas.com/v3'
   const payments: NormalizedPayment[] = []
@@ -39,7 +44,17 @@ async function fetchAsaasPayments(
   for (const integ of integrations) {
     const creds = integ.credentials as Record<string, string> | null
     const customerId = creds?.customer_id
-    if (!customerId) continue
+    console.log(`[data-fetcher] Asaas integ:`, { 
+      type: integ.type, 
+      status: integ.status,
+      hasCredentials: !!creds,
+      customerId,
+      credentials: creds
+    })
+    if (!customerId) {
+      console.warn(`[data-fetcher] Asaas integration skipped: no customer_id`)
+      continue
+    }
 
     try {
       const [receivedRes, pendingRes, overdueRes] = await Promise.allSettled([
@@ -83,10 +98,13 @@ async function fetchAsaasPayments(
           })
         }
       }
-      console.log(`[data-fetcher] Total Asaas payments collected: ${payments.length}`)
-    } catch { /* ignora erros individuais */ }
+      console.log(`[data-fetcher] Total Asaas payments collected for customer ${customerId}: ${payments.length}`)
+    } catch (err) {
+      console.error(`[data-fetcher] Error fetching Asaas payments for customer ${customerId}:`, err)
+    }
   }
 
+  console.log(`[data-fetcher] fetchAsaasPayments FINAL: ${payments.length} total payments`)
   return payments
 }
 
