@@ -39,7 +39,7 @@ const NAV = [
 const inputCls = "bg-zinc-800 border-zinc-700 text-zinc-200 placeholder:text-zinc-500 focus-visible:ring-emerald-500"
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <h2 className="text-white font-semibold text-base mb-4">{children}</h2>
+  return <h2 className="text-white font-semibold text-base mb-2">{children}</h2>
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -83,11 +83,11 @@ function AgenciaSection() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <SectionTitle>Perfil da agência</SectionTitle>
 
       {/* Logo */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 mt-3">
         <div className="w-16 h-16 rounded-xl bg-zinc-800 border-2 border-dashed border-zinc-700 flex items-center justify-center">
           <Building2 className="w-6 h-6 text-zinc-600" />
         </div>
@@ -183,21 +183,21 @@ function ServicosSection() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
           <SectionTitle>Serviços</SectionTitle>
-          <p className="text-zinc-500 text-sm -mt-3 mb-4">
+          <p className="text-zinc-500 text-sm mt-1 mb-3">
             Cadastre os serviços/entregáveis que sua agência oferece. Eles serão usados para montar os Produtos.
           </p>
         </div>
       </div>
 
       {/* Lista de serviços */}
-      <div className="space-y-1">
+      <div className="space-y-0.5">
         {items.map(item => (
           <Card key={item.id} className={cn('bg-zinc-900 border-zinc-800', !item.isActive && 'opacity-50')}>
-            <CardContent className="p-2.5">
+            <CardContent className="p-2">
               {editingId === item.id ? (
                 <div className="space-y-2">
                   <div className="flex gap-2">
@@ -214,12 +214,12 @@ function ServicosSection() {
                     placeholder="Descrição (opcional)" className={cn(inputCls, 'text-sm')} />
                 </div>
               ) : (
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2">
                   <div className="flex-1 min-w-0">
                     <p className="text-zinc-200 text-sm font-medium leading-tight">{item.name}</p>
-                    {item.description && <p className="text-zinc-500 text-xs mt-0.5">{item.description}</p>}
+                    {item.description && <p className="text-zinc-500 text-xs mt-0">{item.description}</p>}
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0">
                     <button onClick={() => startEdit(item)} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">Editar</button>
                     <button onClick={() => setItems(prev => prev.map(i => i.id === item.id ? { ...i, isActive: !i.isActive } : i))}
                       className={cn('w-9 h-5 rounded-full transition-all relative', item.isActive ? 'bg-emerald-500' : 'bg-zinc-700')}>
@@ -446,11 +446,11 @@ function ProdutosSection() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
           <SectionTitle>Produtos</SectionTitle>
-          <p className="text-zinc-500 text-sm -mt-3 mb-4">
+          <p className="text-zinc-500 text-sm mt-1 mb-3">
             Monte pacotes combinando os serviços cadastrados. O tipo de contrato (Recorrente/Projeto) é definido na negociação com o cliente.
           </p>
         </div>
@@ -485,24 +485,24 @@ function ProdutosSection() {
       )}
 
       {/* Lista de produtos */}
-      <div className="space-y-1.5">
+      <div className="space-y-0.5">
         {produtos.map(p => {
           const isExpanded = expandedId === p.id
           const isEditing  = editingId  === p.id
           return (
             <Card key={p.id} className={cn('bg-zinc-900 border-zinc-800', !p.isActive && 'opacity-50')}>
-              <CardContent className="p-3">
+              <CardContent className="p-2">
                 {/* Cabeçalho */}
-                <div className="flex items-start gap-2.5">
+                <div className="flex items-start gap-2">
                   <button onClick={() => !isEditing && setExpandedId(isExpanded ? null : p.id)}
                     className="flex-1 text-left min-w-0">
                     <p className="text-zinc-200 text-sm font-semibold leading-tight">{isEditing ? editName : p.name}</p>
-                    <p className="text-zinc-500 text-xs mt-0.5 leading-tight">
+                    <p className="text-zinc-500 text-xs mt-0 leading-tight">
                       {(isEditing ? editEntregs : p.entregaveis).length} entregável{(isEditing ? editEntregs : p.entregaveis).length !== 1 ? 'is' : ''}
                       {(isEditing ? editBonus : p.bonus).length > 0 && ` · ${(isEditing ? editBonus : p.bonus).length} bônus`}
                     </p>
                   </button>
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0">
                     <button onClick={() => isEditing ? setEditingId(null) : startEdit(p)}
                       className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-1">
                       {isEditing ? 'Cancelar' : 'Editar'}
@@ -758,10 +758,10 @@ function EmailTemplatesSection() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div>
         <SectionTitle>Templates de E-mail</SectionTitle>
-        <p className="text-zinc-500 text-sm -mt-3 mb-4">
+        <p className="text-zinc-500 text-sm mt-1 mb-3">
           Personalize o conteúdo dos e-mails enviados pelo sistema. Clique em uma variável para inseri-la no campo que está editando.
         </p>
       </div>
@@ -935,9 +935,9 @@ function FormularioSection() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <SectionTitle>Formulário NPS</SectionTitle>
-      <p className="text-zinc-500 text-sm -mt-2">
+      <p className="text-zinc-500 text-sm mt-1 mb-2">
         Configure as perguntas do formulário enviado aos clientes. As duas perguntas obrigatórias não podem ser removidas.
       </p>
 
@@ -1978,7 +1978,7 @@ function ResendIntegCard() {
 
 function IntegracoesSection() {
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <SectionTitle>Integrações</SectionTitle>
 
       {/* Asaas — funcional */}
@@ -2033,7 +2033,7 @@ function UsuariosSection() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       <SectionTitle>Equipe</SectionTitle>
 
       {/* Membros */}
@@ -2165,7 +2165,7 @@ function AnalisadorSection() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <SectionTitle>Configurações do analisador</SectionTitle>
 
       {/* Análise semanal de sentimento */}
@@ -2349,9 +2349,9 @@ function NotificacoesSection() {
   ] as const
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <SectionTitle>Preferências de notificação</SectionTitle>
-      <p className="text-zinc-500 text-sm -mt-2">
+      <p className="text-zinc-500 text-sm mt-1 mb-2">
         Controle quais eventos geram alertas na Central de Alertas e notificações no sistema.
       </p>
 
@@ -2412,7 +2412,7 @@ function PrivacidadeSection() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <SectionTitle>Privacidade e Dados (LGPD)</SectionTitle>
 
       {/* Documentos */}
