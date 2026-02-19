@@ -39,7 +39,7 @@ const NAV = [
 const inputCls = "bg-zinc-800 border-zinc-700 text-zinc-200 placeholder:text-zinc-500 focus-visible:ring-emerald-500"
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <h2 className="text-white font-semibold text-base mb-2">{children}</h2>
+  return <h2 className="text-white font-semibold text-base mb-1.5">{children}</h2>
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -83,11 +83,11 @@ function AgenciaSection() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <SectionTitle>Perfil da agência</SectionTitle>
 
       {/* Logo */}
-      <div className="flex items-center gap-4 mt-3">
+      <div className="flex items-center gap-4 mt-2">
         <div className="w-16 h-16 rounded-xl bg-zinc-800 border-2 border-dashed border-zinc-700 flex items-center justify-center">
           <Building2 className="w-6 h-6 text-zinc-600" />
         </div>
@@ -183,11 +183,11 @@ function ServicosSection() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <div className="flex items-center justify-between">
         <div>
           <SectionTitle>Serviços</SectionTitle>
-          <p className="text-zinc-500 text-sm mt-1 mb-3">
+          <p className="text-zinc-500 text-sm mt-0.5 mb-2">
             Cadastre os serviços/entregáveis que sua agência oferece. Eles serão usados para montar os Produtos.
           </p>
         </div>
@@ -197,7 +197,7 @@ function ServicosSection() {
       <div className="space-y-0.5">
         {items.map(item => (
           <Card key={item.id} className={cn('bg-zinc-900 border-zinc-800', !item.isActive && 'opacity-50')}>
-            <CardContent className="p-2">
+            <CardContent className="p-1.5">
               {editingId === item.id ? (
                 <div className="space-y-2">
                   <div className="flex gap-2">
@@ -239,7 +239,7 @@ function ServicosSection() {
 
       {/* Adicionar novo serviço */}
       <Card className="bg-zinc-900 border-zinc-800 border-dashed">
-        <CardContent className="p-4 space-y-2">
+        <CardContent className="p-3 space-y-2">
           <p className="text-zinc-400 text-xs font-medium">Novo serviço</p>
           <div className="flex gap-2">
             <Input value={newName} onChange={e => setNewName(e.target.value)}
@@ -446,11 +446,11 @@ function ProdutosSection() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <div className="flex items-center justify-between">
         <div>
           <SectionTitle>Produtos</SectionTitle>
-          <p className="text-zinc-500 text-sm mt-1 mb-3">
+          <p className="text-zinc-500 text-sm mt-0.5 mb-2">
             Monte pacotes combinando os serviços cadastrados. O tipo de contrato (Recorrente/Projeto) é definido na negociação com o cliente.
           </p>
         </div>
@@ -491,7 +491,7 @@ function ProdutosSection() {
           const isEditing  = editingId  === p.id
           return (
             <Card key={p.id} className={cn('bg-zinc-900 border-zinc-800', !p.isActive && 'opacity-50')}>
-              <CardContent className="p-2">
+              <CardContent className="p-1.5">
                 {/* Cabeçalho */}
                 <div className="flex items-start gap-2">
                   <button onClick={() => !isEditing && setExpandedId(isExpanded ? null : p.id)}
@@ -758,10 +758,10 @@ function EmailTemplatesSection() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <div>
         <SectionTitle>Templates de E-mail</SectionTitle>
-        <p className="text-zinc-500 text-sm mt-1 mb-3">
+        <p className="text-zinc-500 text-sm mt-0.5 mb-2">
           Personalize o conteúdo dos e-mails enviados pelo sistema. Clique em uma variável para inseri-la no campo que está editando.
         </p>
       </div>
@@ -935,9 +935,9 @@ function FormularioSection() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <SectionTitle>Formulário NPS</SectionTitle>
-      <p className="text-zinc-500 text-sm mt-1 mb-2">
+      <p className="text-zinc-500 text-sm mt-0.5 mb-1.5">
         Configure as perguntas do formulário enviado aos clientes. As duas perguntas obrigatórias não podem ser removidas.
       </p>
 
@@ -1978,7 +1978,7 @@ function ResendIntegCard() {
 
 function IntegracoesSection() {
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <SectionTitle>Integrações</SectionTitle>
 
       {/* Asaas — funcional */}
@@ -2033,7 +2033,7 @@ function UsuariosSection() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <SectionTitle>Equipe</SectionTitle>
 
       {/* Membros */}
@@ -2165,7 +2165,7 @@ function AnalisadorSection() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <SectionTitle>Configurações do analisador</SectionTitle>
 
       {/* Análise semanal de sentimento */}
@@ -2349,9 +2349,9 @@ function NotificacoesSection() {
   ] as const
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <SectionTitle>Preferências de notificação</SectionTitle>
-      <p className="text-zinc-500 text-sm mt-1 mb-2">
+      <p className="text-zinc-500 text-sm mt-0.5 mb-1.5">
         Controle quais eventos geram alertas na Central de Alertas e notificações no sistema.
       </p>
 
@@ -2412,7 +2412,7 @@ function PrivacidadeSection() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <SectionTitle>Privacidade e Dados (LGPD)</SectionTitle>
 
       {/* Documentos */}
