@@ -126,7 +126,7 @@ export async function GET(req: NextRequest) {
           // Dispara se o agente financeiro levantou flags críticos
           if (agencyEmail && result.result?.flags) {
             const flags      = result.result.flags
-            const appUrl     = process.env.NEXT_PUBLIC_APP_URL ?? 'https://zero-churn-git-main-arthurfbrandos-opbs-projects.vercel.app'
+            const appUrl     = process.env.NEXT_PUBLIC_APP_URL ?? 'https://zerochurn.brandosystem.com'
             const clientUrl  = `${appUrl}/clientes/${client.id}`
 
             const isInad = flags.some(f =>
@@ -161,7 +161,7 @@ export async function GET(req: NextRequest) {
 
     // ── 4. Envia e-mail de conclusão para a agência ─────────────
     if (agencyEmail) {
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://zero-churn-git-main-arthurfbrandos-opbs-projects.vercel.app'
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://zerochurn.brandosystem.com'
       await sendAnalysisCompleted({
         to:           agencyEmail,
         agencyName:   agency.name,

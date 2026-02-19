@@ -172,7 +172,7 @@ O histórico de análise depende do engajamento nos grupos vinculados.
 Esta limitação está exibida na UI com banner amarelo em Configurações → Integrações → WhatsApp.
 
 ### Webhook URL (registrado automaticamente)
-`https://zero-churn-git-main-arthurfbrandos-opbs-projects.vercel.app/api/whatsapp/webhook`
+`https://zerochurn.brandosystem.com/api/whatsapp/webhook`
 
 ## Health Score — arquitetura
 - **Orquestrador:** `src/lib/agents/orchestrator.ts`
@@ -212,7 +212,7 @@ NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY
 SUPABASE_SERVICE_ROLE_KEY
 ENCRYPTION_SECRET               # AES-256, 32 bytes hex
-NEXT_PUBLIC_APP_URL             # https://zero-churn-git-main-arthurfbrandos-opbs-projects.vercel.app em prod
+NEXT_PUBLIC_APP_URL             # https://zerochurn.brandosystem.com em prod
 RESEND_API_KEY                  # Resend.com (fallback)
 RESEND_FROM_EMAIL               # remetente fallback
 CRON_SECRET                     # qualquer string segura

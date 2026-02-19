@@ -8,8 +8,8 @@
  *  - Troca de e-mail                        (type=email_change)
  *
  * Configure no Supabase Dashboard → Auth → URL Configuration:
- *   Site URL:    https://zero-churn-git-main-arthurfbrandos-opbs-projects.vercel.app
- *   Redirect URLs: https://zero-churn-git-main-arthurfbrandos-opbs-projects.vercel.app/auth/callback
+ *   Site URL:    https://zerochurn.brandosystem.com
+ *   Redirect URLs: https://zerochurn.brandosystem.com/auth/callback
  *                  http://localhost:3000/auth/callback
  */
 import { NextRequest, NextResponse } from 'next/server'

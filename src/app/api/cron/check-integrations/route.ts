@@ -195,7 +195,7 @@ export async function GET(req: NextRequest) {
     return entry
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://zero-churn-git-main-arthurfbrandos-opbs-projects.vercel.app'
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://zerochurn.brandosystem.com'
 
   // ── 6. Avalia cada integração de cliente ──────────────────────
   for (const integ of clientIntegrations) {
