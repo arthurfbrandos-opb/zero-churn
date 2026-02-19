@@ -219,8 +219,8 @@ function ServicosSection() {
                     <p className="text-zinc-200 text-sm font-medium leading-tight">{item.name}</p>
                     {item.description && <p className="text-zinc-500 text-xs mt-0">{item.description}</p>}
                   </div>
-                  <div className="flex items-center gap-2.5 shrink-0">
-                    <button onClick={() => startEdit(item)} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-1.5">Editar</button>
+                  <div className="flex items-center gap-4 shrink-0">
+                    <button onClick={() => startEdit(item)} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-2">Editar</button>
                     <button onClick={() => setItems(prev => prev.map(i => i.id === item.id ? { ...i, isActive: !i.isActive } : i))}
                       className={cn('w-9 h-5 rounded-full transition-all relative', item.isActive ? 'bg-emerald-500' : 'bg-zinc-700')}>
                       <span className={cn('absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all', item.isActive ? 'left-4' : 'left-0.5')} />
@@ -502,9 +502,9 @@ function ProdutosSection() {
                       {(isEditing ? editBonus : p.bonus).length > 0 && ` · ${(isEditing ? editBonus : p.bonus).length} bônus`}
                     </p>
                   </button>
-                  <div className="flex items-center gap-2.5 shrink-0">
+                  <div className="flex items-center gap-4 shrink-0">
                     <button onClick={() => isEditing ? setEditingId(null) : startEdit(p)}
-                      className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-1.5">
+                      className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-2">
                       {isEditing ? 'Cancelar' : 'Editar'}
                     </button>
                     <button onClick={() => setProdutos(prev => prev.map(pp => pp.id === p.id ? { ...pp, isActive: !pp.isActive } : pp))}
@@ -1021,10 +1021,10 @@ function FormularioSection() {
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-2.5 shrink-0">
+                <div className="flex items-center gap-4 shrink-0">
                   {editingId !== q.id && (
                     <button onClick={() => { setEditingId(q.id); setEditText(q.text) }}
-                      className="text-xs text-zinc-500 hover:text-zinc-300 px-1.5 transition-colors">
+                      className="text-xs text-zinc-500 hover:text-zinc-300 px-2 transition-colors">
                       Editar
                     </button>
                   )}
