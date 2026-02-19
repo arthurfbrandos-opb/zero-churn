@@ -78,12 +78,72 @@
 - **Teste manual da API Asaas funcionou:** retornou 1 pagamento (R$ 2.500, status RECEIVED)
 - Período de 60 dias: 2025-12-20 até 2026-02-19
 
-**Próximo passo:** 
-1. Obter token de autenticação do browser
-2. Executar `bash test-analysis.sh`
-3. Analisar logs no Vercel: https://vercel.com/arthurfbrandos-opb/zero-churn/logs
-4. Buscar por `[data-fetcher]` nos logs
-5. Verificar se `customer_id` está sendo lido corretamente
+**Testes realizados:**
+1. ✅ Login automático via agent-browser
+2. ✅ Análise manual executada com sucesso (4.2s)
+3. ❌ **Bug confirmado**: `no_payment_data` flag presente
+4. ✅ Endpoint de debug criado (mas erro 500)
+
+**Resultado da análise de teste:**
+```json
+{
+  "scoreFinanceiro": null,
+  "flags": ["no_payment_data"],
+  "agentsLog": {
+    "financeiro": {
+      "score": null,
+      "flags": ["no_payment_data"],
+      "details": {
+        "reason": "Nenhum dado financeiro integrado para este cliente"
+      },
+      "status": "skipped"
+    }
+  }
+}
+```
+
+**Diagnóstico:**
+- Agente financeiro retorna `score: null` com status `skipped`
+- Reason: "Nenhum dado financeiro integrado para este cliente"
+- Isso significa que `asaasPayments.length === 0` e `domPayments.length === 0`
+
+**Hipóteses do bug:**
+1. 🔴 **Mais provável**: Integrações do cliente não têm `credentials` (apenas `credentials_enc`)
+2. ⚠️ Campo `credentials` (jsonb) pode estar vazio no banco
+3. ⚠️ `customer_id` pode não estar sendo salvo em `credentials` durante o import
+
+**Próximos passos (investigação manual):**
+1. **Verificar no Supabase SQL Editor:**
+   ```sql
+   SELECT 
+     id, type, status, label,
+     credentials,
+     credentials_enc,
+     last_sync_at
+   FROM client_integrations
+   WHERE client_id = '226cca28-d8f3-4dc5-8c92-6c9e4753a1ce'
+     AND type = 'asaas';
+   ```
+
+2. **Se `credentials` estiver vazio:**
+   - Problema está no `/api/asaas/import` que não está salvando `customer_id` corretamente
+   - Verificar linha 207 do arquivo `src/app/api/asaas/import/route.ts`
+
+3. **Se `credentials` tiver dados:**
+   - Problema está no `data-fetcher.ts` que não está lendo `credentials` corretamente
+   - Verificar linha 41: `const creds = integ.credentials as Record<string, string> | null`
+
+4. **Solução temporária (se credentials estiver vazio):**
+   ```sql
+   UPDATE client_integrations
+   SET credentials = jsonb_build_object(
+     'customer_id', 'cus_000155163105',
+     'customer_name', 'ODONTOLOGIA INTEGRADA'
+   )
+   WHERE client_id = '226cca28-d8f3-4dc5-8c92-6c9e4753a1ce'
+     AND type = 'asaas';
+   ```
+   Depois executar análise novamente.
 
 ## 📦 Commits deployados (ordem cronológica)
 
