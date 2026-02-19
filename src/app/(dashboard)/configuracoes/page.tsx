@@ -300,8 +300,16 @@ const INITIAL_PRODUTOS: Produto[] = [
   },
 ]
 
+const LS_PRODUTOS_KEY = 'zc_produtos_v1'
+
 function ProdutosSection() {
-  const [produtos,     setProdutos]     = useState<Produto[]>(INITIAL_PRODUTOS)
+  const [produtos,     setProdutos]     = useState<Produto[]>(() => {
+    try {
+      const raw = localStorage.getItem(LS_PRODUTOS_KEY)
+      if (raw) return JSON.parse(raw) as Produto[]
+    } catch { /* ignore */ }
+    return INITIAL_PRODUTOS
+  })
   const [allServicos,  setAllServicos]  = useState<ServicoItem[]>(INITIAL_SERVICES)
   const [expandedId,   setExpandedId]   = useState<string | null>(null)
   const [editingId,    setEditingId]    = useState<string | null>(null)
@@ -314,6 +322,11 @@ function ProdutosSection() {
   useEffect(() => {
     setAllServicos(loadServicos())
   }, [])
+
+  // Persiste produtos no localStorage sempre que mudar
+  useEffect(() => {
+    try { localStorage.setItem(LS_PRODUTOS_KEY, JSON.stringify(produtos)) } catch { /* ignore */ }
+  }, [produtos])
 
   const activeServicos = allServicos.filter(s => s.isActive)
 

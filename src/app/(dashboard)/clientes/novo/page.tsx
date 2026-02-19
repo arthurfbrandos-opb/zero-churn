@@ -577,13 +577,24 @@ function NovoClientePageInner() {
   const searchParams = useSearchParams()
   const [step, setStep] = useState(0)
 
-  // Serviços da agência — lê do localStorage (mesma chave do Configurações)
-  type AgencyService = { id: string; name: string; type: string; isActive: boolean; entregaveis: ServiceItem[]; bonus: ServiceItem[] }
-  const [agencyServices, setAgencyServices] = useState<AgencyService[]>([])
+  // Produtos da agência — lê do localStorage (produtos = métodos de entrega)
+  type AgencyProduct = { id: string; name: string; isActive: boolean; entregaveis: ServiceItem[]; bonus: ServiceItem[] }
+  const [agencyProducts, setAgencyProducts] = useState<AgencyProduct[]>([])
   useEffect(() => {
     try {
-      const raw = localStorage.getItem('zc_servicos_v1')
-      if (raw) setAgencyServices(JSON.parse(raw))
+      const raw = localStorage.getItem('zc_produtos_v1')
+      if (raw) {
+        setAgencyProducts(JSON.parse(raw))
+      } else {
+        // Fallback: produtos hardcoded se não houver nada salvo
+        setAgencyProducts([
+          {
+            id: 'p1', name: 'Tríade Gestão Comercial', isActive: true,
+            entregaveis: [{ id: 's1', name: 'SEO On-page e Off-page' }, { id: 's2', name: 'Gestão de Redes Sociais' }],
+            bonus: [{ id: 's3', name: 'Relatório Mensal' }],
+          },
+        ])
+      }
     } catch { /* ignore */ }
   }, [])
 
@@ -756,13 +767,13 @@ function NovoClientePageInner() {
     set('parcelas', form.parcelas.map(p => p.id === id ? { ...p, [field]: value } : p))
   }
 
-  // Serviços filtrados pelo tipo de contrato (lidos do localStorage via agencyServices)
-  const servicesForType = agencyServices.filter(s => s.isActive && s.type === form.clientType)
-  const selectedService = agencyServices.find(s => s.id === form.serviceId)
+  // Produtos ativos (MRR/TCV não filtrado — todos os produtos servem para ambos)
+  const activeProducts = agencyProducts.filter(p => p.isActive)
+  const selectedProduct = agencyProducts.find(p => p.id === form.serviceId)
 
-  // Ao selecionar um método: pré-marca todos entregáveis e bônus
+  // Ao selecionar um produto: pré-marca todos entregáveis e bônus
   function handleSelectService(id: string) {
-    const svc = agencyServices.find(s => s.id === id)
+    const svc = agencyProducts.find(p => p.id === id)
     if (svc) {
       setForm(prev => ({
         ...prev,
@@ -1158,7 +1169,7 @@ function NovoClientePageInner() {
                       className={cn(inputCls, 'w-full h-10 rounded-md border px-3 text-sm appearance-none pr-8 cursor-pointer')}
                     >
                       <option value="" className="bg-zinc-800">Selecione o método vendido...</option>
-                      {servicesForType.map(s => (
+                      {activeProducts.map(s => (
                         <option key={s.id} value={s.id} className="bg-zinc-800">{s.name}</option>
                       ))}
                     </select>
@@ -1167,7 +1178,7 @@ function NovoClientePageInner() {
                 </Field>
 
                 {/* Checklist de entregáveis e bônus */}
-                {selectedService && (
+                {selectedProduct && (
                   <div className="border border-zinc-800 rounded-xl overflow-hidden">
                     <div className="bg-zinc-800/60 px-4 py-2.5 flex items-center justify-between">
                       <p className="text-zinc-300 text-xs font-semibold">O que está incluído neste contrato?</p>
@@ -1175,10 +1186,10 @@ function NovoClientePageInner() {
                     </div>
 
                     {/* Entregáveis */}
-                    {selectedService.entregaveis.length > 0 && (
+                    {selectedProduct.entregaveis.length > 0 && (
                       <div className="p-3 space-y-2">
                         <p className="text-zinc-400 text-xs font-semibold uppercase tracking-wider px-1">Entregáveis</p>
-                        {selectedService.entregaveis.map((item: ServiceItem) => {
+                        {selectedProduct.entregaveis.map((item: ServiceItem) => {
                           const checked = form.entregaveisIncluidos.includes(item.id)
                           return (
                             <button key={item.id} onClick={() => toggleEntregavel(item.id)}
@@ -1200,10 +1211,10 @@ function NovoClientePageInner() {
                     )}
 
                     {/* Bônus */}
-                    {selectedService.bonus.length > 0 && (
+                    {selectedProduct.bonus.length > 0 && (
                       <div className="p-3 pt-0 space-y-2">
                         <p className="text-yellow-500 text-xs font-semibold uppercase tracking-wider px-1 pt-2">Bônus</p>
-                        {selectedService.bonus.map((item: ServiceItem) => {
+                        {selectedProduct.bonus.map((item: ServiceItem) => {
                           const checked = form.bonusIncluidos.includes(item.id)
                           return (
                             <button key={item.id} onClick={() => toggleBonus(item.id)}
@@ -1680,9 +1691,9 @@ function NovoClientePageInner() {
             {/* Resumo do contrato */}
             <div className="bg-zinc-800/50 rounded-lg p-3 text-xs text-zinc-500 space-y-1">
               <p>• <span className="text-zinc-400">Cliente:</span> {form.nomeResumido}</p>
-              <p>• <span className="text-zinc-400">Tipo:</span> {form.clientType.toUpperCase()} · {selectedService?.name ?? '—'}</p>
-              {selectedService && form.entregaveisIncluidos.length > 0 && (
-                <p>• <span className="text-zinc-400">Entregáveis:</span> {form.entregaveisIncluidos.length}/{selectedService.entregaveis.length} incluídos</p>
+              <p>• <span className="text-zinc-400">Tipo:</span> {form.clientType.toUpperCase()} · {selectedProduct?.name ?? '—'}</p>
+              {selectedProduct && form.entregaveisIncluidos.length > 0 && (
+                <p>• <span className="text-zinc-400">Entregáveis:</span> {form.entregaveisIncluidos.length}/{selectedProduct.entregaveis.length} incluídos</p>
               )}
               {form.clientType === 'mrr' && <p>• <span className="text-zinc-400">Recorrente:</span> R$ {form.contractValue}/mês · {form.contractMonths} meses</p>}
               {form.clientType === 'tcv' && <p>• <span className="text-zinc-400">TCV:</span> R$ {form.totalProjectValue} · {form.projectDeadlineDays} dias</p>}
