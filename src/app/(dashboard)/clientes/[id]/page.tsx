@@ -1733,16 +1733,21 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
             {/* ── Conectado ── */}
             {wppConnected && !wppEditing && (
               <div className="space-y-2">
-                <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3 py-2.5">
-                  <MessageCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    {wppGroupName
-                      ? <p className="text-emerald-300 text-sm font-medium truncate">{wppGroupName}</p>
-                      : <p className="text-zinc-300 text-sm font-mono truncate">
-                          {client.whatsappGroupId?.slice(0, 6)}···{client.whatsappGroupId?.slice(-5)}
-                        </p>
-                    }
-                    <p className="text-zinc-500 text-xs">Grupo monitorado</p>
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3.5">
+                  <div className="flex items-start gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center shrink-0">
+                      <MessageCircle className="w-4 h-4 text-emerald-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-zinc-400 text-xs mb-1">Grupo WhatsApp monitorado:</p>
+                      {wppGroupName
+                        ? <p className="text-emerald-300 text-sm font-semibold leading-tight truncate">{wppGroupName}</p>
+                        : <p className="text-zinc-300 text-xs font-mono truncate">
+                            {client.whatsappGroupId?.slice(0, 6)}···{client.whatsappGroupId?.slice(-5)}
+                          </p>
+                      }
+                      <p className="text-zinc-600 text-xs mt-0.5">Mensagens coletadas via webhook Evolution API</p>
+                    </div>
                   </div>
                 </div>
                 <div className="flex gap-2">
