@@ -166,6 +166,7 @@ export interface Client {
 
   // Contexto
   whatsappGroupId?: string
+  whatsappGroupName?: string
   observations?: string
   notes?: string
 

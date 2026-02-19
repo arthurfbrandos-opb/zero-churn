@@ -24,7 +24,7 @@ export async function GET(
 
   const { data: client } = await supabase
     .from('clients')
-    .select('id, whatsapp_group_id')
+    .select('id, whatsapp_group_id, whatsapp_group_name')
     .eq('id', clientId)
     .maybeSingle()
 
@@ -35,6 +35,7 @@ export async function GET(
   return NextResponse.json({
     connected,
     groupId: connected ? client.whatsapp_group_id : null,
+    groupName: connected ? client.whatsapp_group_name : null,
   })
 }
 
@@ -76,10 +77,13 @@ export async function POST(
   }
   // Se a Evolution não está configurada, salva sem validar (modo dev)
 
-  // Salva o group_id no cliente
+  // Salva o group_id e group_name no cliente
   const { error } = await supabase
     .from('clients')
-    .update({ whatsapp_group_id: groupId })
+    .update({
+      whatsapp_group_id: groupId,
+      whatsapp_group_name: groupName,
+    })
     .eq('id', clientId)
 
   if (error) {
@@ -117,10 +121,13 @@ export async function DELETE(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
 
-  // Remove o group_id
+  // Remove o group_id e group_name
   const { error } = await supabase
     .from('clients')
-    .update({ whatsapp_group_id: null })
+    .update({
+      whatsapp_group_id: null,
+      whatsapp_group_name: null,
+    })
     .eq('id', clientId)
 
   if (error) {

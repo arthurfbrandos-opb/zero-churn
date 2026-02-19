@@ -1290,7 +1290,7 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
   const [wppGroupsLoading, setWppGroupsLoading]  = useState(false)
   const [wppGroupsError,   setWppGroupsError]    = useState<string | null>(null)
   const [wppSearch,        setWppSearch]         = useState('')
-  const [wppGroupName,     setWppGroupName]      = useState<string | null>(null)
+  const [wppGroupName,     setWppGroupName]      = useState<string | null>(client.whatsappGroupName ?? null)
 
   async function loadWppGroups() {
     setWppGroupsLoading(true); setWppGroupsError(null)
