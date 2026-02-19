@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
       nome_decisor, email, telefone, email_financeiro,
       cep, logradouro, numero, complemento, bairro, cidade, estado,
       service_id, entregaveis_incluidos, bonus_incluidos,
+      entregaveis_customizados, bonus_customizados,
       client_type, mrr_value, tcv_value,
       contract_start, contract_end,
       // MRR
@@ -101,6 +102,8 @@ export async function POST(request: NextRequest) {
         nome_decisor, email, telefone, email_financeiro,
         cep, logradouro, numero, complemento, bairro, cidade, estado,
         service_id, entregaveis_incluidos, bonus_incluidos,
+        entregaveis_customizados: entregaveis_customizados || [],
+        bonus_customizados: bonus_customizados || [],
         client_type, mrr_value, tcv_value,
         contract_months, has_implementation_fee, implementation_fee_value, implementation_fee_date,
         project_deadline_days, has_installments, installments_type, installments_count,
