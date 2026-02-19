@@ -57,8 +57,10 @@ async function fetchAsaasPayments(
     }
 
     try {
+      // Busca pagamentos RECEBIDOS por dueDate (vencimento) em vez de paymentDate
+      // Isso garante que pegamos todos os pagamentos do período, independente de quando foram pagos
       const [receivedRes, pendingRes, overdueRes] = await Promise.allSettled([
-        fetch(`${ASAAS_BASE}/payments?customer=${customerId}&paymentDate[ge]=${startDate}&paymentDate[le]=${endDate}&status=RECEIVED,CONFIRMED,RECEIVED_IN_CASH&limit=100`, {
+        fetch(`${ASAAS_BASE}/payments?customer=${customerId}&dueDate[ge]=${startDate}&dueDate[le]=${endDate}&status=RECEIVED,CONFIRMED,RECEIVED_IN_CASH&limit=100`, {
           headers: { 'access_token': agencyApiKey },
           next: { revalidate: 0 },
         }),
