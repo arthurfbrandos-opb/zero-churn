@@ -15,51 +15,50 @@ SaaS B2B para agências digitais. Monitora saúde dos clientes via **Health Scor
 ## Acessos
 - **GitHub:** `https://github.com/arthurfbrandos-opb/zero-churn.git`
 - **Prod:** `https://zerochurn.brandosystem.com`
+- **Login:** `arthur@emadigital.com.br` / `@Rthur1801`
 - **Local:** `/Users/arthurferreira/Documents/github/Projeto_Zero_Churn/zero-churn/`
 - **Supabase:** projeto `hvpsxypzylqruuufbtxz`, PAT `sbp_44c3edcbe18b75e94fa90aedf7f229ba5b95649a`
-- **Portainer:** `painel.emadigital.com.br` — admin / `T29TmRGYTc9e2GZh8fHE`
-- **Evolution ZC:** `evolution-zc.emadigital.com.br` — stack ID 23, IP `5.161.246.197`, apikey `0e32e814b9136e33bbfcd634e2931f693057bddb`
+- **Evolution ZC:** `evolution-zc.emadigital.com.br` — apikey `0e32e814b9136e33bbfcd634e2931f693057bddb`
 
 ## ⚠️ Regras críticas
 - **NUNCA criar `middleware.ts`** — Next.js 16 usa `src/proxy.ts`
-- **NUNCA mexer em `evolution.emadigital.com.br`** — servidor pessoal (32 instâncias)
 - Migrações: `supabase/migrations/NNN_descricao.sql` — próxima = `013_`
 
-## Estado Sprint 4 — ✅ TESTES CONCLUÍDOS (19/02/2026)
+## Estado Sprint 4 — ✅ STRESS TEST COMPLETO (19/02/2026)
 
 ### O que funciona 100%
 ✅ Login/autenticação
-✅ Dashboard com métricas reais
-✅ Lista de clientes (2 ativos)
-✅ **Seletor de grupos WhatsApp** — dropdown com busca, 168 grupos carregados em ~30s
-✅ **Conectar grupo ao cliente** — 1 click, salva automaticamente
-✅ **Análise manual** — "Rodar análise agora" gera Health Score em ~40s
-✅ **Health Score gerado** — 50 (Risco Médio), 3 flags (no_payment_data, 2x no_form_response)
-✅ **Webhook Evolution** — re-registrado com `zerochurn.brandosystem.com`
-✅ **Serviços/Produtos** — carregados do localStorage (consistente com Configurações)
+✅ Dashboard com métricas reais (R$ 7.500 recorrente, 2 clientes)
+✅ Lista de clientes com filtros
+✅ **Seletor de grupos WhatsApp** — dropdown com busca, 168 grupos em ~30s, 1 click para conectar
+✅ **Conectar grupo ao cliente** — conectou "[ACL.GPS] Elite Agência" com sucesso
+✅ **Análise manual** — gerou Health Score 50 em ~40s
+✅ **Webhook Evolution** — re-registrado para `zerochurn.brandosystem.com`
+✅ **Campo "Produto vendido"** — corrigido (produtos agora persistem e aparecem no select)
 
-### Bugs encontrados e status
-| Bug | Severidade | Status |
-|-----|------------|--------|
-| Nome do grupo não aparece ao reload (só ID mascarado) | 🟡 P2 | Não bloqueia — funciona ao conectar |
-| `no_payment_data` mesmo com Asaas conectado | 🔴 P0 | Investigar orchestrator |
-| "Renova em: NaN dias" | 🟡 P1 | Falta contract_end_date no cliente |
+### Bugs corrigidos (19/02)
+| Bug | Commit | Status |
+|-----|--------|--------|
+| Produtos não aparecem ao cadastrar cliente | `74c2f68` | ✅ **RESOLVIDO** — agora lê produtos (não serviços) de `localStorage` |
+| Webhook Evolution com URL antiga | `3bec7fa` | ✅ **RESOLVIDO** — re-registrado manualmente |
+| Serviços em vez de produtos | `74c2f68` | ✅ **RESOLVIDO** — `zc_produtos_v1` com persistência |
 
-### Próximos passos (ordem de prioridade)
+### Bugs conhecidos (aguardando correção)
+| Bug | Severidade | Próxima ação |
+|-----|------------|--------------|
+| `no_payment_data` mesmo com Asaas conectado | 🔴 P0 | Investigar orchestrator/data-fetcher |
+| "Renova em: NaN dias" | 🟡 P1 | Adicionar `contract_end_date` no cadastro |
+| Nome do grupo desaparece ao reload | 🟡 P2 | Migração 013: coluna `whatsapp_group_name` |
+
+### Próximos passos
 **P0 — Bloqueantes:**
-1. ⚠️ **Fix orchestrator** — não está buscando dados do Asaas (flag `no_payment_data` incorreta)
-2. ⚠️ **Verificar mensagens WhatsApp** — webhook registrado, mas não testamos se mensagens chegam
+1. **Fix orchestrator** — não está buscando dados do Asaas
+2. **Verificar mensagens webhook** — testar se mensagens reais chegam no banco
 
 **P1 — Importantes:**
-3. Salvar `group_name` no banco (campo `whatsapp_group_name` em `clients`)
-4. Contract end date — fix cálculo "Renova em X dias"
+3. Migração 013: `whatsapp_group_name` em `clients`
+4. Contract end date no cadastro de cliente
 5. Email templates persistence
-6. Serviços/Produtos no banco (migração)
-
-**P2 — Polish:**
-7. Dashboard: gráfico churn histórico real
-8. LGPD: exclusão de conta
-9. Painel operacional: custo OpenAI
 
 ## WhatsApp — infra
 
@@ -67,26 +66,36 @@ SaaS B2B para agências digitais. Monitora saúde dos clientes via **Health Scor
 ```
 GET /group/fetchAllGroups/{instanceName}?getParticipants=false
 ```
-⚠️ `/group/findGroupInfos` exige groupJid — NÃO use para listar todos
 
 ### Webhook
 - **URL:** `https://zerochurn.brandosystem.com/api/whatsapp/webhook`
-- **Status:** ✅ Registrado e ativo (atualizado em 19/02/2026)
+- **Status:** ✅ Ativo (atualizado 19/02/2026)
 - **Events:** `MESSAGES_UPSERT`, `CONNECTION_UPDATE`
 
 ### Fluxo
 ```
-WhatsApp → Evolution webhook → POST /api/whatsapp/webhook
-         → salva whatsapp_messages
-         → análise lê do DB
+WhatsApp → Evolution webhook → whatsapp_messages → análise lê do DB
 ```
+
+## Produtos vs Serviços
+
+### Serviços (localStorage: `zc_servicos_v1`)
+- Componentes individuais (ex: "SEO On-page", "Gestão de Redes Sociais")
+- Sem campo `type` (genéricos)
+- Gerenciados em: Configurações → Serviços
+
+### Produtos (localStorage: `zc_produtos_v1`)
+- Pacotes que agrupam serviços (ex: "Tríade Gestão Comercial")
+- Têm `entregaveis` e `bonus` (listas de ServiceItem)
+- **Aparecem no campo "Método / Produto vendido"** ao cadastrar cliente
+- Gerenciados em: Configurações → Produtos
 
 ## Crons (4 total)
 ```
-"0 9 * * *"   → monthly-analysis      (Proximidade semanal + NPS mensal)
+"0 9 * * *"   → monthly-analysis
 "0 8 * * *"   → form-reminders
 "0 8 * * 1"   → check-integrations
-"0 3 * * 0"   → purge-messages         (deleta >90 dias, domingo 03h)
+"0 3 * * 0"   → purge-messages
 ```
 
 ## Variáveis de ambiente (Vercel)
@@ -98,14 +107,7 @@ OPENAI_API_KEY=(internalized)
 + Supabase, Resend, CRON_SECRET
 ```
 
-## Decisões arquiteturais
-- Análise Proximidade = semanal; NPS/Resultado = mensal
-- Peso semana recente via prompt (não fórmula)
-- OpenAI internalized: sem BYOK
-- WhatsApp QR Code only: agência escaneia
-- Purge: mensagens >90 dias, lotes de 1.000
-- `toErrorMsg(err)`: trata todos os tipos
-- fetchAllGroups sem participants = rápido
-
-## Último commit
-`3bec7fa` — feat: seletor de grupo WhatsApp + correções críticas
+## Últimos commits
+- `74c2f68` — fix: campo Produto vendido vazio (produtos agora persistem)
+- `3bec7fa` — feat: seletor de grupo WhatsApp + webhook corrigido
+- `4cf34d7` — docs: stress test completo
