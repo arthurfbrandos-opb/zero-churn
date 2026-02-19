@@ -1333,7 +1333,7 @@ function EvolutionIntegCard() {
       icon={MessageCircle}
       name="WhatsApp"
       color="bg-emerald-500/15 text-emerald-400"
-      description="Análise de sentimento dos grupos via número dedicado"
+      description="Análise de sentimento — somente mensagens de grupos vinculados"
       status={cardStatus}>
 
       {/* Loading */}
@@ -1350,8 +1350,19 @@ function EvolutionIntegCard() {
             <Check className="w-3.5 h-3.5" />
             Número conectado{phone ? `: +${phone}` : ''}
           </p>
+          {/* Aviso: somente grupos */}
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 text-xs space-y-1">
+            <p className="text-amber-400 font-medium flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              Somente mensagens de grupos são coletadas
+            </p>
+            <p className="text-amber-400/70 leading-relaxed">
+              Mensagens privadas (conversas individuais) <strong className="text-amber-400">nunca</strong> são lidas.
+              O histórico de análise depende exclusivamente dos grupos vinculados — quanto mais
+              ativo o grupo, mais precisa a análise de sentimento.
+            </p>
+          </div>
           <p className="text-zinc-500 text-xs">
-            As mensagens dos grupos chegam automaticamente.
             Vincule cada grupo no cadastro do cliente em{' '}
             <span className="text-zinc-300">Clientes → Integrações</span>.
           </p>
@@ -1428,6 +1439,16 @@ function EvolutionIntegCard() {
             <p>2. Abra WhatsApp no celular do número dedicado</p>
             <p>3. Vá em <span className="text-zinc-200">Dispositivos vinculados → Vincular dispositivo</span></p>
             <p>4. Aponte a câmera para o QR Code</p>
+          </div>
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 text-xs space-y-1">
+            <p className="text-amber-400 font-medium flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              Somente grupos são monitorados
+            </p>
+            <p className="text-amber-400/70 leading-relaxed">
+              Apenas mensagens de <strong className="text-amber-400">grupos vinculados</strong> a clientes são coletadas.
+              Conversas privadas são ignoradas. Quanto mais ativo o grupo, mais rico o histórico de análise.
+            </p>
           </div>
           {errMsg && (
             <p className="text-red-400 text-xs flex items-center gap-1">
