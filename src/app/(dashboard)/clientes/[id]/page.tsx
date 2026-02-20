@@ -1294,6 +1294,38 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
   const [wppSearch,        setWppSearch]         = useState('')
   const [wppGroupName,     setWppGroupName]      = useState<string | null>(client.whatsappGroupName ?? null)
 
+  async function searchGroupByName() {
+    if (!wppSearchByName.trim()) return
+    
+    setWppSearchLoading(true)
+    setWppGroupsError(null)
+    setWppGroups(null)
+    
+    try {
+      const res = await fetch('/api/whatsapp/search-group', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupName: wppSearchByName })
+      })
+      
+      const data = await res.json()
+      
+      if (!res.ok) {
+        setWppGroupsError(data.error || 'Erro ao buscar grupo')
+        return
+      }
+      
+      console.log(`[WhatsApp] ✅ Encontrado ${data.groups.length} grupo(s)`)
+      setWppGroups(data.groups)
+      
+    } catch (err) {
+      console.error('[WhatsApp] ❌ Erro:', err)
+      setWppGroupsError('Erro ao buscar grupo')
+    } finally {
+      setWppSearchLoading(false)
+    }
+  }
+
   async function loadWppGroups() {
     setWppGroupsLoading(true); setWppGroupsError(null)
     
@@ -1897,26 +1929,10 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
                     </Button>
                   </div>
                   <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-2.5 space-y-1.5">
-                    <p className="text-blue-300 text-xs font-medium">💡 Como pegar o ID do grupo (CORRETO):</p>
-                    <ol className="text-zinc-400 text-xs space-y-1.5 ml-4 list-decimal">
-                      <li>Abra o <strong className="text-zinc-300">WhatsApp Web</strong> (web.whatsapp.com)</li>
-                      <li>Clique no <strong className="text-zinc-300">grupo do cliente</strong> na lista</li>
-                      <li>
-                        <strong className="text-emerald-400">Copie a URL do navegador</strong> (barra de endereço)
-                        <p className="text-zinc-500 text-xs mt-0.5 italic">
-                          Exemplo: web.whatsapp.com/.../<span className="text-emerald-400">120363194712345-987654321@g.us</span>
-                        </p>
-                      </li>
-                      <li>Cole aqui - o sistema extrai o ID automaticamente ✨</li>
-                    </ol>
-                    <div className="border-t border-blue-500/20 pt-1.5 mt-1.5">
-                      <p className="text-yellow-300/80 text-xs">
-                        ⚠️ <strong>NÃO</strong> use o "link de convite" - não funciona!
-                      </p>
-                      <p className="text-zinc-500 text-xs mt-0.5">
-                        Use apenas o ID da URL do navegador quando o grupo está aberto.
-                      </p>
-                    </div>
+                    <p className="text-blue-300 text-xs font-medium">💡 Não consegue pegar o ID?</p>
+                    <p className="text-zinc-400 text-xs">
+                      Use a <strong className="text-emerald-400">busca por nome</strong> abaixo - é mais fácil! 👇
+                    </p>
                   </div>
                 </div>
 
@@ -1925,22 +1941,33 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
                     <span className="w-full border-t border-zinc-800" />
                   </div>
                   <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-zinc-900 px-2 text-zinc-600">busca automática (pode dar timeout)</span>
+                    <span className="bg-zinc-900 px-2 text-zinc-600">ou busque por nome</span>
                   </div>
                 </div>
 
-                {/* Nenhum grupo carregado ainda */}
-                {!wppGroups && !wppGroupsLoading && (
-                  <div className="space-y-2">
-                    <Button size="sm" variant="outline" onClick={loadWppGroups}
-                      className="border-zinc-600 text-zinc-300 hover:text-white gap-1.5 w-full text-xs">
-                      <Search className="w-3.5 h-3.5" /> Buscar grupos automaticamente
+                {/* Busca por nome do grupo */}
+                <div className="space-y-2">
+                  <Label className="text-zinc-400 text-xs">Digite o nome do grupo</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Ex: Caterine"
+                      value={wppSearchByName}
+                      onChange={e => setWppSearchByName(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && searchGroupByName()}
+                      className="flex-1 bg-zinc-800 border-zinc-700 text-zinc-200 placeholder:text-zinc-600 text-xs"
+                    />
+                    <Button size="sm"
+                      onClick={searchGroupByName}
+                      disabled={!wppSearchByName.trim() || wppSearchLoading}
+                      className="bg-blue-500 hover:bg-blue-600 text-white gap-1.5 shrink-0">
+                      {wppSearchLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                      Buscar
                     </Button>
-                    <p className="text-yellow-400/70 text-xs bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-2.5 py-1.5">
-                      ⚠️ Se tiver muitos grupos, pode dar timeout. Use o input manual acima.
-                    </p>
                   </div>
-                )}
+                  <p className="text-zinc-600 text-xs">
+                    Digite o nome do grupo e clique em Buscar. Vai listar os grupos que contém esse nome.
+                  </p>
+                </div>
 
                 {/* Carregando */}
                 {wppGroupsLoading && (
