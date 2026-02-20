@@ -582,12 +582,29 @@ function NovoClientePageInner() {
 
   // Produtos da agência — lê do localStorage (produtos = métodos de entrega)
   type AgencyProduct = { id: string; name: string; isActive: boolean; entregaveis: ServiceItem[]; bonus: ServiceItem[] }
+  type AgencyService = { id: string; name: string; description?: string; isActive: boolean }
   const [agencyProducts, setAgencyProducts] = useState<AgencyProduct[]>([])
+  const [agencyServices, setAgencyServices] = useState<AgencyService[]>([])
+  
   useEffect(() => {
     try {
-      const raw = localStorage.getItem('zc_produtos_v1')
-      if (raw) {
-        setAgencyProducts(JSON.parse(raw))
+      // Carrega serviços ativos
+      const rawServices = localStorage.getItem('zc_servicos_v1')
+      const allServices: AgencyService[] = rawServices ? JSON.parse(rawServices) : []
+      const activeServiceIds = new Set(allServices.filter(s => s.isActive).map(s => s.id))
+      setAgencyServices(allServices.filter(s => s.isActive))
+      
+      // Carrega produtos e filtra para mostrar apenas serviços ativos
+      const rawProducts = localStorage.getItem('zc_produtos_v1')
+      if (rawProducts) {
+        const produtos: AgencyProduct[] = JSON.parse(rawProducts)
+        // Filtra entregáveis e bônus para mostrar apenas serviços ativos
+        const produtosFiltrados = produtos.map(p => ({
+          ...p,
+          entregaveis: p.entregaveis.filter(e => activeServiceIds.has(e.id)),
+          bonus: p.bonus.filter(b => activeServiceIds.has(b.id))
+        }))
+        setAgencyProducts(produtosFiltrados)
       } else {
         // Fallback: produtos hardcoded se não houver nada salvo
         setAgencyProducts([
