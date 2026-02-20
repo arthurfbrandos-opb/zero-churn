@@ -14,8 +14,10 @@ import { getAgencyEvolutionConfig } from '@/lib/evolution/agency-config'
 import { listGroups } from '@/lib/evolution/client'
 import { toErrorMsg } from '@/lib/utils'
 
-// Aumenta o timeout desta rota para 120s (pode demorar muito com 100+ grupos)
-export const maxDuration = 120
+// NOTA: maxDuration pode não funcionar no Vercel Hobby (plano gratuito)
+// Vercel Hobby tem limite de 10s para Serverless Functions
+// Vercel Pro tem limite configurável até 300s
+export const maxDuration = 60 // Reduzido para 60s (mais realista)
 
 export async function GET(req: NextRequest) {
   try {
@@ -40,24 +42,41 @@ export async function GET(req: NextRequest) {
     // Filtro opcional por nome
     const search = req.nextUrl.searchParams.get('q')?.toLowerCase() ?? ''
 
-    console.log('[GET /api/whatsapp/groups] Fetching groups (can take ~30-60s)...')
+    console.log('[GET /api/whatsapp/groups] Fetching groups (timeout: 55s)...')
     const startTime = Date.now()
     
-    const groups = await listGroups(config)
+    // Cria AbortController com timeout de 55s (antes do timeout do Vercel)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 55000)
     
-    const duration = Math.round((Date.now() - startTime) / 1000)
-    console.log(`[GET /api/whatsapp/groups] Fetched ${groups.length} groups in ${duration}s`)
+    try {
+      const groups = await listGroups(config, controller.signal)
+      clearTimeout(timeoutId)
+      
+      const duration = Math.round((Date.now() - startTime) / 1000)
+      console.log(`[GET /api/whatsapp/groups] ✅ Fetched ${groups.length} groups in ${duration}s`)
 
-    const filtered = groups
-      .filter(g => !search || g.subject.toLowerCase().includes(search))
-      .sort((a, b) => a.subject.localeCompare(b.subject, 'pt-BR'))
-      .map(g => ({
-        id:           g.id,
-        name:         g.subject,
-        participants: g.participants?.length ?? 0,
-      }))
+      const filtered = groups
+        .filter(g => !search || g.subject.toLowerCase().includes(search))
+        .sort((a, b) => a.subject.localeCompare(b.subject, 'pt-BR'))
+        .map(g => ({
+          id:           g.id,
+          name:         g.subject,
+          participants: g.participants?.length ?? 0,
+        }))
 
-    return NextResponse.json({ groups: filtered, total: groups.length })
+      return NextResponse.json({ groups: filtered, total: groups.length })
+    } catch (abortErr) {
+      clearTimeout(timeoutId)
+      if (abortErr instanceof Error && abortErr.name === 'AbortError') {
+        console.error('[GET /api/whatsapp/groups] ❌ Timeout após 55s')
+        return NextResponse.json({ 
+          error: 'Timeout: Muitos grupos. Use input manual do ID do grupo.',
+          suggestion: 'Digite o ID do grupo manualmente (ex: 120363xxxxx@g.us)'
+        }, { status: 408 })
+      }
+      throw abortErr
+    }
   } catch (err) {
     const msg = toErrorMsg(err)
     console.error('[GET /api/whatsapp/groups]', msg)
