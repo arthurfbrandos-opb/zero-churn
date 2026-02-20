@@ -1859,25 +1859,49 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
 
                 {/* Input manual de grupo ID (sempre visível) */}
                 <div className="space-y-2">
-                  <Label className="text-zinc-400 text-xs">Conectar grupo manualmente</Label>
+                  <Label className="text-zinc-400 text-xs font-medium">📱 Conectar grupo WhatsApp</Label>
                   <div className="flex gap-2">
                     <Input
-                      placeholder="Cole o ID do grupo (ex: 120363xxxxx@g.us)"
+                      placeholder="Cole o link ou ID do grupo"
                       value={wppGroupId}
-                      onChange={e => setWppGroupId(e.target.value)}
+                      onChange={e => {
+                        let value = e.target.value.trim()
+                        // Extrai ID do link do WhatsApp se colar um link
+                        if (value.includes('chat.whatsapp.com/')) {
+                          // Link de convite - pega o código
+                          const match = value.match(/chat\.whatsapp\.com\/([A-Za-z0-9]+)/)
+                          if (match) {
+                            value = match[1] // Código de convite
+                          }
+                        } else if (value.includes('@g.us')) {
+                          // Já é um ID de grupo - não precisa fazer nada
+                        } else if (/^\d+$/.test(value)) {
+                          // Só números - adiciona @g.us
+                          value = `${value}@g.us`
+                        }
+                        setWppGroupId(value)
+                      }}
                       className="flex-1 bg-zinc-800 border-zinc-700 text-zinc-200 placeholder:text-zinc-600 text-xs"
                     />
                     <Button size="sm"
                       onClick={() => handleWppConnect(wppGroupId)}
                       disabled={!wppGroupId.trim() || wppConnecting}
                       className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1.5 shrink-0">
-                      {wppConnecting && wppGroupId ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}
+                      {wppConnecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}
                       Conectar
                     </Button>
                   </div>
-                  <p className="text-zinc-600 text-xs">
-                    Para pegar o ID: abra o grupo no WhatsApp Web → clique no nome → copie o link → ID está na URL
-                  </p>
+                  <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-2.5 space-y-1.5">
+                    <p className="text-blue-300 text-xs font-medium">💡 Como pegar o ID do grupo:</p>
+                    <ol className="text-zinc-400 text-xs space-y-1 ml-4 list-decimal">
+                      <li>Abra o <strong className="text-zinc-300">WhatsApp Web</strong> (web.whatsapp.com)</li>
+                      <li>Abra o <strong className="text-zinc-300">grupo do cliente</strong></li>
+                      <li>Clique no <strong className="text-zinc-300">nome do grupo</strong> (topo)</li>
+                      <li>Clique em <strong className="text-zinc-300">"Dados do grupo"</strong></li>
+                      <li>Role até o final e clique em <strong className="text-zinc-300">"Link do convite"</strong></li>
+                      <li>Copie e cole aqui - o sistema extrai o ID automaticamente ✨</li>
+                    </ol>
+                  </div>
                 </div>
 
                 <div className="relative">
@@ -1885,16 +1909,21 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
                     <span className="w-full border-t border-zinc-800" />
                   </div>
                   <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-zinc-900 px-2 text-zinc-600">ou busque automaticamente</span>
+                    <span className="bg-zinc-900 px-2 text-zinc-600">busca automática (pode dar timeout)</span>
                   </div>
                 </div>
 
                 {/* Nenhum grupo carregado ainda */}
                 {!wppGroups && !wppGroupsLoading && (
-                  <Button size="sm" variant="outline" onClick={loadWppGroups}
-                    className="border-zinc-600 text-zinc-300 hover:text-white gap-1.5 w-full text-xs">
-                    <MessageCircle className="w-3.5 h-3.5" /> Buscar grupos automaticamente
-                  </Button>
+                  <div className="space-y-2">
+                    <Button size="sm" variant="outline" onClick={loadWppGroups}
+                      className="border-zinc-600 text-zinc-300 hover:text-white gap-1.5 w-full text-xs">
+                      <Search className="w-3.5 h-3.5" /> Buscar grupos automaticamente
+                    </Button>
+                    <p className="text-yellow-400/70 text-xs bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-2.5 py-1.5">
+                      ⚠️ Se tiver muitos grupos, pode dar timeout. Use o input manual acima.
+                    </p>
+                  </div>
                 )}
 
                 {/* Carregando */}
