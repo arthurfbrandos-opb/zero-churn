@@ -168,27 +168,59 @@ export async function getActiveSubscriptions(apiKey: string, customerId: string)
 
 /**
  * Retorna o valor mensal recorrente de um customer (0 se não tiver assinatura ativa)
+ * 
+ * IMPORTANTE: Se houver múltiplas subscriptions ativas (ex: upgrade de preço),
+ * considera apenas a VIGENTE baseada no nextDueDate mais próximo.
  */
 export async function getCustomerMrr(apiKey: string, customerId: string): Promise<number> {
   try {
     const res = await getActiveSubscriptions(apiKey, customerId)
     if (!res.data.length) return 0
 
-    return res.data.reduce((total, sub) => {
-      // Normaliza tudo para valor mensal
-      const monthly = (() => {
-        switch (sub.cycle) {
-          case 'WEEKLY':       return sub.value * 4.33
-          case 'BIWEEKLY':     return sub.value * 2.17
-          case 'MONTHLY':      return sub.value
-          case 'QUARTERLY':    return sub.value / 3
-          case 'SEMIANNUALLY': return sub.value / 6
-          case 'YEARLY':       return sub.value / 12
-          default:             return sub.value
+    // Se houver múltiplas subscriptions, pega apenas a vigente (nextDueDate mais próximo)
+    let subscriptionVigente = res.data[0]
+    
+    if (res.data.length > 1) {
+      const hoje = new Date()
+      
+      // Ordena por nextDueDate (mais próximo primeiro)
+      const subsOrdenadas = [...res.data].sort((a, b) => {
+        const dateA = new Date(a.nextDueDate)
+        const dateB = new Date(b.nextDueDate)
+        
+        // Se ambas são futuras, pega a mais próxima
+        if (dateA >= hoje && dateB >= hoje) {
+          return dateA.getTime() - dateB.getTime()
         }
-      })()
-      return total + monthly
-    }, 0)
+        
+        // Se uma é passada e outra futura, pega a futura
+        if (dateA < hoje && dateB >= hoje) return 1
+        if (dateB < hoje && dateA >= hoje) return -1
+        
+        // Se ambas são passadas, pega a mais recente
+        return dateB.getTime() - dateA.getTime()
+      })
+      
+      subscriptionVigente = subsOrdenadas[0]
+      
+      console.log(`[asaas/client] Cliente ${customerId} tem ${res.data.length} subscriptions ativas`)
+      console.log(`[asaas/client] Subscription vigente: ID=${subscriptionVigente.id}, nextDueDate=${subscriptionVigente.nextDueDate}, value=${subscriptionVigente.value}`)
+    }
+
+    // Normaliza para valor mensal
+    const monthly = (() => {
+      switch (subscriptionVigente.cycle) {
+        case 'WEEKLY':       return subscriptionVigente.value * 4.33
+        case 'BIWEEKLY':     return subscriptionVigente.value * 2.17
+        case 'MONTHLY':      return subscriptionVigente.value
+        case 'QUARTERLY':    return subscriptionVigente.value / 3
+        case 'SEMIANNUALLY': return subscriptionVigente.value / 6
+        case 'YEARLY':       return subscriptionVigente.value / 12
+        default:             return subscriptionVigente.value
+      }
+    })()
+    
+    return monthly
   } catch {
     return 0
   }
