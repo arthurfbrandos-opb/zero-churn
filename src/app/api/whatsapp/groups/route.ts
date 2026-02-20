@@ -42,16 +42,12 @@ export async function GET(req: NextRequest) {
     // Filtro opcional por nome
     const search = req.nextUrl.searchParams.get('q')?.toLowerCase() ?? ''
 
-    console.log('[GET /api/whatsapp/groups] Fetching groups (timeout: 55s)...')
+    console.log('[GET /api/whatsapp/groups] Fetching groups (may take 30-60s)...')
     const startTime = Date.now()
     
-    // Cria AbortController com timeout de 55s (antes do timeout do Vercel)
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 55000)
-    
     try {
-      const groups = await listGroups(config, controller.signal)
-      clearTimeout(timeoutId)
+      // listGroups já tem timeout interno de 45s
+      const groups = await listGroups(config)
       
       const duration = Math.round((Date.now() - startTime) / 1000)
       console.log(`[GET /api/whatsapp/groups] ✅ Fetched ${groups.length} groups in ${duration}s`)
@@ -66,16 +62,16 @@ export async function GET(req: NextRequest) {
         }))
 
       return NextResponse.json({ groups: filtered, total: groups.length })
-    } catch (abortErr) {
-      clearTimeout(timeoutId)
-      if (abortErr instanceof Error && abortErr.name === 'AbortError') {
-        console.error('[GET /api/whatsapp/groups] ❌ Timeout após 55s')
+    } catch (fetchErr) {
+      // Se for timeout do Evolution API (AbortError), retorna 408
+      if (fetchErr instanceof Error && (fetchErr.name === 'AbortError' || fetchErr.message.includes('aborted'))) {
+        console.error('[GET /api/whatsapp/groups] ❌ Timeout da Evolution API')
         return NextResponse.json({ 
           error: 'Timeout: Muitos grupos. Use input manual do ID do grupo.',
           suggestion: 'Digite o ID do grupo manualmente (ex: 120363xxxxx@g.us)'
         }, { status: 408 })
       }
-      throw abortErr
+      throw fetchErr
     }
   } catch (err) {
     const msg = toErrorMsg(err)
