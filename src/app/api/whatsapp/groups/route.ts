@@ -14,8 +14,8 @@ import { getAgencyEvolutionConfig } from '@/lib/evolution/agency-config'
 import { listGroups } from '@/lib/evolution/client'
 import { toErrorMsg } from '@/lib/utils'
 
-// Aumenta o timeout desta rota para 60s (Vercel default é 10s)
-export const maxDuration = 60
+// Aumenta o timeout desta rota para 120s (pode demorar muito com 100+ grupos)
+export const maxDuration = 120
 
 export async function GET(req: NextRequest) {
   try {
@@ -40,7 +40,13 @@ export async function GET(req: NextRequest) {
     // Filtro opcional por nome
     const search = req.nextUrl.searchParams.get('q')?.toLowerCase() ?? ''
 
+    console.log('[GET /api/whatsapp/groups] Fetching groups (can take ~30-60s)...')
+    const startTime = Date.now()
+    
     const groups = await listGroups(config)
+    
+    const duration = Math.round((Date.now() - startTime) / 1000)
+    console.log(`[GET /api/whatsapp/groups] Fetched ${groups.length} groups in ${duration}s`)
 
     const filtered = groups
       .filter(g => !search || g.subject.toLowerCase().includes(search))

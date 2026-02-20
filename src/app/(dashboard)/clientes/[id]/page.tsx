@@ -1294,13 +1294,60 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
 
   async function loadWppGroups() {
     setWppGroupsLoading(true); setWppGroupsError(null)
+    
+    // Tenta usar cache (válido por 5 minutos)
+    const CACHE_KEY = 'zc_whatsapp_groups_cache'
+    const CACHE_TTL = 5 * 60 * 1000 // 5 minutos
+    
     try {
-      const r = await fetch('/api/whatsapp/groups')
+      const cached = localStorage.getItem(CACHE_KEY)
+      if (cached) {
+        const { groups, timestamp } = JSON.parse(cached)
+        const age = Date.now() - timestamp
+        
+        // Cache ainda válido
+        if (age < CACHE_TTL) {
+          console.log(`[WhatsApp] Usando cache (${Math.round(age / 1000)}s atrás)`)
+          setWppGroups(groups)
+          setWppGroupsLoading(false)
+          return
+        }
+      }
+    } catch (err) {
+      console.warn('[WhatsApp] Erro ao ler cache:', err)
+    }
+    
+    // Cache inválido ou não existe - busca da API
+    try {
+      console.log('[WhatsApp] Buscando grupos da API (pode levar ~60s com muitos grupos)...')
+      const r = await fetch('/api/whatsapp/groups', {
+        signal: AbortSignal.timeout(120000) // 120s timeout no cliente também
+      })
       const d = await r.json()
       if (!r.ok) { setWppGroupsError(d.error ?? 'Erro ao carregar grupos'); return }
-      setWppGroups(d.groups ?? [])
-    } catch { setWppGroupsError('Erro de rede') }
-    finally { setWppGroupsLoading(false) }
+      
+      const groups = d.groups ?? []
+      setWppGroups(groups)
+      
+      // Salva no cache
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify({
+          groups,
+          timestamp: Date.now()
+        }))
+        console.log(`[WhatsApp] ${groups.length} grupos salvos no cache`)
+      } catch (err) {
+        console.warn('[WhatsApp] Erro ao salvar cache:', err)
+      }
+    } catch (err) {
+      if (err instanceof Error && err.name === 'TimeoutError') {
+        setWppGroupsError('Timeout: Muitos grupos. Tente novamente ou use busca manual.')
+      } else {
+        setWppGroupsError('Erro de rede')
+      }
+    } finally { 
+      setWppGroupsLoading(false) 
+    }
   }
 
   async function handleWppConnect(groupId: string, groupName?: string) {
