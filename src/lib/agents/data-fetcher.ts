@@ -209,9 +209,12 @@ export async function fetchPaymentsByCustomerFromDb(
   let asaasPayments: NormalizedPayment[] = []
   if (agencyAsaas?.encrypted_key && asaasIntegs.length > 0) {
     try {
-      const apiKey = await decrypt<string>(agencyAsaas.encrypted_key)
+      // IMPORTANTE: a chave está salva como objeto { api_key: "xxx" }, não como string
+      const { api_key: apiKey } = await decrypt<{ api_key: string }>(agencyAsaas.encrypted_key)
       asaasPayments = await fetchAsaasPayments(asaasIntegs, apiKey, startDate, endDate)
-    } catch { /* ignora */ }
+    } catch (err) {
+      console.error('[data-fetcher] Erro ao buscar pagamentos Asaas:', err)
+    }
   }
 
   // Dom
