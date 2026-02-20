@@ -1307,26 +1307,41 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
         
         // Cache ainda válido
         if (age < CACHE_TTL) {
-          console.log(`[WhatsApp] Usando cache (${Math.round(age / 1000)}s atrás)`)
+          console.log(`[WhatsApp] ✅ Usando cache (${Math.round(age / 1000)}s atrás)`)
           setWppGroups(groups)
           setWppGroupsLoading(false)
           return
+        } else {
+          console.log(`[WhatsApp] ⏰ Cache expirado (${Math.round(age / 1000)}s atrás)`)
         }
       }
     } catch (err) {
-      console.warn('[WhatsApp] Erro ao ler cache:', err)
+      console.warn('[WhatsApp] ⚠️ Erro ao ler cache:', err)
     }
     
     // Cache inválido ou não existe - busca da API
     try {
-      console.log('[WhatsApp] Buscando grupos da API (pode levar ~60s com muitos grupos)...')
+      console.log('[WhatsApp] 🔄 Buscando grupos da API (pode levar ~60s com muitos grupos)...')
+      const startTime = Date.now()
+      
       const r = await fetch('/api/whatsapp/groups', {
         signal: AbortSignal.timeout(120000) // 120s timeout no cliente também
       })
+      
+      const duration = Math.round((Date.now() - startTime) / 1000)
+      console.log(`[WhatsApp] 📡 Resposta recebida em ${duration}s - Status: ${r.status}`)
+      
       const d = await r.json()
-      if (!r.ok) { setWppGroupsError(d.error ?? 'Erro ao carregar grupos'); return }
+      console.log('[WhatsApp] 📦 Response data:', d)
+      
+      if (!r.ok) { 
+        console.error('[WhatsApp] ❌ Erro da API:', d)
+        setWppGroupsError(d.error ?? 'Erro ao carregar grupos')
+        return 
+      }
       
       const groups = d.groups ?? []
+      console.log(`[WhatsApp] ✅ ${groups.length} grupos recebidos`)
       setWppGroups(groups)
       
       // Salva no cache
@@ -1335,13 +1350,16 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
           groups,
           timestamp: Date.now()
         }))
-        console.log(`[WhatsApp] ${groups.length} grupos salvos no cache`)
+        console.log(`[WhatsApp] 💾 ${groups.length} grupos salvos no cache`)
       } catch (err) {
-        console.warn('[WhatsApp] Erro ao salvar cache:', err)
+        console.warn('[WhatsApp] ⚠️ Erro ao salvar cache:', err)
       }
     } catch (err) {
+      console.error('[WhatsApp] ❌ Exception:', err)
       if (err instanceof Error && err.name === 'TimeoutError') {
-        setWppGroupsError('Timeout: Muitos grupos. Tente novamente ou use busca manual.')
+        setWppGroupsError('Timeout: Muitos grupos. Tente novamente em alguns minutos.')
+      } else if (err instanceof Error) {
+        setWppGroupsError(`Erro: ${err.message}`)
       } else {
         setWppGroupsError('Erro de rede')
       }
