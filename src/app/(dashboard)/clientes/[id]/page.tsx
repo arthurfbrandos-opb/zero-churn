@@ -1862,23 +1862,28 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
                   <Label className="text-zinc-400 text-xs font-medium">📱 Conectar grupo WhatsApp</Label>
                   <div className="flex gap-2">
                     <Input
-                      placeholder="Cole o link ou ID do grupo"
+                      placeholder="Cole o ID do grupo (ex: 120363xxxxx@g.us)"
                       value={wppGroupId}
                       onChange={e => {
                         let value = e.target.value.trim()
-                        // Extrai ID do link do WhatsApp se colar um link
-                        if (value.includes('chat.whatsapp.com/')) {
-                          // Link de convite - pega o código
-                          const match = value.match(/chat\.whatsapp\.com\/([A-Za-z0-9]+)/)
+                        
+                        // Se vier da URL do WhatsApp Web, extrai o ID
+                        if (value.includes('web.whatsapp.com')) {
+                          // Tenta pegar o ID da URL (formato: /xxxxxxxx-yyyyyy@g.us ou /xxxxxxxx@g.us)
+                          const match = value.match(/\/([0-9-]+@g\.us)/)
                           if (match) {
-                            value = match[1] // Código de convite
+                            value = match[1]
                           }
-                        } else if (value.includes('@g.us')) {
-                          // Já é um ID de grupo - não precisa fazer nada
-                        } else if (/^\d+$/.test(value)) {
-                          // Só números - adiciona @g.us
+                        }
+                        // Se já tem @g.us, mantém
+                        else if (value.includes('@g.us')) {
+                          // Nada a fazer
+                        }
+                        // Se for só números com hífen, adiciona @g.us
+                        else if (/^[0-9-]+$/.test(value)) {
                           value = `${value}@g.us`
                         }
+                        
                         setWppGroupId(value)
                       }}
                       className="flex-1 bg-zinc-800 border-zinc-700 text-zinc-200 placeholder:text-zinc-600 text-xs"
@@ -1892,15 +1897,26 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
                     </Button>
                   </div>
                   <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-2.5 space-y-1.5">
-                    <p className="text-blue-300 text-xs font-medium">💡 Como pegar o ID do grupo:</p>
-                    <ol className="text-zinc-400 text-xs space-y-1 ml-4 list-decimal">
+                    <p className="text-blue-300 text-xs font-medium">💡 Como pegar o ID do grupo (CORRETO):</p>
+                    <ol className="text-zinc-400 text-xs space-y-1.5 ml-4 list-decimal">
                       <li>Abra o <strong className="text-zinc-300">WhatsApp Web</strong> (web.whatsapp.com)</li>
-                      <li>Abra o <strong className="text-zinc-300">grupo do cliente</strong></li>
-                      <li>Clique no <strong className="text-zinc-300">nome do grupo</strong> (topo)</li>
-                      <li>Clique em <strong className="text-zinc-300">"Dados do grupo"</strong></li>
-                      <li>Role até o final e clique em <strong className="text-zinc-300">"Link do convite"</strong></li>
-                      <li>Copie e cole aqui - o sistema extrai o ID automaticamente ✨</li>
+                      <li>Clique no <strong className="text-zinc-300">grupo do cliente</strong> na lista</li>
+                      <li>
+                        <strong className="text-emerald-400">Copie a URL do navegador</strong> (barra de endereço)
+                        <p className="text-zinc-500 text-xs mt-0.5 italic">
+                          Exemplo: web.whatsapp.com/.../<span className="text-emerald-400">120363194712345-987654321@g.us</span>
+                        </p>
+                      </li>
+                      <li>Cole aqui - o sistema extrai o ID automaticamente ✨</li>
                     </ol>
+                    <div className="border-t border-blue-500/20 pt-1.5 mt-1.5">
+                      <p className="text-yellow-300/80 text-xs">
+                        ⚠️ <strong>NÃO</strong> use o "link de convite" - não funciona!
+                      </p>
+                      <p className="text-zinc-500 text-xs mt-0.5">
+                        Use apenas o ID da URL do navegador quando o grupo está aberto.
+                      </p>
+                    </div>
                   </div>
                 </div>
 
