@@ -1294,38 +1294,6 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
   const [wppSearch,        setWppSearch]         = useState('')
   const [wppGroupName,     setWppGroupName]      = useState<string | null>(client.whatsappGroupName ?? null)
 
-  async function searchGroupByName() {
-    if (!wppSearchByName.trim()) return
-    
-    setWppSearchLoading(true)
-    setWppGroupsError(null)
-    setWppGroups(null)
-    
-    try {
-      const res = await fetch('/api/whatsapp/search-group', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ groupName: wppSearchByName })
-      })
-      
-      const data = await res.json()
-      
-      if (!res.ok) {
-        setWppGroupsError(data.error || 'Erro ao buscar grupo')
-        return
-      }
-      
-      console.log(`[WhatsApp] ✅ Encontrado ${data.groups.length} grupo(s)`)
-      setWppGroups(data.groups)
-      
-    } catch (err) {
-      console.error('[WhatsApp] ❌ Erro:', err)
-      setWppGroupsError('Erro ao buscar grupo')
-    } finally {
-      setWppSearchLoading(false)
-    }
-  }
-
   async function loadWppGroups() {
     setWppGroupsLoading(true); setWppGroupsError(null)
     
@@ -1928,46 +1896,22 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
                       Conectar
                     </Button>
                   </div>
-                  <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-2.5 space-y-1.5">
-                    <p className="text-blue-300 text-xs font-medium">💡 Não consegue pegar o ID?</p>
-                    <p className="text-zinc-400 text-xs">
-                      Use a <strong className="text-emerald-400">busca por nome</strong> abaixo - é mais fácil! 👇
-                    </p>
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2.5 space-y-2">
+                    <p className="text-emerald-300 text-xs font-semibold">✅ Como pegar o ID (MÉTODO QUE FUNCIONA):</p>
+                    <div className="space-y-1.5 text-zinc-400 text-xs">
+                      <p><strong className="text-zinc-300">1.</strong> Adicione seu próprio número no grupo (temporário)</p>
+                      <p><strong className="text-zinc-300">2.</strong> Abra WhatsApp no celular</p>
+                      <p><strong className="text-zinc-300">3.</strong> Entre no grupo do cliente</p>
+                      <p><strong className="text-zinc-300">4.</strong> Encaminhe qualquer mensagem do grupo para "Mensagens Arquivadas"</p>
+                      <p><strong className="text-zinc-300">5.</strong> Abra WhatsApp Web → "Arquivadas"</p>
+                      <p><strong className="text-zinc-300">6.</strong> A URL vai ter o ID: <code className="text-emerald-400 text-xs">xxxxx@g.us</code></p>
+                      <p><strong className="text-zinc-300">7.</strong> Copie e cole acima</p>
+                      <p><strong className="text-zinc-300">8.</strong> Pode sair do grupo depois ✅</p>
+                    </div>
                   </div>
                 </div>
 
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t border-zinc-800" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-zinc-900 px-2 text-zinc-600">ou busque por nome</span>
-                  </div>
-                </div>
 
-                {/* Busca por nome do grupo */}
-                <div className="space-y-2">
-                  <Label className="text-zinc-400 text-xs">Digite o nome do grupo</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Ex: Caterine"
-                      value={wppSearchByName}
-                      onChange={e => setWppSearchByName(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && searchGroupByName()}
-                      className="flex-1 bg-zinc-800 border-zinc-700 text-zinc-200 placeholder:text-zinc-600 text-xs"
-                    />
-                    <Button size="sm"
-                      onClick={searchGroupByName}
-                      disabled={!wppSearchByName.trim() || wppSearchLoading}
-                      className="bg-blue-500 hover:bg-blue-600 text-white gap-1.5 shrink-0">
-                      {wppSearchLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
-                      Buscar
-                    </Button>
-                  </div>
-                  <p className="text-zinc-600 text-xs">
-                    Digite o nome do grupo e clique em Buscar. Vai listar os grupos que contém esse nome.
-                  </p>
-                </div>
 
                 {/* Carregando */}
                 {wppGroupsLoading && (
