@@ -30,8 +30,8 @@ export async function GET() {
       }, { status: 404 })
     }
 
-    // 2. Tenta descriptografar
-    const apiKey = await decrypt<string>(agencyAsaas.encrypted_key)
+    // 2. Tenta descriptografar (formato: { api_key: "xxx" })
+    const { api_key: apiKey } = await decrypt<{ api_key: string }>(agencyAsaas.encrypted_key)
 
     // 3. Testa chamada simples à API Asaas
     const ASAAS_BASE = process.env.ASAAS_API_URL ?? 'https://api.asaas.com/v3'

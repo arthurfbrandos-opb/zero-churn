@@ -39,8 +39,8 @@ export async function GET() {
       return NextResponse.json({ error: 'API key não encontrada' }, { status: 404 })
     }
 
-    // 3. Decripta a chave
-    const apiKey = await decrypt<string>(agencyAsaas.encrypted_key)
+    // 3. Decripta a chave (formato: { api_key: "xxx" })
+    const { api_key: apiKey } = await decrypt<{ api_key: string }>(agencyAsaas.encrypted_key)
 
     // 4. Monta período
     const endDate = new Date().toISOString().slice(0, 10)
