@@ -17,6 +17,8 @@ import {
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import { ScoreGauge } from '@/components/dashboard/score-gauge'
 import { RiskBadge } from '@/components/dashboard/risk-badge'
 import { Client, ActionItem, Integration, Trend, PaymentStatus, ChurnRecord } from '@/types'
