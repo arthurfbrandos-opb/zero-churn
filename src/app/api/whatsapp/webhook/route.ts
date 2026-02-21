@@ -10,7 +10,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { decrypt } from '@/lib/supabase/encryption'
 import { extractMessageText } from '@/lib/evolution/client'
 import type { EvolutionMessage } from '@/lib/evolution/client'
 
@@ -29,17 +28,26 @@ interface WebhookPayload {
 // ── Resolve agência pelo nome da instância ────────────────────────
 
 async function resolveAgencyId(instanceName: string): Promise<string | null> {
-  const { data: integrations } = await supabase
-    .from('agency_integrations')
-    .select('agency_id, encrypted_key')
-    .eq('type', 'evolution_api')
+  // Busca direta por whatsapp_instance_name (migration 016 - tabela agencies)
+  const { data } = await supabase
+    .from('agencies')
+    .select('id')
+    .eq('whatsapp_instance_name', instanceName)
+    .maybeSingle()
 
-  for (const integ of integrations ?? []) {
-    try {
-      const creds = await decrypt<{ instance_name?: string }>(integ.encrypted_key)
-      if (creds.instance_name === instanceName) return integ.agency_id
-    } catch { /* skip */ }
+  if (data?.id) return data.id
+
+  // Fallback: convenção agency_{agencyId}
+  if (instanceName.startsWith('agency_')) {
+    const candidateId = instanceName.replace('agency_', '')
+    const { data: fallback } = await supabase
+      .from('agencies')
+      .select('id')
+      .eq('id', candidateId)
+      .maybeSingle()
+    if (fallback?.id) return fallback.id
   }
+
   return null
 }
 
