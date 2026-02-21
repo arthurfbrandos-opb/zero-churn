@@ -2,22 +2,23 @@
  * Gerenciamento de instâncias Evolution API por agência.
  *
  * Zero Churn hospeda um servidor Evolution API compartilhado (env vars).
- * Cada agência tem sua própria instância: nome = "agency-{agencyId[:8]}"
+ * Cada agência tem sua própria instância: nome = "agency_{agencyId}"
  *
- * O que fica no banco (agency_integrations.encrypted_key):
- *   { instance_name, phone_number?, connected_at? }
+ * O que fica no banco (tabela agencies - migration 016):
+ *   - whatsapp_instance_name: nome da instância (ex: agency_694e9e9e-8e69-42b8-9953-c3d9595676b9)
+ *   - whatsapp_phone: número conectado (ex: 5511999999999)
+ *   - whatsapp_connected_at: timestamp da última conexão
  *
  * A URL e API Key do servidor vêm sempre das env vars — agências nunca tocam nisso.
  */
 
 import { SupabaseClient } from '@supabase/supabase-js'
-import { encrypt, decrypt } from '@/lib/supabase/encryption'
 import { getSystemEvolutionConfig, isEvolutionConfigured } from './client'
 import type { EvolutionConfig } from './client'
 
 // Nome de instância baseado no agencyId (curto, URL-safe)
 export function instanceNameForAgency(agencyId: string): string {
-  return `agency-${agencyId.replace(/-/g, '').slice(0, 12)}`
+  return `agency_${agencyId}`
 }
 
 // ── Leitura ───────────────────────────────────────────────────────
@@ -32,6 +33,8 @@ export interface AgencyEvolutionRecord {
 /**
  * Retorna a config Evolution da agência (sistema + instância do banco).
  * Retorna null se o servidor Evolution não estiver configurado.
+ * 
+ * ATUALIZADO: Usa tabela agencies (migration 016) em vez de agency_integrations
  */
 export async function getAgencyEvolutionConfig(
   supabase:  SupabaseClient,
@@ -39,57 +42,43 @@ export async function getAgencyEvolutionConfig(
 ): Promise<EvolutionConfig | null> {
   if (!isEvolutionConfigured()) return null
 
-  // Pega nome da instância do banco (se já criada)
+  // Pega nome da instância do banco (migration 016 - tabela agencies)
   const { data } = await supabase
-    .from('agency_integrations')
-    .select('encrypted_key')
-    .eq('agency_id', agencyId)
-    .eq('type', 'evolution_api')
+    .from('agencies')
+    .select('whatsapp_instance_name')
+    .eq('id', agencyId)
     .maybeSingle()
 
-  let instanceName = instanceNameForAgency(agencyId)
-
-  if (data?.encrypted_key) {
-    try {
-      const creds = await decrypt<{ instance_name?: string }>(data.encrypted_key)
-      if (creds.instance_name) instanceName = creds.instance_name
-    } catch { /* usa o padrão */ }
-  }
+  // Usa instance_name do banco ou gera padrão
+  const instanceName = data?.whatsapp_instance_name || `agency_${agencyId}`
 
   return getSystemEvolutionConfig(instanceName)
 }
 
 /**
  * Retorna detalhes da integração WhatsApp da agência (status, número).
+ * 
+ * ATUALIZADO: Usa tabela agencies (migration 016)
  */
 export async function getAgencyEvolutionRecord(
   supabase:  SupabaseClient,
   agencyId:  string,
 ): Promise<AgencyEvolutionRecord | null> {
   const { data } = await supabase
-    .from('agency_integrations')
-    .select('encrypted_key, status')
-    .eq('agency_id', agencyId)
-    .eq('type', 'evolution_api')
+    .from('agencies')
+    .select('whatsapp_instance_name, whatsapp_phone, whatsapp_connected_at')
+    .eq('id', agencyId)
     .maybeSingle()
 
-  if (!data?.encrypted_key) return null
+  if (!data) return null
 
-  try {
-    const creds = await decrypt<{
-      instance_name?: string
-      phone_number?:  string
-      connected_at?:  string
-    }>(data.encrypted_key)
+  const hasWhatsApp = !!data.whatsapp_instance_name || !!data.whatsapp_phone
 
-    return {
-      instanceName: creds.instance_name ?? instanceNameForAgency(agencyId),
-      phoneNumber:  creds.phone_number,
-      connectedAt:  creds.connected_at,
-      status:       data.status === 'active' ? 'connected' : 'disconnected',
-    }
-  } catch {
-    return null
+  return {
+    instanceName: data.whatsapp_instance_name ?? `agency_${agencyId}`,
+    phoneNumber:  data.whatsapp_phone ?? undefined,
+    connectedAt:  data.whatsapp_connected_at ?? undefined,
+    status:       data.whatsapp_connected_at ? 'connected' : (hasWhatsApp ? 'pending' : 'disconnected'),
   }
 }
 
@@ -97,6 +86,8 @@ export async function getAgencyEvolutionRecord(
 
 /**
  * Salva/atualiza o registro da instância no banco.
+ * 
+ * ATUALIZADO: Usa tabela agencies (migration 016) - mais simples, sem criptografia
  */
 export async function saveAgencyEvolutionRecord(
   supabase:      SupabaseClient,
@@ -108,21 +99,27 @@ export async function saveAgencyEvolutionRecord(
     status?:      'active' | 'error' | 'disconnected'
   },
 ): Promise<void> {
-  const credentials = {
-    instance_name: instanceName,
-    phone_number:  opts?.phoneNumber,
-    connected_at:  opts?.connectedAt,
+  const update: {
+    whatsapp_instance_name: string
+    whatsapp_phone?: string | null
+    whatsapp_connected_at?: string | null
+  } = {
+    whatsapp_instance_name: instanceName,
   }
-  const encrypted_key = await encrypt(credentials as Record<string, unknown>)
+
+  if (opts?.phoneNumber !== undefined) {
+    update.whatsapp_phone = opts.phoneNumber
+  }
+
+  if (opts?.connectedAt !== undefined) {
+    update.whatsapp_connected_at = opts.connectedAt
+  } else if (opts?.status === 'disconnected') {
+    // Se está desconectando, limpa a data
+    update.whatsapp_connected_at = null
+  }
 
   await supabase
-    .from('agency_integrations')
-    .upsert({
-      agency_id:      agencyId,
-      type:           'evolution_api',
-      encrypted_key,
-      status:         opts?.status ?? 'active',
-      last_tested_at: new Date().toISOString(),
-      updated_at:     new Date().toISOString(),
-    }, { onConflict: 'agency_id,type' })
+    .from('agencies')
+    .update(update)
+    .eq('id', agencyId)
 }
