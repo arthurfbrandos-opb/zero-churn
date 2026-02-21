@@ -246,8 +246,9 @@ export async function fetchGroupMessages(
     let records: EvolutionMessage[]
     try {
       const data = await evo<EvolutionMessage[] | { messages: { records: EvolutionMessage[] } }>(
-        config, 'GET',
-        `/chat/findMessages/${config.instanceName}?where[key.remoteJid]=${encodeURIComponent(jid)}&limit=100&page=${page}`,
+        config, 'POST',
+        `/chat/findMessages/${config.instanceName}`,
+        { where: { key: { remoteJid: jid } }, limit: 100, page },
       )
       records = Array.isArray(data)
         ? data
