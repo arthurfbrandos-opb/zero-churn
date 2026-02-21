@@ -1297,74 +1297,31 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
   async function loadWppGroups() {
     setWppGroupsLoading(true); setWppGroupsError(null)
     
-    // Tenta usar cache (válido por 5 minutos)
-    const CACHE_KEY = 'zc_whatsapp_groups_cache'
-    const CACHE_TTL = 5 * 60 * 1000 // 5 minutos
-    
     try {
-      const cached = localStorage.getItem(CACHE_KEY)
-      if (cached) {
-        const { groups, timestamp } = JSON.parse(cached)
-        const age = Date.now() - timestamp
-        
-        // Cache ainda válido
-        if (age < CACHE_TTL) {
-          console.log(`[WhatsApp] ✅ Usando cache (${Math.round(age / 1000)}s atrás)`)
-          setWppGroups(groups)
-          setWppGroupsLoading(false)
-          return
-        } else {
-          console.log(`[WhatsApp] ⏰ Cache expirado (${Math.round(age / 1000)}s atrás)`)
-        }
-      }
-    } catch (err) {
-      console.warn('[WhatsApp] ⚠️ Erro ao ler cache:', err)
-    }
-    
-    // Cache inválido ou não existe - busca da API
-    try {
-      console.log('[WhatsApp] 🔄 Buscando grupos da API (pode levar ~60s com muitos grupos)...')
+      console.log('[WhatsApp] 🔄 Buscando grupos da agência...')
       const startTime = Date.now()
       
-      const r = await fetch('/api/whatsapp/groups', {
-        signal: AbortSignal.timeout(120000) // 120s timeout no cliente também
-      })
+      // Usa novo endpoint que lista apenas grupos da agência (rápido!)
+      const r = await fetch('/api/whatsapp/agency/groups')
       
       const duration = Math.round((Date.now() - startTime) / 1000)
-      console.log(`[WhatsApp] 📡 Resposta recebida em ${duration}s - Status: ${r.status}`)
+      console.log(`[WhatsApp] 📡 Resposta em ${duration}s - Status: ${r.status}`)
       
       const d = await r.json()
-      console.log('[WhatsApp] 📦 Response data:', d)
       
       if (!r.ok) { 
-        console.error('[WhatsApp] ❌ Erro da API:', d)
+        console.error('[WhatsApp] ❌ Erro:', d)
         setWppGroupsError(d.error ?? 'Erro ao carregar grupos')
         return 
       }
       
       const groups = d.groups ?? []
-      console.log(`[WhatsApp] ✅ ${groups.length} grupos recebidos`)
+      console.log(`[WhatsApp] ✅ ${groups.length} grupos da agência`)
       setWppGroups(groups)
       
-      // Salva no cache
-      try {
-        localStorage.setItem(CACHE_KEY, JSON.stringify({
-          groups,
-          timestamp: Date.now()
-        }))
-        console.log(`[WhatsApp] 💾 ${groups.length} grupos salvos no cache`)
-      } catch (err) {
-        console.warn('[WhatsApp] ⚠️ Erro ao salvar cache:', err)
-      }
     } catch (err) {
       console.error('[WhatsApp] ❌ Exception:', err)
-      if (err instanceof Error && err.name === 'TimeoutError') {
-        setWppGroupsError('Timeout: Muitos grupos. Tente novamente em alguns minutos.')
-      } else if (err instanceof Error) {
-        setWppGroupsError(`Erro: ${err.message}`)
-      } else {
-        setWppGroupsError('Erro de rede')
-      }
+      setWppGroupsError(err instanceof Error ? err.message : 'Erro ao buscar grupos')
     } finally { 
       setWppGroupsLoading(false) 
     }
@@ -1857,58 +1814,21 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
                   </div>
                 )}
 
-                {/* Input manual de grupo ID (sempre visível) */}
+                {/* Busca de grupos da agência (botão único) */}
                 <div className="space-y-2">
-                  <Label className="text-zinc-400 text-xs font-medium">📱 Conectar grupo WhatsApp</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Cole o ID do grupo (ex: 120363xxxxx@g.us)"
-                      value={wppGroupId}
-                      onChange={e => {
-                        let value = e.target.value.trim()
-                        
-                        // Se vier da URL do WhatsApp Web, extrai o ID
-                        if (value.includes('web.whatsapp.com')) {
-                          // Tenta pegar o ID da URL (formato: /xxxxxxxx-yyyyyy@g.us ou /xxxxxxxx@g.us)
-                          const match = value.match(/\/([0-9-]+@g\.us)/)
-                          if (match) {
-                            value = match[1]
-                          }
-                        }
-                        // Se já tem @g.us, mantém
-                        else if (value.includes('@g.us')) {
-                          // Nada a fazer
-                        }
-                        // Se for só números com hífen, adiciona @g.us
-                        else if (/^[0-9-]+$/.test(value)) {
-                          value = `${value}@g.us`
-                        }
-                        
-                        setWppGroupId(value)
-                      }}
-                      className="flex-1 bg-zinc-800 border-zinc-700 text-zinc-200 placeholder:text-zinc-600 text-xs"
-                    />
-                    <Button size="sm"
-                      onClick={() => handleWppConnect(wppGroupId)}
-                      disabled={!wppGroupId.trim() || wppConnecting}
-                      className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1.5 shrink-0">
-                      {wppConnecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}
-                      Conectar
-                    </Button>
-                  </div>
-                  <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2.5 space-y-2">
-                    <p className="text-emerald-300 text-xs font-semibold">✅ Como pegar o ID (MÉTODO QUE FUNCIONA):</p>
-                    <div className="space-y-1.5 text-zinc-400 text-xs">
-                      <p><strong className="text-zinc-300">1.</strong> Adicione seu próprio número no grupo (temporário)</p>
-                      <p><strong className="text-zinc-300">2.</strong> Abra WhatsApp no celular</p>
-                      <p><strong className="text-zinc-300">3.</strong> Entre no grupo do cliente</p>
-                      <p><strong className="text-zinc-300">4.</strong> Encaminhe qualquer mensagem do grupo para "Mensagens Arquivadas"</p>
-                      <p><strong className="text-zinc-300">5.</strong> Abra WhatsApp Web → "Arquivadas"</p>
-                      <p><strong className="text-zinc-300">6.</strong> A URL vai ter o ID: <code className="text-emerald-400 text-xs">xxxxx@g.us</code></p>
-                      <p><strong className="text-zinc-300">7.</strong> Copie e cole acima</p>
-                      <p><strong className="text-zinc-300">8.</strong> Pode sair do grupo depois ✅</p>
-                    </div>
-                  </div>
+                  <Label className="text-zinc-400 text-xs font-medium">📱 Selecione o grupo WhatsApp</Label>
+                  <Button size="sm" variant="outline" onClick={loadWppGroups}
+                    disabled={wppGroupsLoading}
+                    className="border-emerald-600 text-emerald-400 hover:bg-emerald-500/10 gap-1.5 w-full text-xs">
+                    {wppGroupsLoading ? (
+                      <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Carregando grupos...</>
+                    ) : (
+                      <><MessageCircle className="w-3.5 h-3.5" /> Selecionar Grupo do Cliente</>
+                    )}
+                  </Button>
+                  <p className="text-zinc-600 text-xs">
+                    ⚡ Rápido! Lista apenas os grupos do WhatsApp conectado em Configurações.
+                  </p>
                 </div>
 
 
