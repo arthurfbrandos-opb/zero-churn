@@ -34,13 +34,15 @@ stories/
 - ⏳ `story-wpp-4-sentiment-analysis.md` - Análise de sentimento (Next)
 
 ### **2. Epic Health Score** (`epic-health-score/`)
-**Status:** 🟡 Planejado  
-**Objetivo:** Sistema de análise de saúde do cliente
+**Status:** ✅ Concluido (5/5 stories)
+**Objetivo:** Motor de IA preditiva com 4 agentes + orquestrador
 
 **Stories:**
-- ⏳ `story-hs-1-calculation.md` - Cálculo automático
-- ⏳ `story-hs-2-alerts.md` - Sistema de alertas
-- ⏳ `story-hs-3-trends.md` - Análise de tendências
+- ✅ `story-hs-1-financial-agent.md` - Agente Financeiro (35%)
+- ✅ `story-hs-2-nps-agent.md` - Agente NPS + Resultado (25% + 10%)
+- ✅ `story-hs-3-proximity-agent.md` - Agente Proximidade (30%)
+- ✅ `story-hs-4-diagnostic-agent.md` - Agente Diagnostico (GPT-4o)
+- ✅ `story-hs-5-orchestrator.md` - Orquestrador de Analise
 
 ### **3. Epic Forms** (`epic-forms/`)
 **Status:** 🟡 Planejado  
@@ -121,7 +123,7 @@ Para [benefício]
 | Épico | Stories Total | Concluídas | Em Progresso | Planejadas |
 |-------|--------------|------------|--------------|------------|
 | WhatsApp | 4 | 3 | 0 | 1 |
-| Health Score | 3 | 0 | 0 | 3 |
+| Health Score | 5 | 5 | 0 | 0 |
 | Forms | - | 0 | 0 | - |
 | Dashboard | - | 0 | 0 | - |
 
@@ -146,5 +148,5 @@ Para [benefício]
 
 ---
 
-**Última atualização:** 21 Fevereiro 2026  
+**Ultima atualizacao:** 21 Fevereiro 2026
 **Metodologia:** AIOS Story-Driven Development
