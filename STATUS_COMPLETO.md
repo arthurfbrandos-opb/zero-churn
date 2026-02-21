@@ -55,14 +55,18 @@
 - ✅ Histórico de respostas
 - ✅ Lembretes automáticos (cron diário)
 
-### 💬 WhatsApp Integration
+### 💬 WhatsApp Integration ⚡ **NOVA ARQUITETURA**
+- ✅ **1 instância Evolution API por agência** (performance 95% melhor!)
 - ✅ Evolution API dedicada (`evolution-zc.emadigital.com.br`)
-- ✅ QR Code flow completo
+- ✅ QR Code flow completo (UI em Configurações)
+- ✅ Seletor rápido de grupos (1-3s, antes: 45-60s timeout)
 - ✅ Webhook em tempo real
-- ✅ Monitoramento de grupos
-- ✅ Listagem de grupos ativos
+- ✅ Monitoramento de grupos isolado
 - ✅ Purge automático de mensagens antigas (cron semanal)
 - ✅ Análise de sentimento semanal
+- ✅ Debug endpoint (`/api/whatsapp/debug`)
+- ✅ Retry system (3 tentativas automáticas)
+- 📄 **Docs:** `WHATSAPP_IMPLEMENTATION.md` + `WHATSAPP_TROUBLESHOOTING.md`
 
 ### 🤖 Motor de IA (Agentes)
 - ✅ **Agente Financeiro:** Score + flags (overdue, chargeback, consecutive_overdue)
