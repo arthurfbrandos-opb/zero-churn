@@ -78,18 +78,34 @@ export async function POST(
   // Se a Evolution não está configurada, salva sem validar (modo dev)
 
   // Salva o group_id e group_name no cliente
-  const { error } = await supabase
+  console.log('[whatsapp/connect POST] Salvando grupo:', { clientId, groupId, groupName })
+  
+  const { data: updateData, error } = await supabase
     .from('clients')
     .update({
       whatsapp_group_id: groupId,
       whatsapp_group_name: groupName,
     })
     .eq('id', clientId)
+    .select()
 
   if (error) {
-    console.error('[whatsapp/connect POST]', error)
-    return NextResponse.json({ error: 'Erro ao salvar integração' }, { status: 500 })
+    console.error('[whatsapp/connect POST] Erro ao atualizar cliente:', error)
+    return NextResponse.json({ 
+      error: 'Erro ao salvar integração',
+      details: error.message,
+      code: error.code 
+    }, { status: 500 })
   }
+
+  if (!updateData || updateData.length === 0) {
+    console.error('[whatsapp/connect POST] Cliente não encontrado ou sem permissão:', clientId)
+    return NextResponse.json({ 
+      error: 'Cliente não encontrado ou sem permissão de edição' 
+    }, { status: 404 })
+  }
+
+  console.log('[whatsapp/connect POST] Cliente atualizado com sucesso:', updateData[0])
 
   // Cria (ou atualiza) registro em client_integrations
   await supabase
