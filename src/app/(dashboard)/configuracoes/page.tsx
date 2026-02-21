@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils'
 // ── Nav sections ──────────────────────────────────────────────────
 const NAV = [
   { id: 'agencia',       label: 'Agência',           icon: Building2 },
+  { id: 'whatsapp',      label: 'WhatsApp',          icon: MessageCircle },
   { id: 'servicos',      label: 'Serviços',           icon: Wrench    },
   { id: 'produtos',      label: 'Produtos',           icon: Package   },
   { id: 'formulario',    label: 'Formulário NPS',     icon: FileText  },
@@ -2586,8 +2587,11 @@ function PrivacidadeSection() {
 export default function ConfiguracoesPage() {
   const [active, setActive] = useState('agencia')
 
+  const { WhatsAppSection } = require('./whatsapp-section')
+  
   const SECTIONS: Record<string, React.ReactNode> = {
     agencia:           <AgenciaSection />,
+    whatsapp:          <WhatsAppSection />,
     servicos:          <ServicosSection />,
     produtos:          <ProdutosSection />,
     formulario:        <FormularioSection />,
