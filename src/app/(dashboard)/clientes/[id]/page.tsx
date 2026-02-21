@@ -1294,6 +1294,19 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
   const [wppSearch,        setWppSearch]         = useState('')
   const [wppGroupName,     setWppGroupName]      = useState<string | null>(client.whatsappGroupName ?? null)
 
+  // Sentiment analysis
+  const [sentimentLoading, setSentimentLoading] = useState(false)
+  const [sentimentMsg, setSentimentMsg]         = useState('')
+  const [sentimentError, setSentimentError]     = useState<string | null>(null)
+  const [sentimentResult, setSentimentResult]   = useState<{
+    score: number | null
+    sentiment: string | null
+    engagementLevel: string | null
+    summary: string | null
+    flags: string[]
+    totalMessages: number
+  } | null>(null)
+
   async function loadWppGroups() {
     setWppGroupsLoading(true); setWppGroupsError(null)
     
@@ -1339,6 +1352,49 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
       setWppGroupName(groupName ?? null); setWppGroups(null); refetch()
     } else { setWppError(d.error ?? 'Erro ao conectar') }
     setWppConnecting(false)
+  }
+
+  async function handleSentimentAnalysis() {
+    setSentimentError(null)
+    setSentimentResult(null)
+    setSentimentLoading(true)
+
+    const steps = [
+      'Coletando mensagens do grupo…',
+      'Resumindo conversas semanais…',
+      'Analisando sentimento com IA…',
+      'Finalizando análise…',
+    ]
+    let stepIdx = 0
+    setSentimentMsg(steps[0])
+    const interval = setInterval(() => {
+      stepIdx = (stepIdx + 1) % steps.length
+      setSentimentMsg(steps[stepIdx])
+    }, 3000)
+
+    try {
+      const res = await fetch(`/api/whatsapp/sentiment/${client.id}`, { method: 'POST' })
+      const data = await res.json()
+
+      if (!res.ok) {
+        setSentimentError(data.error ?? 'Erro ao analisar sentimento')
+      } else {
+        setSentimentResult({
+          score:           data.score,
+          sentiment:       data.sentiment,
+          engagementLevel: data.engagementLevel,
+          summary:         data.summary,
+          flags:           data.flags ?? [],
+          totalMessages:   data.totalMessages ?? 0,
+        })
+      }
+    } catch (err) {
+      setSentimentError(err instanceof Error ? err.message : 'Erro inesperado')
+    } finally {
+      clearInterval(interval)
+      setSentimentLoading(false)
+      setSentimentMsg('')
+    }
   }
 
   async function loadAccounts() {
@@ -1783,7 +1839,16 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
                     </div>
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
+                  <Button size="sm" variant="outline"
+                    onClick={handleSentimentAnalysis}
+                    disabled={sentimentLoading}
+                    className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10 gap-1.5 text-xs">
+                    {sentimentLoading
+                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />{sentimentMsg}</>
+                      : <><Heart className="w-3.5 h-3.5" />Analisar Sentimento</>
+                    }
+                  </Button>
                   <Button size="sm" variant="outline"
                     onClick={() => { setWppEditing(true); setWppGroups(null); setWppSearch('') }}
                     className="border-zinc-700 text-zinc-400 hover:text-white gap-1.5 text-xs">
@@ -1804,6 +1869,71 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
                     Desvincular
                   </Button>
                 </div>
+
+                {/* Sentiment error */}
+                {sentimentError && (
+                  <div className="flex items-center gap-2 bg-red-500/5 border border-red-500/20 rounded-lg px-3 py-2">
+                    <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                    <p className="text-red-300 text-xs">{sentimentError}</p>
+                  </div>
+                )}
+
+                {/* Sentiment result */}
+                {sentimentResult && (
+                  <div className="bg-zinc-800/60 border border-zinc-700/50 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center gap-3">
+                      {sentimentResult.score !== null && (
+                        <div className="shrink-0">
+                          <ScoreGauge score={sentimentResult.score} size="sm" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {sentimentResult.sentiment && (
+                            <Badge variant="outline" className={cn('text-xs',
+                              sentimentResult.sentiment === 'positive' ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' :
+                              sentimentResult.sentiment === 'negative' ? 'text-red-400 border-red-500/30 bg-red-500/10' :
+                              'text-zinc-400 border-zinc-500/30 bg-zinc-500/10'
+                            )}>
+                              {sentimentResult.sentiment === 'positive' ? 'Positivo' :
+                               sentimentResult.sentiment === 'negative' ? 'Negativo' : 'Neutro'}
+                            </Badge>
+                          )}
+                          {sentimentResult.engagementLevel && (
+                            <Badge variant="outline" className={cn('text-xs',
+                              sentimentResult.engagementLevel === 'high'   ? 'text-blue-400 border-blue-500/30 bg-blue-500/10' :
+                              sentimentResult.engagementLevel === 'medium' ? 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10' :
+                              'text-zinc-400 border-zinc-500/30 bg-zinc-500/10'
+                            )}>
+                              Engajamento {sentimentResult.engagementLevel === 'high' ? 'Alto' :
+                                           sentimentResult.engagementLevel === 'medium' ? 'Médio' : 'Baixo'}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-zinc-500 text-xs">{sentimentResult.totalMessages} mensagens analisadas (60 dias)</p>
+                      </div>
+                      <button onClick={() => setSentimentResult(null)}
+                        className="text-zinc-600 hover:text-zinc-400 p-1 shrink-0">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {sentimentResult.summary && (
+                      <p className="text-zinc-300 text-xs leading-relaxed">{sentimentResult.summary}</p>
+                    )}
+
+                    {sentimentResult.flags.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {sentimentResult.flags.map(flag => (
+                          <Badge key={flag} variant="outline"
+                            className="text-xs text-orange-400 border-orange-500/30 bg-orange-500/10">
+                            {flag.replace(/_/g, ' ')}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
