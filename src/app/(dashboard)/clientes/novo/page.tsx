@@ -366,50 +366,10 @@ function WhatsAppStep({
   form: FormData
   setForm: React.Dispatch<React.SetStateAction<FormData>>
 }) {
-  const [connecting, setConnecting] = useState(false)
-  const [creating, setCreating] = useState(false)
-
-  // Nome de grupo sugerido ao abrir "criar"
-  const suggestedName = form.nomeResumido
-    ? `${form.nomeResumido} × Agência`
-    : 'Nome do Grupo'
-
-  function set(field: keyof FormData, value: unknown) {
-    setForm(prev => ({ ...prev, [field]: value }))
-  }
-
-  // Escolha: já tem grupo ou vai criar
-  function chooseStatus(s: 'has_group' | 'create_group') {
-    setForm(prev => ({
-      ...prev,
-      whatsappStatus: s,
-      whatsappConnected: false,
-      whatsappGroupName: s === 'create_group' && !prev.whatsappGroupName ? suggestedName : prev.whatsappGroupName,
-    }))
-  }
-
-  // Simula integração de grupo existente
-  async function handleConnect() {
-    if (!form.whatsappGroupLink.trim()) return
-    setConnecting(true)
-    await new Promise(r => setTimeout(r, 1600))
-    setConnecting(false)
-    set('whatsappConnected', true)
-  }
-
-  // Simula criação de novo grupo
-  async function handleCreate() {
-    if (!form.whatsappGroupName.trim()) return
-    setCreating(true)
-    await new Promise(r => setTimeout(r, 1800))
-    setCreating(false)
-    set('whatsappConnected', true)
-  }
-
   return (
     <div className="space-y-4">
       <Card className="bg-zinc-900 border-zinc-800">
-        <CardContent className="p-5 space-y-5">
+        <CardContent className="p-5 space-y-4">
 
           {/* Header */}
           <div className="flex items-start gap-3">
@@ -417,159 +377,63 @@ function WhatsAppStep({
               <MessageCircle className="w-5 h-5 text-emerald-400" />
             </div>
             <div>
-              <p className="text-white font-semibold">Grupo de WhatsApp</p>
+              <p className="text-white font-semibold">Grupo WhatsApp (Opcional)</p>
               <p className="text-zinc-500 text-sm mt-0.5">
                 O grupo alimenta o pilar de <span className="text-emerald-400 font-medium">Proximidade (30%)</span> do health score.
-                Configure agora ou faça depois no perfil do cliente.
               </p>
             </div>
           </div>
 
-          {/* Pergunta */}
-          <div className="space-y-2">
-            <p className="text-zinc-300 text-sm font-medium">O cliente já tem um grupo com a equipe da agência?</p>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => chooseStatus('has_group')}
-                className={cn(
-                  'p-4 rounded-xl border-2 text-left transition-all',
-                  form.whatsappStatus === 'has_group'
-                    ? 'border-emerald-500 bg-emerald-500/10'
-                    : 'border-zinc-700 bg-zinc-800/50 hover:border-zinc-600'
-                )}
-              >
-                <Link2 className={cn('w-5 h-5 mb-2', form.whatsappStatus === 'has_group' ? 'text-emerald-400' : 'text-zinc-500')} />
-                <p className={cn('font-semibold text-sm', form.whatsappStatus === 'has_group' ? 'text-emerald-400' : 'text-zinc-400')}>
-                  Sim, já existe
-                </p>
-                <p className="text-zinc-500 text-xs mt-0.5">Vou informar o link ou ID do grupo</p>
-              </button>
-
-              <button
-                onClick={() => chooseStatus('create_group')}
-                className={cn(
-                  'p-4 rounded-xl border-2 text-left transition-all',
-                  form.whatsappStatus === 'create_group'
-                    ? 'border-blue-500 bg-blue-500/10'
-                    : 'border-zinc-700 bg-zinc-800/50 hover:border-zinc-600'
-                )}
-              >
-                <Users className={cn('w-5 h-5 mb-2', form.whatsappStatus === 'create_group' ? 'text-blue-400' : 'text-zinc-500')} />
-                <p className={cn('font-semibold text-sm', form.whatsappStatus === 'create_group' ? 'text-blue-400' : 'text-zinc-400')}>
-                  Não, criar agora
-                </p>
-                <p className="text-zinc-500 text-xs mt-0.5">O sistema criará o grupo via Evolution API</p>
-              </button>
+          {/* Aviso: Configurar depois */}
+          <div className="flex items-start gap-2 bg-blue-500/5 border border-blue-500/20 rounded-lg p-3.5">
+            <AlertCircle className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+            <div className="text-xs space-y-2">
+              <p className="text-blue-300">
+                <strong>Você pode vincular o grupo WhatsApp depois</strong> no perfil do cliente (aba Integrações).
+              </p>
+              <p className="text-zinc-400">
+                <strong>Pré-requisito:</strong> O WhatsApp da agência deve estar conectado em{' '}
+                <Link href="/configuracoes?tab=whatsapp" className="text-zinc-300 underline hover:text-zinc-200">
+                  Configurações → WhatsApp
+                </Link>
+              </p>
             </div>
           </div>
 
-          {/* ── Grupo existente ───────────────────────────────── */}
-          {form.whatsappStatus === 'has_group' && !form.whatsappConnected && (
-            <div className="space-y-3 pt-2 border-t border-zinc-800">
-              <div className="space-y-1.5">
-                <Label className="text-zinc-300 text-sm">Link de convite ou Group ID</Label>
-                <Input
-                  value={form.whatsappGroupLink}
-                  onChange={e => set('whatsappGroupLink', e.target.value)}
-                  placeholder="https://chat.whatsapp.com/XXXXXXXXXX ou 120363XXXXXXXXX@g.us"
-                  className={inputCls}
-                />
-                <p className="text-zinc-600 text-xs">
-                  Abra o grupo no WhatsApp → três pontos → Convidar via link
-                </p>
-              </div>
-              <Button
-                size="sm"
-                onClick={handleConnect}
-                disabled={!form.whatsappGroupLink.trim() || connecting}
-                className="bg-emerald-500 hover:bg-emerald-600 text-white gap-2"
-              >
-                {connecting ? (
-                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Integrando...</>
-                ) : (
-                  <><Link2 className="w-3.5 h-3.5" /> Integrar grupo</>
-                )}
-              </Button>
+          {/* Como funciona */}
+          <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-3.5 space-y-2">
+            <p className="text-zinc-300 text-xs font-medium">📱 Como vincular o grupo:</p>
+            <ol className="text-zinc-500 text-xs space-y-1 ml-4 list-decimal">
+              <li>Conecte o WhatsApp da agência em <strong className="text-zinc-400">Configurações</strong></li>
+              <li>Crie ou use um grupo existente com o cliente</li>
+              <li>No perfil do cliente, selecione o grupo na aba <strong className="text-zinc-400">Integrações</strong></li>
+              <li>O sistema analisará as mensagens automaticamente (IA)</li>
+            </ol>
+          </div>
+
+          {/* Benefícios */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-2.5">
+              <p className="text-emerald-400 text-xs font-medium">✓ Análise de sentimento</p>
+              <p className="text-zinc-600 text-xs mt-0.5">IA identifica detratores</p>
             </div>
-          )}
-
-          {/* ── Criar novo grupo ──────────────────────────────── */}
-          {form.whatsappStatus === 'create_group' && !form.whatsappConnected && (
-            <div className="space-y-3 pt-2 border-t border-zinc-800">
-              <div className="space-y-1.5">
-                <Label className="text-zinc-300 text-sm">Nome do grupo</Label>
-                <Input
-                  value={form.whatsappGroupName || suggestedName}
-                  onChange={e => set('whatsappGroupName', e.target.value)}
-                  className={inputCls}
-                />
-                <p className="text-zinc-600 text-xs">
-                  O grupo será criado via Evolution API com você e o cliente como participantes iniciais.
-                </p>
-              </div>
-
-              {/* Aviso de pré-requisito */}
-              <div className="flex items-start gap-2 bg-yellow-500/5 border border-yellow-500/20 rounded-lg p-3">
-                <AlertCircle className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" />
-                <div className="text-xs text-zinc-400">
-                  <span className="text-yellow-400 font-medium">Pré-requisito:</span>{' '}
-                  A Evolution API deve estar conectada em{' '}
-                  <span className="text-zinc-300">Configurações → Integrações → WhatsApp</span>.
-                </div>
-              </div>
-
-              <Button
-                size="sm"
-                onClick={handleCreate}
-                disabled={!form.whatsappGroupName.trim() || creating}
-                className="bg-blue-500 hover:bg-blue-600 text-white gap-2"
-              >
-                {creating ? (
-                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Criando grupo...</>
-                ) : (
-                  <><Users className="w-3.5 h-3.5" /> Criar grupo</>
-                )}
-              </Button>
+            <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-2.5">
+              <p className="text-emerald-400 text-xs font-medium">✓ Score de proximidade</p>
+              <p className="text-zinc-600 text-xs mt-0.5">Peso 30% no Health Score</p>
             </div>
-          )}
+          </div>
 
-          {/* ── Sucesso ───────────────────────────────────────── */}
-          {form.whatsappConnected && (
-            <div className="flex items-center gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4">
-              <div className="w-9 h-9 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
-                <Check className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <p className="text-emerald-400 font-semibold text-sm">
-                  {form.whatsappStatus === 'create_group' ? 'Grupo criado com sucesso!' : 'Grupo integrado com sucesso!'}
-                </p>
-                <p className="text-zinc-400 text-xs mt-0.5">
-                  {form.whatsappStatus === 'create_group'
-                    ? `"${form.whatsappGroupName || suggestedName}" está pronto. Adicione os participantes pelo WhatsApp.`
-                    : 'O grupo já está sincronizado e vai alimentar o pilar de Proximidade.'}
-                </p>
-              </div>
-              <button
-                onClick={() => setForm(prev => ({ ...prev, whatsappConnected: false }))}
-                className="text-zinc-600 hover:text-zinc-400 transition-colors ml-auto shrink-0"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          )}
         </CardContent>
       </Card>
 
-      {/* Pular step */}
-      {!form.whatsappConnected && (
-        <button
-          onClick={() => setForm(prev => ({ ...prev, whatsappStatus: 'none' }))}
-          className="w-full flex items-center justify-center gap-1.5 text-zinc-600 hover:text-zinc-400 text-xs transition-colors py-1"
-        >
-          <SkipForward className="w-3.5 h-3.5" />
-          Configurar WhatsApp depois no perfil do cliente
-        </button>
-      )}
+      {/* Botão: Configurar depois */}
+      <button
+        onClick={() => setForm(prev => ({ ...prev, whatsappStatus: 'none' }))}
+        className="w-full flex items-center justify-center gap-1.5 text-zinc-600 hover:text-zinc-400 text-xs transition-colors py-1"
+      >
+        <SkipForward className="w-3.5 h-3.5" />
+        Vou configurar o WhatsApp depois (recomendado)
+      </button>
     </div>
   )
 }

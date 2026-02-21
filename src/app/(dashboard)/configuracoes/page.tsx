@@ -2585,7 +2585,9 @@ function PrivacidadeSection() {
 // PÁGINA PRINCIPAL
 // ─────────────────────────────────────────────────────────────────
 export default function ConfiguracoesPage() {
-  const [active, setActive] = useState('agencia')
+  const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
+  const initialTab = searchParams.get('tab') || 'agencia'
+  const [active, setActive] = useState(initialTab)
 
   const { WhatsAppSection } = require('./whatsapp-section')
   

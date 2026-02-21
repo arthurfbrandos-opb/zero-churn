@@ -1732,8 +1732,10 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
                   <MessageCircle className="w-5 h-5 text-emerald-400" />
                 </div>
                 <div>
-                  <p className="text-zinc-200 font-semibold text-sm">WhatsApp</p>
-                  <p className="text-zinc-500 text-xs">Análise de sentimento via Evolution API</p>
+                  <p className="text-zinc-200 font-semibold text-sm">Grupo WhatsApp</p>
+                  <p className="text-zinc-500 text-xs">
+                    {wppConnected ? 'Monitoramento ativo' : 'Selecione o grupo do cliente'}
+                  </p>
                 </div>
               </div>
               <Badge variant="outline" className={cn('text-xs shrink-0',
@@ -1741,20 +1743,27 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
                   ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
                   : 'border-zinc-700 text-zinc-500'
               )}>
-                {wppConnected ? '✓ Conectado' : 'Desconectado'}
+                {wppConnected ? '✓ Conectado' : 'Não vinculado'}
               </Badge>
             </div>
 
-            {/* Aviso LGPD */}
-            <div className="flex gap-2 p-3 bg-yellow-500/5 border border-yellow-500/20 rounded-xl">
-              <Shield className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" />
-              <p className="text-yellow-300/80 text-xs leading-relaxed">
-                As mensagens do grupo serão lidas e processadas por IA para análise de sentimento e proximidade.
-                Ao conectar, confirmo que tenho autorização dos participantes do grupo. (LGPD)
-              </p>
+            {/* Aviso: WhatsApp da agência precisa estar conectado */}
+            <div className="flex gap-2 p-3 bg-blue-500/5 border border-blue-500/20 rounded-xl">
+              <Shield className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="text-blue-300/80 text-xs leading-relaxed">
+                  <strong>Pré-requisito:</strong> O WhatsApp da agência deve estar conectado em{' '}
+                  <Link href="/configuracoes?tab=whatsapp" className="underline hover:text-blue-200">
+                    Configurações → WhatsApp
+                  </Link>
+                </p>
+                <p className="text-zinc-500 text-xs">
+                  As mensagens do grupo serão analisadas por IA para cálculo de proximidade e sentimento (LGPD).
+                </p>
+              </div>
             </div>
 
-            {/* ── Conectado ── */}
+            {/* ── Grupo Conectado ── */}
             {wppConnected && !wppEditing && (
               <div className="space-y-2">
                 <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3.5">
@@ -1763,14 +1772,14 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
                       <MessageCircle className="w-4 h-4 text-emerald-400" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-zinc-400 text-xs mb-1">Grupo WhatsApp monitorado:</p>
+                      <p className="text-zinc-400 text-xs mb-1">Grupo WhatsApp:</p>
                       {wppGroupName
                         ? <p className="text-emerald-300 text-sm font-semibold leading-tight truncate">{wppGroupName}</p>
                         : <p className="text-zinc-300 text-xs font-mono truncate">
-                            {client.whatsappGroupId?.slice(0, 6)}···{client.whatsappGroupId?.slice(-5)}
+                            {client.whatsappGroupId?.slice(0, 8)}···{client.whatsappGroupId?.slice(-6)}
                           </p>
                       }
-                      <p className="text-zinc-600 text-xs mt-0.5">Mensagens coletadas via webhook Evolution API</p>
+                      <p className="text-zinc-600 text-xs mt-0.5">Mensagens sendo analisadas via webhook</p>
                     </div>
                   </div>
                 </div>
@@ -1782,67 +1791,52 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
                   </Button>
                   <Button size="sm" variant="outline"
                     onClick={async () => {
-                      if (!confirm('Desconectar este grupo? O monitoramento será interrompido.')) return
+                      if (!confirm('Desvincular este grupo? O monitoramento será interrompido.')) return
                       setWppConnecting(true); setWppError(null)
                       const res = await fetch(`/api/whatsapp/connect/${client.id}`, { method: 'DELETE' })
                       if (res.ok) { setWppConnected(false); setWppGroupId(''); setWppGroupName(null); refetch() }
-                      else { const d = await res.json(); setWppError(d.error ?? 'Erro ao desconectar') }
+                      else { const d = await res.json(); setWppError(d.error ?? 'Erro ao desvincular') }
                       setWppConnecting(false)
                     }}
                     disabled={wppConnecting}
                     className="border-red-500/30 text-red-400 hover:bg-red-500/10 gap-1.5 text-xs">
                     {wppConnecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
-                    Desconectar
+                    Desvincular
                   </Button>
                 </div>
               </div>
             )}
 
-            {/* ── Seletor de grupo ── */}
+            {/* ── Seletor de Grupo (Simples) ── */}
             {(!wppConnected || wppEditing) && (
               <div className="space-y-3">
                 {wppError && (
-                  <div className="space-y-2">
-                    <p className="text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
-                      {wppError}
-                    </p>
-                    {wppError.includes('Timeout') && (
-                      <p className="text-yellow-300/80 text-xs bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-3 py-2">
-                        💡 <strong>Solução:</strong> Digite o ID do grupo manualmente abaixo
-                      </p>
+                  <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                    <p className="text-red-400 text-xs">{wppError}</p>
+                    {wppError.includes('WhatsApp da agência não está conectado') && (
+                      <Link href="/configuracoes?tab=whatsapp" 
+                        className="text-blue-400 hover:text-blue-300 text-xs underline mt-1 inline-block">
+                        Ir para Configurações
+                      </Link>
                     )}
                   </div>
                 )}
 
-                {/* Busca de grupos da agência (botão único) */}
-                <div className="space-y-2">
-                  <Label className="text-zinc-400 text-xs font-medium">📱 Selecione o grupo WhatsApp</Label>
+                {/* Botão carregar grupos */}
+                {!wppGroups && (
                   <Button size="sm" variant="outline" onClick={loadWppGroups}
                     disabled={wppGroupsLoading}
                     className="border-emerald-600 text-emerald-400 hover:bg-emerald-500/10 gap-1.5 w-full text-xs">
                     {wppGroupsLoading ? (
                       <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Carregando grupos...</>
                     ) : (
-                      <><MessageCircle className="w-3.5 h-3.5" /> Selecionar Grupo do Cliente</>
+                      <><MessageCircle className="w-3.5 h-3.5" /> Buscar Grupos do WhatsApp</>
                     )}
                   </Button>
-                  <p className="text-zinc-600 text-xs">
-                    ⚡ Rápido! Lista apenas os grupos do WhatsApp conectado em Configurações.
-                  </p>
-                </div>
-
-
-
-                {/* Carregando */}
-                {wppGroupsLoading && (
-                  <div className="flex items-center gap-2 text-zinc-500 text-xs py-2">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    Carregando grupos (pode levar ~30s com muitos grupos)...
-                  </div>
                 )}
 
                 {/* Erro ao carregar */}
-                {wppGroupsError && !wppGroupsLoading && (
+                {wppGroupsError && (
                   <div className="space-y-2">
                     <p className="text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
                       {wppGroupsError}
@@ -1855,16 +1849,16 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
                 )}
 
                 {/* Lista de grupos */}
-                {wppGroups && !wppGroupsLoading && (
+                {wppGroups && wppGroups.length > 0 && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-zinc-400 text-xs">{wppGroups.length} grupos disponíveis</span>
+                      <span className="text-zinc-400 text-xs">{wppGroups.length} grupos encontrados</span>
                       <button onClick={() => { setWppGroups(null); setWppSearch('') }}
                         className="text-zinc-600 hover:text-zinc-400 text-xs">limpar</button>
                     </div>
                     <input
                       type="text" autoFocus
-                      placeholder="Buscar grupo do cliente..."
+                      placeholder="Filtrar por nome..."
                       value={wppSearch}
                       onChange={e => setWppSearch(e.target.value)}
                       className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 outline-none focus:border-emerald-500"
@@ -1889,6 +1883,16 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
                         <p className="text-zinc-600 text-xs text-center py-3">Nenhum grupo encontrado</p>
                       )}
                     </div>
+                  </div>
+                )}
+
+                {wppGroups && wppGroups.length === 0 && !wppGroupsLoading && (
+                  <div className="text-center py-4">
+                    <p className="text-zinc-500 text-xs">Nenhum grupo disponível</p>
+                    <Link href="/configuracoes?tab=whatsapp" 
+                      className="text-blue-400 hover:text-blue-300 text-xs underline mt-2 inline-block">
+                      Conectar WhatsApp em Configurações
+                    </Link>
                   </div>
                 )}
 
