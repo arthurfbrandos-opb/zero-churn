@@ -211,3 +211,23 @@
   -webkit-mask-composite: xor;
   padding: 1px;
 }
+
+/* ── Hero dynamic glow (larger, softer) ────────────────── */
+.glow-hero-healthy {
+  box-shadow: 0 0 40px rgba(16, 185, 129, 0.1), 0 0 80px rgba(16, 185, 129, 0.04);
+}
+.glow-hero-warning {
+  box-shadow: 0 0 40px rgba(245, 158, 11, 0.1), 0 0 80px rgba(245, 158, 11, 0.04);
+}
+.glow-hero-danger {
+  box-shadow: 0 0 40px rgba(239, 68, 68, 0.1), 0 0 80px rgba(239, 68, 68, 0.04);
+}
+
+/* ── Pulse for urgent indicator ────────────────────────── */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
