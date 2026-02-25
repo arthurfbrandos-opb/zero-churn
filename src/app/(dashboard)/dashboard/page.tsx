@@ -44,6 +44,8 @@ import {
 } from '@/lib/client-stats'
 import { ChurnRisk } from '@/types'
 import { cn } from '@/lib/utils'
+import { Skeleton } from '@/components/ui/skeleton'
+import { AnimatedNumber } from '@/components/ui/animated-number'
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
@@ -134,10 +136,33 @@ export default function DashboardPage() {
   const withoutNPS        = getClientsWithoutRecentNPS(clients)
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="text-center space-y-3">
-        <Loader2 className="w-8 h-8 text-emerald-500 animate-spin mx-auto" />
-        <p className="text-zinc-500 text-sm">Carregando dashboard...</p>
+    <div className="min-h-screen">
+      <Header title="Dashboard" description="Visão da operação e saúde do negócio" />
+      <div className="p-6 space-y-5">
+        {/* Barra resumo skeleton */}
+        <Skeleton className="h-16 w-full rounded-xl" />
+        {/* 4 cards financeiros */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[...Array(4)].map((_, i) => (
+            <Skeleton key={i} className="h-28 rounded-xl" />
+          ))}
+        </div>
+        {/* NPS + Pagamentos */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          <Skeleton className="h-52 rounded-xl lg:col-span-3" />
+          <Skeleton className="h-52 rounded-xl lg:col-span-2" />
+        </div>
+        {/* Saúde + Radar */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          <Skeleton className="h-64 rounded-xl lg:col-span-2" />
+          <Skeleton className="h-64 rounded-xl lg:col-span-3" />
+        </div>
+        {/* Lista de clientes */}
+        <div className="space-y-2">
+          {[...Array(5)].map((_, i) => (
+            <Skeleton key={i} className="h-20 rounded-xl" />
+          ))}
+        </div>
       </div>
     </div>
   )
@@ -296,10 +321,10 @@ export default function DashboardPage() {
         }
       />
 
-      <div className="p-6 space-y-5">
+      <div className="p-6 space-y-5 stagger-children">
 
         {/* ── 0. BARRA RESUMO ──────────────────────────────────────── */}
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card className="bg-zinc-900 gradient-border animate-fade-in">
           <CardContent className="px-4 lg:px-5 py-3">
             <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:items-center sm:gap-0 sm:divide-x sm:divide-zinc-800 gap-3">
 
@@ -355,7 +380,7 @@ export default function DashboardPage() {
                 </p>
                 <div className="flex items-baseline gap-3 mt-0.5">
                   <p className="text-emerald-400 text-xl font-bold leading-tight">
-                    {formatCurrency(billing.total)}
+                    <AnimatedNumber value={billing.total} formatFn={formatCurrency} />
                   </p>
                   <div className="flex items-center gap-3 text-xs text-zinc-500">
                     <span>MRR <span className="text-zinc-300 font-semibold">{formatCurrency(billing.total)}</span></span>
@@ -371,9 +396,9 @@ export default function DashboardPage() {
         </Card>
 
         {/* ── 1. PULSO FINANCEIRO ──────────────────────────────────── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 stagger-children">
 
-          <Card className="bg-zinc-900 border-zinc-800">
+          <Card className="bg-zinc-900 border-zinc-800 transition-all duration-200 hover:glow-emerald hover:border-emerald-500/20">
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
@@ -381,12 +406,14 @@ export default function DashboardPage() {
                 </div>
                 <span className="text-zinc-500 text-xs font-medium">Recorrente Total</span>
               </div>
-              <p className="text-emerald-400 text-2xl font-bold">{formatCurrency(totalMRR)}</p>
+              <p className="text-emerald-400 text-2xl font-bold">
+                <AnimatedNumber value={totalMRR} formatFn={formatCurrency} />
+              </p>
               <p className="text-zinc-500 text-xs mt-1">{mrrClients.length} clientes recorrentes</p>
             </CardContent>
           </Card>
 
-          <Card className={cn('border', mrrAtRisk > 0 ? 'bg-red-500/5 border-red-500/20' : 'bg-zinc-900 border-zinc-800')}>
+          <Card className={cn('border transition-all duration-200', mrrAtRisk > 0 ? 'bg-red-500/5 border-red-500/20 glow-red' : 'bg-zinc-900 border-zinc-800 hover:border-red-500/20')}>
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center">
@@ -394,14 +421,16 @@ export default function DashboardPage() {
                 </div>
                 <span className="text-zinc-500 text-xs font-medium">Recorrente em Risco</span>
               </div>
-              <p className="text-red-400 text-2xl font-bold">{formatCurrency(mrrAtRisk)}</p>
+              <p className="text-red-400 text-2xl font-bold">
+                <AnimatedNumber value={mrrAtRisk} formatFn={formatCurrency} />
+              </p>
               <p className="text-zinc-500 text-xs mt-1">
                 {totalMRR > 0 ? Math.round((mrrAtRisk / totalMRR) * 100) : 0}% do recorrente em risco
               </p>
             </CardContent>
           </Card>
 
-          <Card className="bg-zinc-900 border-zinc-800">
+          <Card className="bg-zinc-900 border-zinc-800 transition-all duration-200 hover:glow-blue hover:border-blue-500/20">
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-7 h-7 rounded-lg bg-blue-500/10 flex items-center justify-center">
@@ -409,7 +438,9 @@ export default function DashboardPage() {
                 </div>
                 <span className="text-zinc-500 text-xs font-medium">TCV em Execução</span>
               </div>
-              <p className="text-blue-400 text-2xl font-bold">{formatCurrency(totalTCV)}</p>
+              <p className="text-blue-400 text-2xl font-bold">
+                <AnimatedNumber value={totalTCV} formatFn={formatCurrency} />
+              </p>
               <p className="text-zinc-500 text-xs mt-1">{tcvClients.length} projeto{tcvClients.length !== 1 ? 's' : ''} ativos</p>
             </CardContent>
           </Card>
@@ -725,9 +756,17 @@ export default function DashboardPage() {
                 ? { label: 'Vencendo', color: 'text-yellow-400 border-yellow-500/30 bg-yellow-500/8' }
                 : null
 
+              const riskBorderColor = risk === 'high' ? 'border-l-red-500'
+                : risk === 'medium' ? 'border-l-yellow-500'
+                : risk === 'low' ? 'border-l-emerald-500'
+                : 'border-l-zinc-600'
+
               return (
                 <Link key={client.id} href={`/clientes/${client.id}`}>
-                  <Card className="bg-zinc-900 border-zinc-800 hover:border-zinc-600 hover:bg-zinc-800/50 transition-all cursor-pointer group">
+                  <Card className={cn(
+                    'bg-zinc-900 border-zinc-800 hover:border-zinc-600 hover:bg-zinc-800/50 transition-all duration-200 cursor-pointer group border-l-[3px] hover:shadow-lg hover:shadow-black/20',
+                    riskBorderColor
+                  )}>
                     <CardContent className="p-4">
                       <div className="flex items-center gap-4">
 

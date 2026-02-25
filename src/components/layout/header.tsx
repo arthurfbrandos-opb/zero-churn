@@ -25,7 +25,7 @@ export function Header({ title, description, action }: HeaderProps) {
   }
 
   return (
-    <header className="h-14 lg:h-16 border-b border-zinc-800 bg-zinc-950 flex items-center px-4 lg:px-6 gap-3 sticky top-0 z-30">
+    <header className="h-14 lg:h-16 border-b border-zinc-800/60 bg-zinc-950/80 backdrop-blur-xl flex items-center px-4 lg:px-6 gap-3 sticky top-0 z-30">
       <div className="flex-1 min-w-0">
         <h1 className="text-white font-semibold text-base lg:text-lg leading-tight truncate">{title}</h1>
         {description && (
