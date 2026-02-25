@@ -23,7 +23,9 @@ export async function GET(
         health_scores (
           id, score_total, score_financeiro, score_proximidade,
           score_resultado, score_nps, churn_risk, diagnosis,
-          flags, triggered_by, analyzed_at
+          flags, triggered_by, analyzed_at,
+          proximity_sentiment, proximity_engagement, proximity_summary,
+          proximity_messages_total, proximity_messages_client, proximity_weekly_batches
         ),
         form_submissions (
           id, score_resultado, nps_score, comment, submitted_at

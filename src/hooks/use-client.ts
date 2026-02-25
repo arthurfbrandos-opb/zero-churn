@@ -37,6 +37,13 @@ function mapDbClient(row: Record<string, unknown>): Client {
                           ? (() => { try { return JSON.parse(hs.flags as string) } catch { return [] } })()
                           : [],
     analyzedAt:       String(hs.analyzed_at).slice(0, 10),
+    // Proximity details
+    proximitySentiment:      hs.proximity_sentiment   ? String(hs.proximity_sentiment) as 'positive' | 'neutral' | 'negative' : undefined,
+    proximityEngagement:     hs.proximity_engagement  ? String(hs.proximity_engagement) as 'high' | 'medium' | 'low' : undefined,
+    proximitySummary:        hs.proximity_summary     ? String(hs.proximity_summary) : undefined,
+    proximityMessagesTotal:  hs.proximity_messages_total  != null ? Number(hs.proximity_messages_total) : undefined,
+    proximityMessagesClient: hs.proximity_messages_client != null ? Number(hs.proximity_messages_client) : undefined,
+    proximityWeeklyBatches:  hs.proximity_weekly_batches  != null ? Number(hs.proximity_weekly_batches) : undefined,
   } : undefined
 
   const subs = ((row.form_submissions as Record<string, unknown>[]) ?? [])

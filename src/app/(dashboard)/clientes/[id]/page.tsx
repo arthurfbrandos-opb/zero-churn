@@ -314,6 +314,68 @@ function TabVisaoGeral({ client, refetch }: { client: Client; refetch: () => voi
         })}
       </div>
 
+      {/* Detalhes da Proximidade */}
+      {hs.proximitySummary && (
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-blue-500/15 flex items-center justify-center">
+                <MessageCircle className="w-3.5 h-3.5 text-blue-400" />
+              </div>
+              <p className="text-zinc-300 font-semibold text-sm">Detalhes da Proximidade</p>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {hs.proximitySentiment && (
+                <Badge variant="outline" className={cn('text-xs',
+                  hs.proximitySentiment === 'positive' ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' :
+                  hs.proximitySentiment === 'negative' ? 'text-red-400 border-red-500/30 bg-red-500/10' :
+                  'text-zinc-400 border-zinc-500/30 bg-zinc-500/10'
+                )}>
+                  {hs.proximitySentiment === 'positive' ? 'Sentimento Positivo' :
+                   hs.proximitySentiment === 'negative' ? 'Sentimento Negativo' : 'Sentimento Neutro'}
+                </Badge>
+              )}
+              {hs.proximityEngagement && (
+                <Badge variant="outline" className={cn('text-xs',
+                  hs.proximityEngagement === 'high'   ? 'text-blue-400 border-blue-500/30 bg-blue-500/10' :
+                  hs.proximityEngagement === 'medium' ? 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10' :
+                  'text-zinc-400 border-zinc-500/30 bg-zinc-500/10'
+                )}>
+                  Engajamento {hs.proximityEngagement === 'high' ? 'Alto' :
+                               hs.proximityEngagement === 'medium' ? 'Médio' : 'Baixo'}
+                </Badge>
+              )}
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              {hs.proximityMessagesTotal != null && (
+                <div className="bg-zinc-800/50 rounded-lg p-2.5 text-center">
+                  <p className="text-zinc-200 text-lg font-bold">{hs.proximityMessagesTotal}</p>
+                  <p className="text-zinc-500 text-xs">msgs totais</p>
+                </div>
+              )}
+              {hs.proximityMessagesClient != null && (
+                <div className="bg-zinc-800/50 rounded-lg p-2.5 text-center">
+                  <p className="text-zinc-200 text-lg font-bold">{hs.proximityMessagesClient}</p>
+                  <p className="text-zinc-500 text-xs">msgs do cliente</p>
+                </div>
+              )}
+              {hs.proximityWeeklyBatches != null && (
+                <div className="bg-zinc-800/50 rounded-lg p-2.5 text-center">
+                  <p className="text-zinc-200 text-lg font-bold">{hs.proximityWeeklyBatches}</p>
+                  <p className="text-zinc-500 text-xs">semanas</p>
+                </div>
+              )}
+            </div>
+
+            <p className="text-zinc-400 text-sm leading-relaxed border-l-2 border-blue-500/30 pl-3">
+              {hs.proximitySummary}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Diagnóstico da IA */}
       <Card className="bg-zinc-900 border-zinc-800">
         <CardContent className="p-4 space-y-3">
@@ -1307,6 +1369,71 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
     totalMessages: number
   } | null>(null)
 
+  // Team members
+  const [teamOpen, setTeamOpen]                   = useState(false)
+  const [teamParticipants, setTeamParticipants]   = useState<{ jid: string; displayName: string; isAdmin: boolean; isTeam: boolean; isAgencyPhone: boolean }[]>([])
+  const [teamLoading, setTeamLoading]             = useState(false)
+  const [teamError, setTeamError]                 = useState<string | null>(null)
+  const [teamSaving, setTeamSaving]               = useState(false)
+  const [teamSelection, setTeamSelection]         = useState<Set<string>>(new Set())
+
+  async function loadTeamParticipants() {
+    if (!client.whatsappGroupId) return
+    setTeamLoading(true); setTeamError(null)
+    try {
+      const res = await fetch(`/api/whatsapp/group-participants/${encodeURIComponent(client.whatsappGroupId)}`)
+      const data = await res.json()
+      if (!res.ok) { setTeamError(data.error ?? 'Erro ao carregar participantes'); return }
+      setTeamParticipants(data.participants ?? [])
+      // Pre-select existing team members
+      const selected = new Set<string>()
+      for (const p of data.participants ?? []) {
+        if (p.isTeam) selected.add(p.jid)
+      }
+      setTeamSelection(selected)
+    } catch (err) {
+      setTeamError(err instanceof Error ? err.message : 'Erro ao carregar')
+    } finally { setTeamLoading(false) }
+  }
+
+  async function saveTeamMembers() {
+    setTeamSaving(true); setTeamError(null)
+    try {
+      // First, get current members to know which to remove
+      const getRes = await fetch('/api/whatsapp/team-members')
+      const getCur = await getRes.json()
+      const currentJids = new Set<string>((getCur.members ?? []).map((m: { jid: string }) => m.jid))
+
+      // Remove members no longer selected (excluding agency phone)
+      for (const jid of currentJids) {
+        const isAgencyPhone = teamParticipants.find(p => p.jid === jid)?.isAgencyPhone
+        if (!teamSelection.has(jid) && !isAgencyPhone) {
+          await fetch(`/api/whatsapp/team-members?jid=${encodeURIComponent(jid)}`, { method: 'DELETE' })
+        }
+      }
+
+      // Add new team members
+      const members = [...teamSelection]
+        .filter(jid => !teamParticipants.find(p => p.jid === jid)?.isAgencyPhone)
+        .map(jid => ({
+          jid,
+          displayName: teamParticipants.find(p => p.jid === jid)?.displayName,
+        }))
+
+      if (members.length > 0) {
+        await fetch('/api/whatsapp/team-members', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ members }),
+        })
+      }
+
+      setTeamOpen(false)
+    } catch (err) {
+      setTeamError(err instanceof Error ? err.message : 'Erro ao salvar')
+    } finally { setTeamSaving(false) }
+  }
+
   async function loadWppGroups() {
     setWppGroupsLoading(true); setWppGroupsError(null)
     
@@ -1934,6 +2061,103 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
                     )}
                   </div>
                 )}
+
+                {/* ── Identificar membros do time ── */}
+                <div className="border border-zinc-700/50 rounded-xl overflow-hidden">
+                  <button
+                    onClick={() => { setTeamOpen(!teamOpen); if (!teamOpen && teamParticipants.length === 0) loadTeamParticipants() }}
+                    className="w-full flex items-center justify-between px-3.5 py-2.5 hover:bg-zinc-800/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <User className="w-3.5 h-3.5 text-zinc-400" />
+                      <span className="text-zinc-300 text-xs font-medium">Identificar membros do time</span>
+                    </div>
+                    <ChevronRight className={cn('w-3.5 h-3.5 text-zinc-500 transition-transform', teamOpen && 'rotate-90')} />
+                  </button>
+
+                  {teamOpen && (
+                    <div className="border-t border-zinc-700/50 p-3.5 space-y-3">
+                      <p className="text-zinc-500 text-xs">
+                        Marque quem faz parte do time da agência. Mensagens do time serão separadas na análise de proximidade.
+                      </p>
+
+                      {teamLoading && (
+                        <div className="flex items-center justify-center py-4">
+                          <Loader2 className="w-4 h-4 animate-spin text-zinc-500" />
+                        </div>
+                      )}
+
+                      {teamError && (
+                        <div className="flex items-center gap-2 bg-red-500/5 border border-red-500/20 rounded-lg px-3 py-2">
+                          <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                          <p className="text-red-300 text-xs">{teamError}</p>
+                        </div>
+                      )}
+
+                      {!teamLoading && teamParticipants.length > 0 && (
+                        <>
+                          <div className="max-h-52 overflow-y-auto space-y-1">
+                            {teamParticipants.map(p => {
+                              const isChecked = teamSelection.has(p.jid) || p.isAgencyPhone
+                              return (
+                                <label key={p.jid}
+                                  className={cn(
+                                    'flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer transition-colors text-xs',
+                                    isChecked ? 'bg-blue-500/5 border border-blue-500/20' : 'bg-zinc-800/40 border border-transparent hover:bg-zinc-800/70',
+                                    p.isAgencyPhone && 'opacity-70 cursor-not-allowed'
+                                  )}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    disabled={p.isAgencyPhone}
+                                    onChange={e => {
+                                      const next = new Set(teamSelection)
+                                      if (e.target.checked) next.add(p.jid)
+                                      else next.delete(p.jid)
+                                      setTeamSelection(next)
+                                    }}
+                                    className="rounded border-zinc-600 bg-zinc-800 text-blue-500 focus:ring-blue-500/30 w-3.5 h-3.5"
+                                  />
+                                  <span className={cn('flex-1 truncate', isChecked ? 'text-zinc-200' : 'text-zinc-400')}>
+                                    {p.displayName}
+                                  </span>
+                                  {p.isAgencyPhone && (
+                                    <Badge variant="outline" className="text-xs text-blue-400 border-blue-500/30 bg-blue-500/10 shrink-0">
+                                      Agência
+                                    </Badge>
+                                  )}
+                                  {p.isAdmin && !p.isAgencyPhone && (
+                                    <Badge variant="outline" className="text-xs text-zinc-500 border-zinc-700 shrink-0">
+                                      Admin
+                                    </Badge>
+                                  )}
+                                </label>
+                              )
+                            })}
+                          </div>
+                          <div className="flex items-center justify-between pt-1">
+                            <span className="text-zinc-600 text-xs">
+                              {teamSelection.size} marcados como time
+                            </span>
+                            <Button size="sm" onClick={saveTeamMembers} disabled={teamSaving}
+                              className="bg-blue-500 hover:bg-blue-600 text-white gap-1.5 text-xs h-7">
+                              {teamSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                              Salvar
+                            </Button>
+                          </div>
+                        </>
+                      )}
+
+                      {!teamLoading && teamParticipants.length === 0 && !teamError && (
+                        <Button size="sm" variant="outline" onClick={loadTeamParticipants}
+                          className="w-full border-zinc-700 text-zinc-400 text-xs gap-1.5">
+                          <RefreshCw className="w-3 h-3" /> Carregar participantes
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

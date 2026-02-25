@@ -240,6 +240,13 @@ export interface HealthScore {
   diagnosis?: string
   actionPlan?: ActionItem[]
   triggeredBy?: TriggeredBy
+  // Detalhes da análise de proximidade
+  proximitySentiment?: 'positive' | 'neutral' | 'negative'
+  proximityEngagement?: 'high' | 'medium' | 'low'
+  proximitySummary?: string
+  proximityMessagesTotal?: number
+  proximityMessagesClient?: number
+  proximityWeeklyBatches?: number
 }
 
 export interface ActionItem {
@@ -259,6 +266,14 @@ export interface Alert {
   message: string
   isRead: boolean
   createdAt: string
+}
+
+export interface WhatsAppTeamMember {
+  id: string
+  agencyId: string
+  jid: string
+  displayName?: string
+  autoDetected: boolean
 }
 
 // Alias mantido por compatibilidade — Client já inclui todos esses campos

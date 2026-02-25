@@ -35,9 +35,11 @@ interface ProximidadeInput {
   messages?:  {               // mensagens pré-coletadas pelo orchestrator
     content:    string
     senderName: string | null
+    senderJid?: string | null  // JID do remetente (para filtro de time)
     timestamp:  number
     fromMe:     boolean
   }[]
+  teamJids?:  Set<string>      // JIDs dos membros do time da agência
   days?:      number           // padrão: 60
   openaiKey?: string           // se não fornecido → score heurístico
 }
@@ -53,11 +55,11 @@ const CANCEL_KEYWORDS = [
 
 interface WeeklyBatch {
   weekLabel:  string
-  messages:   { sender: string; text: string; ts: number }[]
+  messages:   { sender: string; text: string; ts: number; isTeam?: boolean }[]
 }
 
 function buildWeeklyBatches(
-  messages: { sender: string; text: string; ts: number }[],
+  messages: { sender: string; text: string; ts: number; isTeam?: boolean }[],
 ): WeeklyBatch[] {
   const byWeek = new Map<string, typeof messages>()
 
@@ -83,18 +85,26 @@ async function summarizeWeek(
   weekLabel: string,
   messages:  WeeklyBatch['messages'],
   apiKey:    string,
+  hasTeamInfo: boolean,
 ): Promise<string> {
   const content = messages
     .slice(0, 50)  // no máximo 50 msgs por semana
-    .map(m => `[${m.sender}]: ${m.text.slice(0, 200)}`)
+    .map(m => {
+      const tag = hasTeamInfo ? (m.isTeam ? '[EQUIPE]' : '[CLIENTE]') + ' ' : ''
+      return `${tag}[${m.sender}]: ${m.text.slice(0, 200)}`
+    })
     .join('\n')
+
+  const systemPrompt = hasTeamInfo
+    ? 'Você é um analista de relacionamento entre uma agência de marketing e seu cliente. As mensagens estão marcadas com [EQUIPE] (time da agência) ou [CLIENTE] (time do cliente). Foque sua análise nas mensagens do CLIENTE — o tom, engajamento e satisfação deles é o que importa. Escreva um parágrafo conciso (máx 100 palavras) descrevendo: o nível de engajamento DO CLIENTE, o tom da comunicação DO CLIENTE, temas principais e sinais preocupantes. Responda APENAS o parágrafo.'
+    : 'Você é um analista de relacionamento entre uma agência de marketing e seu cliente. Analise o trecho de conversas de WhatsApp e escreva um parágrafo conciso (máx 100 palavras) descrevendo: o nível de engajamento, o tom geral da comunicação, temas principais discutidos e qualquer sinal preocupante. Responda APENAS o parágrafo, sem introdução.'
 
   const body = {
     model: 'gpt-3.5-turbo',
     messages: [
       {
         role: 'system',
-        content: 'Você é um analista de relacionamento entre uma agência de marketing e seu cliente. Analise o trecho de conversas de WhatsApp e escreva um parágrafo conciso (máx 100 palavras) descrevendo: o nível de engajamento, o tom geral da comunicação, temas principais discutidos e qualquer sinal preocupante. Responda APENAS o parágrafo, sem introdução.',
+        content: systemPrompt,
       },
       {
         role: 'user',
@@ -130,6 +140,7 @@ async function analyzeWithGpt4o(
   weeklyResumos: string[],
   apiKey: string,
   totalMessages: number,
+  clientMessages?: number,
 ): Promise<ProximidadeGptOutput> {
   // Rotula os resumos dando destaque especial à semana mais recente
   const totalWeeks = weeklyResumos.length
@@ -172,7 +183,7 @@ CRITÉRIOS DE SCORE (baseado principalmente na semana mais recente):
       },
       {
         role: 'user',
-        content: `Total de mensagens nos últimos 60 dias: ${totalMessages}\n\nResumos por semana (do mais antigo ao mais recente):\n\n${resumoText}`,
+        content: `Total de mensagens nos últimos 60 dias: ${totalMessages}${clientMessages !== undefined ? ` (${clientMessages} do cliente)` : ''}\n\nResumos por semana (do mais antigo ao mais recente):\n\n${resumoText}`,
       },
     ],
     max_tokens: 500,
@@ -215,37 +226,54 @@ export async function runAgenteProximidade(input: ProximidadeInput): Promise<Age
 
   try {
     // ── 1. Normaliza mensagens (já coletadas pelo orchestrator) ───
+    const teamJids   = input.teamJids ?? new Set<string>()
+    const hasTeamInfo = teamJids.size > 0
+
     const messages = (input.messages ?? [])
-      .map(m => ({
-        sender: m.senderName ?? 'Desconhecido',
-        text:   m.content,
-        ts:     m.timestamp,
-      }))
+      .map(m => {
+        const isTeam = hasTeamInfo && (
+          m.fromMe ||
+          (m.senderJid ? teamJids.has(m.senderJid) : false)
+        )
+        return {
+          sender: m.senderName ?? 'Desconhecido',
+          text:   m.content,
+          ts:     m.timestamp,
+          isTeam,
+        }
+      })
       .filter(m => m.text.trim().length > 0)
 
-    // Silêncio: muito poucas mensagens
-    if (messages.length < 5) {
+    const clientMessages = hasTeamInfo ? messages.filter(m => !m.isTeam) : messages
+    const clientMsgCount = clientMessages.length
+    const totalMsgCount  = messages.length
+
+    // Silêncio: baseado nas mensagens do CLIENTE (não total)
+    if (clientMsgCount < 5) {
       return {
         agent:  'proximidade',
         score:  30,
         flags:  ['silence'],
         details: {
-          totalMessages: messages.length,
-          period:        `${days} dias`,
-          reason:        'Menos de 5 mensagens no período — silêncio detectado',
+          totalMessages:  totalMsgCount,
+          clientMessages: hasTeamInfo ? clientMsgCount : undefined,
+          period:         `${days} dias`,
+          reason:         hasTeamInfo
+            ? `Menos de 5 mensagens do cliente no período (${clientMsgCount} de ${totalMsgCount} total) — silêncio detectado`
+            : 'Menos de 5 mensagens no período — silêncio detectado',
         },
         status:     'success',
         durationMs: Date.now() - startMs,
       }
     }
 
-    // Detecção rápida de palavras-chave de cancelamento
-    const allText = messages.map(m => m.text.toLowerCase()).join(' ')
-    const hasCancelKw = CANCEL_KEYWORDS.some(kw => allText.includes(kw))
+    // Detecção rápida de palavras-chave de cancelamento (foca nas msgs do cliente)
+    const textForCancel = clientMessages.map(m => m.text.toLowerCase()).join(' ')
+    const hasCancelKw = CANCEL_KEYWORDS.some(kw => textForCancel.includes(kw))
 
     // ── 2. Sem OpenAI configurado → score heurístico ─────────────
     if (!input.openaiKey) {
-      const baseScore = Math.min(100, 50 + messages.length / 2)  // mais msgs = mais engajado (até 100)
+      const baseScore = Math.min(100, 50 + clientMsgCount / 2)
       const score     = hasCancelKw ? Math.max(20, baseScore - 30) : Math.round(baseScore)
       const flags     = hasCancelKw ? ['cancellation_risk'] : []
 
@@ -254,10 +282,11 @@ export async function runAgenteProximidade(input: ProximidadeInput): Promise<Age
         score,
         flags,
         details: {
-          totalMessages:  messages.length,
-          period:         `${days} dias`,
+          totalMessages:    totalMsgCount,
+          clientMessages:   hasTeamInfo ? clientMsgCount : undefined,
+          period:           `${days} dias`,
           hasCancelKeywords: hasCancelKw,
-          mode:           'heuristic (no OpenAI key)',
+          mode:             'heuristic (no OpenAI key)',
         },
         status:     'success',
         durationMs: Date.now() - startMs,
@@ -271,7 +300,7 @@ export async function runAgenteProximidade(input: ProximidadeInput): Promise<Age
 
     for (const batch of batches) {
       if (batch.messages.length === 0) continue
-      const resumo = await summarizeWeek(batch.weekLabel, batch.messages, input.openaiKey)
+      const resumo = await summarizeWeek(batch.weekLabel, batch.messages, input.openaiKey, hasTeamInfo)
       weeklyResumos.push(resumo)
       tokensEstimate += 300  // estimativa por batch
     }
@@ -281,14 +310,17 @@ export async function runAgenteProximidade(input: ProximidadeInput): Promise<Age
         agent:  'proximidade',
         score:  50,
         flags:  [],
-        details: { totalMessages: messages.length, reason: 'Sem resumos gerados' },
+        details: { totalMessages: totalMsgCount, clientMessages: hasTeamInfo ? clientMsgCount : undefined, reason: 'Sem resumos gerados' },
         status: 'success',
         durationMs: Date.now() - startMs,
       }
     }
 
     // ── 4. Análise final GPT-4o ───────────────────────────────────
-    const gptResult = await analyzeWithGpt4o(weeklyResumos, input.openaiKey, messages.length)
+    const gptResult = await analyzeWithGpt4o(
+      weeklyResumos, input.openaiKey, totalMsgCount,
+      hasTeamInfo ? clientMsgCount : undefined,
+    )
     tokensEstimate += 500
 
     // Merge de flags: adiciona cancellation_risk se palavras-chave detectadas
@@ -302,7 +334,8 @@ export async function runAgenteProximidade(input: ProximidadeInput): Promise<Age
       score:  gptResult.score,
       flags:  finalFlags,
       details: {
-        totalMessages:   messages.length,
+        totalMessages:   totalMsgCount,
+        clientMessages:  hasTeamInfo ? clientMsgCount : undefined,
         period:          `${days} dias`,
         sentiment:       gptResult.sentiment,
         engagementLevel: gptResult.engagementLevel,

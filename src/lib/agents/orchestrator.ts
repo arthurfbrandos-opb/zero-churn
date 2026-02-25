@@ -225,7 +225,29 @@ export async function runAnalysis(input: OrchestratorInput): Promise<Orchestrato
   // e é excluído do cálculo ponderado automaticamente.
   let proxResult: AgentResult
   try {
-    let messages: { content: string; senderName: string | null; timestamp: number; fromMe: boolean }[] = []
+    let messages: { content: string; senderName: string | null; senderJid?: string | null; timestamp: number; fromMe: boolean }[] = []
+
+    // Busca membros do time da agência para filtro
+    const { data: teamRows } = await supabase
+      .from('whatsapp_team_members')
+      .select('jid')
+      .eq('agency_id', agencyId)
+
+    // Inclui telefone da agência como membro do time
+    const { data: agencyRow } = await supabase
+      .from('agencies')
+      .select('whatsapp_phone')
+      .eq('id', agencyId)
+      .maybeSingle()
+
+    const teamJids = new Set<string>()
+    for (const row of teamRows ?? []) {
+      if (row.jid) teamJids.add(row.jid)
+    }
+    const agencyPhone = agencyRow?.whatsapp_phone?.replace(/\D/g, '')
+    if (agencyPhone) {
+      teamJids.add(`${agencyPhone}@s.whatsapp.net`)
+    }
 
     if (groupId) {
       const cutoff = Math.floor(Date.now() / 1000) - 60 * 86400
@@ -233,7 +255,7 @@ export async function runAnalysis(input: OrchestratorInput): Promise<Orchestrato
       // 1. Tenta banco local (webhook já populou)
       const { data: dbMsgs } = await supabase
         .from('whatsapp_messages')
-        .select('content, sender_name, timestamp_unix, from_me')
+        .select('content, sender_name, sender_jid, timestamp_unix, from_me')
         .eq('group_id', groupId.includes('@g.us') ? groupId : `${groupId}@g.us`)
         .eq('agency_id', agencyId)
         .gte('timestamp_unix', cutoff)
@@ -244,6 +266,7 @@ export async function runAnalysis(input: OrchestratorInput): Promise<Orchestrato
         messages = dbMsgs.map(m => ({
           content:    String(m.content),
           senderName: m.sender_name ? String(m.sender_name) : null,
+          senderJid:  m.sender_jid ? String(m.sender_jid) : null,
           timestamp:  Number(m.timestamp_unix),
           fromMe:     Boolean(m.from_me),
         }))
@@ -258,6 +281,7 @@ export async function runAnalysis(input: OrchestratorInput): Promise<Orchestrato
             return [{
               content:    text.trim(),
               senderName: m.pushName ?? null,
+              senderJid:  m.key.participant ?? null,
               timestamp:  m.messageTimestamp,
               fromMe:     m.key.fromMe,
             }]
@@ -269,7 +293,8 @@ export async function runAnalysis(input: OrchestratorInput): Promise<Orchestrato
     proxResult = await runAgenteProximidade({
       clientId,
       groupId,
-      messages,   // passa as mensagens já coletadas
+      messages,
+      teamJids: teamJids.size > 0 ? teamJids : undefined,
       days:       60,
       openaiKey:  openaiKey ?? undefined,
     })
@@ -353,6 +378,7 @@ export async function runAnalysis(input: OrchestratorInput): Promise<Orchestrato
   const costBrl = estimateCostBrl(tokensTotal)
 
   // ── 9. Persiste health_score ──────────────────────────────────
+  const proxDetails = proxResult.details ?? {}
   const { data: hsRow } = await supabase
     .from('health_scores')
     .insert({
@@ -369,6 +395,13 @@ export async function runAnalysis(input: OrchestratorInput): Promise<Orchestrato
       triggered_by:     triggeredBy,
       tokens_used:      tokensTotal,
       cost_brl:         costBrl,
+      // Proximity details
+      proximity_sentiment:       (proxDetails.sentiment as string) ?? null,
+      proximity_engagement:      (proxDetails.engagementLevel as string) ?? null,
+      proximity_summary:         (proxDetails.summary as string) ?? null,
+      proximity_messages_total:  (proxDetails.totalMessages as number) ?? null,
+      proximity_messages_client: (proxDetails.clientMessages as number) ?? null,
+      proximity_weekly_batches:  (proxDetails.weeklyBatches as number) ?? null,
     })
     .select('id')
     .single()
