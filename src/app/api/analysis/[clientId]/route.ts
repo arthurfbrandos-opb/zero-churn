@@ -32,6 +32,8 @@ export async function GET(
       id, score_total, score_financeiro, score_proximidade,
       score_resultado, score_nps, churn_risk, diagnosis,
       flags, triggered_by, tokens_used, cost_brl, analyzed_at,
+      proximity_sentiment, proximity_engagement, proximity_summary,
+      proximity_messages_total, proximity_messages_client, proximity_weekly_batches,
       action_items ( id, text, is_done, done_at )
     `)
     .eq('client_id', clientId)

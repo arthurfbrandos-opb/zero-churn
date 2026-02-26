@@ -101,5 +101,5 @@ export function calcWeightedScore(scores: {
   }
 
   if (totalWeight === 0) return 50  // sem dados → score neutro
-  return Math.round((weightedSum / totalWeight) * 100) / 100
+  return Math.round(weightedSum / totalWeight)
 }

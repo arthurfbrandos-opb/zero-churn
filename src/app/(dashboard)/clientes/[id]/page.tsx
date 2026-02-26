@@ -49,6 +49,7 @@ const TABS = [
   { id: 'pasta',        label: 'Contrato',     icon: FileText    },
   { id: 'integracoes',  label: 'Integrações',  icon: Plug        },
   { id: 'formularios',  label: 'Formulários',  icon: FileText    },
+  { id: 'sentimento',   label: 'Sentimento',   icon: Heart       },
   { id: 'historico',    label: 'Histórico',    icon: History     },
 ]
 
@@ -313,68 +314,6 @@ function TabVisaoGeral({ client, refetch }: { client: Client; refetch: () => voi
           )
         })}
       </div>
-
-      {/* Detalhes da Proximidade */}
-      {hs.proximitySummary && (
-        <Card className="bg-zinc-900 border-zinc-800">
-          <CardContent className="p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-blue-500/15 flex items-center justify-center">
-                <MessageCircle className="w-3.5 h-3.5 text-blue-400" />
-              </div>
-              <p className="text-zinc-300 font-semibold text-sm">Detalhes da Proximidade</p>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              {hs.proximitySentiment && (
-                <Badge variant="outline" className={cn('text-xs',
-                  hs.proximitySentiment === 'positive' ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' :
-                  hs.proximitySentiment === 'negative' ? 'text-red-400 border-red-500/30 bg-red-500/10' :
-                  'text-zinc-400 border-zinc-500/30 bg-zinc-500/10'
-                )}>
-                  {hs.proximitySentiment === 'positive' ? 'Sentimento Positivo' :
-                   hs.proximitySentiment === 'negative' ? 'Sentimento Negativo' : 'Sentimento Neutro'}
-                </Badge>
-              )}
-              {hs.proximityEngagement && (
-                <Badge variant="outline" className={cn('text-xs',
-                  hs.proximityEngagement === 'high'   ? 'text-blue-400 border-blue-500/30 bg-blue-500/10' :
-                  hs.proximityEngagement === 'medium' ? 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10' :
-                  'text-zinc-400 border-zinc-500/30 bg-zinc-500/10'
-                )}>
-                  Engajamento {hs.proximityEngagement === 'high' ? 'Alto' :
-                               hs.proximityEngagement === 'medium' ? 'Médio' : 'Baixo'}
-                </Badge>
-              )}
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              {hs.proximityMessagesTotal != null && (
-                <div className="bg-zinc-800/50 rounded-lg p-2.5 text-center">
-                  <p className="text-zinc-200 text-lg font-bold">{hs.proximityMessagesTotal}</p>
-                  <p className="text-zinc-500 text-xs">msgs totais</p>
-                </div>
-              )}
-              {hs.proximityMessagesClient != null && (
-                <div className="bg-zinc-800/50 rounded-lg p-2.5 text-center">
-                  <p className="text-zinc-200 text-lg font-bold">{hs.proximityMessagesClient}</p>
-                  <p className="text-zinc-500 text-xs">msgs do cliente</p>
-                </div>
-              )}
-              {hs.proximityWeeklyBatches != null && (
-                <div className="bg-zinc-800/50 rounded-lg p-2.5 text-center">
-                  <p className="text-zinc-200 text-lg font-bold">{hs.proximityWeeklyBatches}</p>
-                  <p className="text-zinc-500 text-xs">semanas</p>
-                </div>
-              )}
-            </div>
-
-            <p className="text-zinc-400 text-sm leading-relaxed border-l-2 border-blue-500/30 pl-3">
-              {hs.proximitySummary}
-            </p>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Diagnóstico da IA */}
       <Card className="bg-zinc-900 border-zinc-800">
@@ -2062,102 +2001,6 @@ function TabIntegracoes({ client, refetch }: { client: Client; refetch: () => vo
                   </div>
                 )}
 
-                {/* ── Identificar membros do time ── */}
-                <div className="border border-zinc-700/50 rounded-xl overflow-hidden">
-                  <button
-                    onClick={() => { setTeamOpen(!teamOpen); if (!teamOpen && teamParticipants.length === 0) loadTeamParticipants() }}
-                    className="w-full flex items-center justify-between px-3.5 py-2.5 hover:bg-zinc-800/50 transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <User className="w-3.5 h-3.5 text-zinc-400" />
-                      <span className="text-zinc-300 text-xs font-medium">Identificar membros do time</span>
-                    </div>
-                    <ChevronRight className={cn('w-3.5 h-3.5 text-zinc-500 transition-transform', teamOpen && 'rotate-90')} />
-                  </button>
-
-                  {teamOpen && (
-                    <div className="border-t border-zinc-700/50 p-3.5 space-y-3">
-                      <p className="text-zinc-500 text-xs">
-                        Marque quem faz parte do time da agência. Mensagens do time serão separadas na análise de proximidade.
-                      </p>
-
-                      {teamLoading && (
-                        <div className="flex items-center justify-center py-4">
-                          <Loader2 className="w-4 h-4 animate-spin text-zinc-500" />
-                        </div>
-                      )}
-
-                      {teamError && (
-                        <div className="flex items-center gap-2 bg-red-500/5 border border-red-500/20 rounded-lg px-3 py-2">
-                          <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                          <p className="text-red-300 text-xs">{teamError}</p>
-                        </div>
-                      )}
-
-                      {!teamLoading && teamParticipants.length > 0 && (
-                        <>
-                          <div className="max-h-52 overflow-y-auto space-y-1">
-                            {teamParticipants.map(p => {
-                              const isChecked = teamSelection.has(p.jid) || p.isAgencyPhone
-                              return (
-                                <label key={p.jid}
-                                  className={cn(
-                                    'flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer transition-colors text-xs',
-                                    isChecked ? 'bg-blue-500/5 border border-blue-500/20' : 'bg-zinc-800/40 border border-transparent hover:bg-zinc-800/70',
-                                    p.isAgencyPhone && 'opacity-70 cursor-not-allowed'
-                                  )}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    disabled={p.isAgencyPhone}
-                                    onChange={e => {
-                                      const next = new Set(teamSelection)
-                                      if (e.target.checked) next.add(p.jid)
-                                      else next.delete(p.jid)
-                                      setTeamSelection(next)
-                                    }}
-                                    className="rounded border-zinc-600 bg-zinc-800 text-blue-500 focus:ring-blue-500/30 w-3.5 h-3.5"
-                                  />
-                                  <span className={cn('flex-1 truncate', isChecked ? 'text-zinc-200' : 'text-zinc-400')}>
-                                    {p.displayName}
-                                  </span>
-                                  {p.isAgencyPhone && (
-                                    <Badge variant="outline" className="text-xs text-blue-400 border-blue-500/30 bg-blue-500/10 shrink-0">
-                                      Agência
-                                    </Badge>
-                                  )}
-                                  {p.isAdmin && !p.isAgencyPhone && (
-                                    <Badge variant="outline" className="text-xs text-zinc-500 border-zinc-700 shrink-0">
-                                      Admin
-                                    </Badge>
-                                  )}
-                                </label>
-                              )
-                            })}
-                          </div>
-                          <div className="flex items-center justify-between pt-1">
-                            <span className="text-zinc-600 text-xs">
-                              {teamSelection.size} marcados como time
-                            </span>
-                            <Button size="sm" onClick={saveTeamMembers} disabled={teamSaving}
-                              className="bg-blue-500 hover:bg-blue-600 text-white gap-1.5 text-xs h-7">
-                              {teamSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                              Salvar
-                            </Button>
-                          </div>
-                        </>
-                      )}
-
-                      {!teamLoading && teamParticipants.length === 0 && !teamError && (
-                        <Button size="sm" variant="outline" onClick={loadTeamParticipants}
-                          className="w-full border-zinc-700 text-zinc-400 text-xs gap-1.5">
-                          <RefreshCw className="w-3 h-3" /> Carregar participantes
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                </div>
               </div>
             )}
 
@@ -2552,6 +2395,12 @@ interface AnalysisHistoryEntry {
   diagnosis:        string | null
   flags:            string[]
   triggeredBy:      string
+  proximitySentiment?:     string | null
+  proximityEngagement?:    string | null
+  proximitySummary?:       string | null
+  proximityMessagesTotal?: number | null
+  proximityMessagesClient?: number | null
+  proximityWeeklyBatches?: number | null
   analyzedAt:       string
 }
 
@@ -2565,6 +2414,417 @@ function ScoreSparkbar({ score }: { score: number }) {
       <span className={cn('text-xs font-bold',
         score >= 70 ? 'text-emerald-400' : score >= 40 ? 'text-yellow-400' : 'text-red-400'
       )}>{score}</span>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────
+// TAB — SENTIMENTO
+// ─────────────────────────────────────────────────────────────────
+function TabSentimento({ clientId, client, refetch }: { clientId: string; client: Client; refetch: () => void }) {
+  const hs = client.healthScore
+  const [analyses, setAnalyses]     = useState<AnalysisHistoryEntry[]>([])
+  const [loading, setLoading]       = useState(true)
+  const [expanded, setExpanded]     = useState<string | null>(null)
+
+  // Team members state
+  const [teamParticipants, setTeamParticipants] = useState<{ jid: string; displayName: string; isAdmin: boolean; isTeam: boolean; isAgencyPhone: boolean }[]>([])
+  const [teamLoading, setTeamLoading]           = useState(false)
+  const [teamError, setTeamError]               = useState<string | null>(null)
+  const [teamSaving, setTeamSaving]             = useState(false)
+  const [teamSelection, setTeamSelection]       = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    fetch(`/api/analysis/${clientId}`)
+      .then(r => r.json())
+      .then(d => setAnalyses((d.analyses ?? []).map((a: Record<string, unknown>) => ({
+        id:               String(a.id),
+        scoreTotal:       Number(a.score_total),
+        scoreFinanceiro:  a.score_financeiro != null ? Number(a.score_financeiro) : null,
+        scoreProximidade: a.score_proximidade != null ? Number(a.score_proximidade) : null,
+        scoreResultado:   a.score_resultado != null ? Number(a.score_resultado) : null,
+        scoreNps:         a.score_nps != null ? Number(a.score_nps) : null,
+        churnRisk:        String(a.churn_risk ?? 'low'),
+        diagnosis:        a.diagnosis ? String(a.diagnosis) : null,
+        flags:            (a.flags as string[]) ?? [],
+        triggeredBy:      String(a.triggered_by ?? 'scheduled'),
+        analyzedAt:       String(a.analyzed_at),
+        proximitySentiment:     a.proximity_sentiment != null ? String(a.proximity_sentiment) : null,
+        proximityEngagement:    a.proximity_engagement != null ? String(a.proximity_engagement) : null,
+        proximitySummary:       a.proximity_summary != null ? String(a.proximity_summary) : null,
+        proximityMessagesTotal: a.proximity_messages_total != null ? Number(a.proximity_messages_total) : null,
+        proximityMessagesClient: a.proximity_messages_client != null ? Number(a.proximity_messages_client) : null,
+        proximityWeeklyBatches: a.proximity_weekly_batches != null ? Number(a.proximity_weekly_batches) : null,
+      }))))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [clientId])
+
+  async function loadTeamParticipants() {
+    if (!client.whatsappGroupId) return
+    setTeamLoading(true); setTeamError(null)
+    try {
+      const res = await fetch(`/api/whatsapp/group-participants/${encodeURIComponent(client.whatsappGroupId)}`)
+      const data = await res.json()
+      if (!res.ok) { setTeamError(data.error ?? 'Erro ao carregar participantes'); return }
+      setTeamParticipants(data.participants ?? [])
+      const selected = new Set<string>()
+      for (const p of data.participants ?? []) {
+        if (p.isTeam) selected.add(p.jid)
+      }
+      setTeamSelection(selected)
+    } catch (err) {
+      setTeamError(err instanceof Error ? err.message : 'Erro ao carregar')
+    } finally { setTeamLoading(false) }
+  }
+
+  async function saveTeamMembers() {
+    setTeamSaving(true); setTeamError(null)
+    try {
+      const getRes = await fetch('/api/whatsapp/team-members')
+      const getCur = await getRes.json()
+      const currentJids = new Set<string>((getCur.members ?? []).map((m: { jid: string }) => m.jid))
+
+      for (const jid of currentJids) {
+        const isAgencyPhone = teamParticipants.find(p => p.jid === jid)?.isAgencyPhone
+        if (!teamSelection.has(jid) && !isAgencyPhone) {
+          await fetch(`/api/whatsapp/team-members?jid=${encodeURIComponent(jid)}`, { method: 'DELETE' })
+        }
+      }
+
+      const members = [...teamSelection]
+        .filter(jid => !teamParticipants.find(p => p.jid === jid)?.isAgencyPhone)
+        .map(jid => ({
+          jid,
+          displayName: teamParticipants.find(p => p.jid === jid)?.displayName,
+        }))
+
+      if (members.length > 0) {
+        await fetch('/api/whatsapp/team-members', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ members }),
+        })
+      }
+    } catch (err) {
+      setTeamError(err instanceof Error ? err.message : 'Erro ao salvar')
+    } finally { setTeamSaving(false) }
+  }
+
+  // Sentimento history entries (only those with proximity data)
+  const sentimentHistory = analyses.filter(a => a.proximitySentiment || a.proximitySummary)
+
+  // Chart data for proximity score evolution
+  const chartEntries = analyses.filter(a => a.scoreProximidade != null).slice().reverse()
+  const chartW = 280
+  const chartH = 60
+  const xStep = chartEntries.length > 1 ? chartW / (chartEntries.length - 1) : chartW
+  const chartPoints = chartEntries.map((a, i) => ({
+    x: chartEntries.length === 1 ? chartW / 2 : i * xStep,
+    y: chartH - ((a.scoreProximidade ?? 0) / 100) * chartH,
+    score: a.scoreProximidade ?? 0,
+    date: a.analyzedAt,
+  }))
+  const polyline = chartPoints.map(p => `${p.x},${p.y}`).join(' ')
+  const areaPath = chartPoints.length > 0
+    ? `M${chartPoints[0].x},${chartH} ${chartPoints.map(p => `L${p.x},${p.y}`).join(' ')} L${chartPoints[chartPoints.length - 1].x},${chartH} Z`
+    : ''
+
+  const sentimentLabel = (s?: string | null) =>
+    s === 'positive' ? 'Positivo' : s === 'negative' ? 'Negativo' : 'Neutro'
+  const sentimentCls = (s?: string | null) =>
+    s === 'positive' ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' :
+    s === 'negative' ? 'text-red-400 border-red-500/30 bg-red-500/10' :
+    'text-zinc-400 border-zinc-500/30 bg-zinc-500/10'
+  const engagementLabel = (e?: string | null) =>
+    e === 'high' ? 'Alto' : e === 'medium' ? 'Médio' : 'Baixo'
+  const engagementCls = (e?: string | null) =>
+    e === 'high' ? 'text-blue-400 border-blue-500/30 bg-blue-500/10' :
+    e === 'medium' ? 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10' :
+    'text-zinc-400 border-zinc-500/30 bg-zinc-500/10'
+
+  return (
+    <div className="space-y-5">
+
+      {/* ── Seção 1: Análise atual ── */}
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardContent className="p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-blue-500/15 flex items-center justify-center">
+              <Heart className="w-4 h-4 text-blue-400" />
+            </div>
+            <div>
+              <p className="text-zinc-200 font-semibold text-sm">Análise de Sentimento</p>
+              <p className="text-zinc-500 text-xs">Última análise de proximidade do WhatsApp</p>
+            </div>
+          </div>
+
+          {hs?.proximitySummary ? (
+            <>
+              {/* Score gauge + badges */}
+              <div className="flex items-start gap-4">
+                {hs.scoreProximidade != null && (
+                  <div className="shrink-0">
+                    <ScoreGauge score={hs.scoreProximidade} size="sm" />
+                  </div>
+                )}
+                <div className="flex-1 space-y-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {hs.proximitySentiment && (
+                      <Badge variant="outline" className={cn('text-xs', sentimentCls(hs.proximitySentiment))}>
+                        Sentimento {sentimentLabel(hs.proximitySentiment)}
+                      </Badge>
+                    )}
+                    {hs.proximityEngagement && (
+                      <Badge variant="outline" className={cn('text-xs', engagementCls(hs.proximityEngagement))}>
+                        Engajamento {engagementLabel(hs.proximityEngagement)}
+                      </Badge>
+                    )}
+                  </div>
+
+                  {/* Grid: msgs totais | msgs do cliente | semanas */}
+                  <div className="grid grid-cols-3 gap-3">
+                    {hs.proximityMessagesTotal != null && (
+                      <div className="bg-zinc-800/50 rounded-lg p-2.5 text-center">
+                        <p className="text-zinc-200 text-lg font-bold">{hs.proximityMessagesTotal}</p>
+                        <p className="text-zinc-500 text-xs">msgs totais</p>
+                      </div>
+                    )}
+                    {hs.proximityMessagesClient != null && (
+                      <div className="bg-zinc-800/50 rounded-lg p-2.5 text-center">
+                        <p className="text-zinc-200 text-lg font-bold">{hs.proximityMessagesClient}</p>
+                        <p className="text-zinc-500 text-xs">msgs do cliente</p>
+                      </div>
+                    )}
+                    {hs.proximityWeeklyBatches != null && (
+                      <div className="bg-zinc-800/50 rounded-lg p-2.5 text-center">
+                        <p className="text-zinc-200 text-lg font-bold">{hs.proximityWeeklyBatches}</p>
+                        <p className="text-zinc-500 text-xs">semanas</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Resumo completo da IA */}
+              <p className="text-zinc-400 text-sm leading-relaxed border-l-2 border-blue-500/30 pl-3">
+                {hs.proximitySummary}
+              </p>
+            </>
+          ) : (
+            <div className="flex flex-col items-center gap-2 py-6 text-center">
+              <MessageCircle className="w-8 h-8 text-zinc-700" />
+              <p className="text-zinc-500 text-sm">Nenhuma análise de sentimento disponível</p>
+              <p className="text-zinc-600 text-xs max-w-sm">
+                Conecte o grupo WhatsApp do cliente na aba Integrações e rode uma análise para ver os resultados aqui.
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Seção 2: Histórico de sentimento ── */}
+      {loading ? (
+        <div className="flex items-center justify-center py-10">
+          <Loader2 className="w-5 h-5 text-zinc-500 animate-spin" />
+        </div>
+      ) : (
+        <>
+          {/* Gráfico de evolução do score_proximidade */}
+          {chartPoints.length > 1 && (
+            <Card className="bg-zinc-900 border-zinc-800">
+              <CardContent className="p-4">
+                <p className="text-zinc-400 text-xs font-medium mb-3">Evolução do Score de Proximidade</p>
+                <div className="overflow-x-auto">
+                  <svg width="100%" viewBox={`0 0 ${chartW} ${chartH + 10}`} className="min-w-[200px]">
+                    <defs>
+                      <linearGradient id="proxGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.3" />
+                        <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
+                      </linearGradient>
+                    </defs>
+                    <path d={areaPath} fill="url(#proxGrad)" />
+                    <polyline
+                      points={polyline}
+                      fill="none"
+                      stroke="#3b82f6"
+                      strokeWidth="2"
+                      strokeLinejoin="round"
+                    />
+                    {chartPoints.map((p, i) => (
+                      <g key={i}>
+                        <circle cx={p.x} cy={p.y} r="3" fill="#3b82f6" />
+                        <text x={p.x} y={chartH + 9} textAnchor="middle" fontSize="7" fill="#52525b">
+                          {p.score}
+                        </text>
+                      </g>
+                    ))}
+                  </svg>
+                  <div className="flex justify-between text-zinc-700 text-xs mt-1">
+                    <span>{fmtDate(chartEntries[0].analyzedAt.slice(0, 10))}</span>
+                    <span>{fmtDate(chartEntries[chartEntries.length - 1].analyzedAt.slice(0, 10))}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Lista de análises anteriores com sentimento */}
+          {sentimentHistory.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-zinc-500 text-xs font-medium uppercase tracking-wider px-1">Histórico de sentimento</p>
+              {sentimentHistory.map(a => {
+                const isExp = expanded === a.id
+                return (
+                  <Card key={a.id} className="bg-zinc-900 border-zinc-800">
+                    <CardContent className="p-4">
+                      <button
+                        className="w-full flex items-center gap-3 text-left"
+                        onClick={() => setExpanded(isExp ? null : a.id)}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {a.scoreProximidade != null && <ScoreSparkbar score={a.scoreProximidade} />}
+                            {a.proximitySentiment && (
+                              <Badge variant="outline" className={cn('text-xs', sentimentCls(a.proximitySentiment))}>
+                                {sentimentLabel(a.proximitySentiment)}
+                              </Badge>
+                            )}
+                            {a.proximityEngagement && (
+                              <Badge variant="outline" className={cn('text-xs', engagementCls(a.proximityEngagement))}>
+                                Eng. {engagementLabel(a.proximityEngagement)}
+                              </Badge>
+                            )}
+                            {a.proximityMessagesClient != null && (
+                              <span className="text-zinc-600 text-xs">{a.proximityMessagesClient} msgs cliente</span>
+                            )}
+                          </div>
+                          <p className="text-zinc-600 text-xs mt-1">{fmtDate(a.analyzedAt.slice(0, 10))}</p>
+                        </div>
+                        <ChevronRight className={cn('w-4 h-4 text-zinc-600 shrink-0 transition-transform', isExp && 'rotate-90')} />
+                      </button>
+
+                      {isExp && a.proximitySummary && (
+                        <div className="mt-3 pt-3 border-t border-zinc-800">
+                          <p className="text-zinc-400 text-sm leading-relaxed border-l-2 border-blue-500/30 pl-3">
+                            {a.proximitySummary}
+                          </p>
+                          {a.proximityMessagesTotal != null && (
+                            <div className="flex items-center gap-4 mt-3 text-zinc-500 text-xs">
+                              <span>{a.proximityMessagesTotal} msgs totais</span>
+                              {a.proximityWeeklyBatches != null && <span>{a.proximityWeeklyBatches} semanas analisadas</span>}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── Seção 3: Configurar membros do time ── */}
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardContent className="p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-blue-500/15 flex items-center justify-center">
+              <User className="w-4 h-4 text-blue-400" />
+            </div>
+            <div>
+              <p className="text-zinc-200 font-semibold text-sm">Membros do time</p>
+              <p className="text-zinc-500 text-xs">Marque quem faz parte do time da agência para separar mensagens na análise</p>
+            </div>
+          </div>
+
+          {!client.whatsappGroupId ? (
+            <div className="flex flex-col items-center gap-2 py-4 text-center">
+              <MessageCircle className="w-6 h-6 text-zinc-700" />
+              <p className="text-zinc-500 text-sm">Grupo WhatsApp não conectado</p>
+              <p className="text-zinc-600 text-xs">Conecte o grupo na aba Integrações primeiro.</p>
+            </div>
+          ) : (
+            <>
+              {teamParticipants.length === 0 && !teamLoading && !teamError && (
+                <Button size="sm" variant="outline" onClick={loadTeamParticipants}
+                  className="w-full border-zinc-700 text-zinc-400 text-xs gap-1.5">
+                  <RefreshCw className="w-3 h-3" /> Carregar participantes do grupo
+                </Button>
+              )}
+
+              {teamLoading && (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-4 h-4 animate-spin text-zinc-500" />
+                </div>
+              )}
+
+              {teamError && (
+                <div className="flex items-center gap-2 bg-red-500/5 border border-red-500/20 rounded-lg px-3 py-2">
+                  <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                  <p className="text-red-300 text-xs">{teamError}</p>
+                </div>
+              )}
+
+              {!teamLoading && teamParticipants.length > 0 && (
+                <>
+                  <div className="max-h-64 overflow-y-auto space-y-1">
+                    {teamParticipants.map(p => {
+                      const isChecked = teamSelection.has(p.jid) || p.isAgencyPhone
+                      return (
+                        <label key={p.jid}
+                          className={cn(
+                            'flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer transition-colors text-xs',
+                            isChecked ? 'bg-blue-500/5 border border-blue-500/20' : 'bg-zinc-800/40 border border-transparent hover:bg-zinc-800/70',
+                            p.isAgencyPhone && 'opacity-70 cursor-not-allowed'
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            disabled={p.isAgencyPhone}
+                            onChange={e => {
+                              const next = new Set(teamSelection)
+                              if (e.target.checked) next.add(p.jid)
+                              else next.delete(p.jid)
+                              setTeamSelection(next)
+                            }}
+                            className="rounded border-zinc-600 bg-zinc-800 text-blue-500 focus:ring-blue-500/30 w-3.5 h-3.5"
+                          />
+                          <span className={cn('flex-1 truncate', isChecked ? 'text-zinc-200' : 'text-zinc-400')}>
+                            {p.displayName}
+                          </span>
+                          {p.isAgencyPhone && (
+                            <Badge variant="outline" className="text-xs text-blue-400 border-blue-500/30 bg-blue-500/10 shrink-0">
+                              Agência
+                            </Badge>
+                          )}
+                          {p.isAdmin && !p.isAgencyPhone && (
+                            <Badge variant="outline" className="text-xs text-zinc-500 border-zinc-700 shrink-0">
+                              Admin
+                            </Badge>
+                          )}
+                        </label>
+                      )
+                    })}
+                  </div>
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-zinc-600 text-xs">
+                      {teamSelection.size} marcados como time
+                    </span>
+                    <Button size="sm" onClick={saveTeamMembers} disabled={teamSaving}
+                      className="bg-blue-500 hover:bg-blue-600 text-white gap-1.5 text-xs h-7">
+                      {teamSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                      Salvar
+                    </Button>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }
@@ -2589,6 +2849,12 @@ function TabHistorico({ clientId }: { clientId: string }) {
         flags:            (a.flags as string[]) ?? [],
         triggeredBy:      String(a.triggered_by ?? 'scheduled'),
         analyzedAt:       String(a.analyzed_at),
+        proximitySentiment:     a.proximity_sentiment != null ? String(a.proximity_sentiment) : null,
+        proximityEngagement:    a.proximity_engagement != null ? String(a.proximity_engagement) : null,
+        proximitySummary:       a.proximity_summary != null ? String(a.proximity_summary) : null,
+        proximityMessagesTotal: a.proximity_messages_total != null ? Number(a.proximity_messages_total) : null,
+        proximityMessagesClient: a.proximity_messages_client != null ? Number(a.proximity_messages_client) : null,
+        proximityWeeklyBatches: a.proximity_weekly_batches != null ? Number(a.proximity_weekly_batches) : null,
       }))))
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -3084,6 +3350,7 @@ function ClientePerfilInner() {
         {activeTab === 'pasta'        && <TabPasta client={client} refetch={refetch} />}
         {activeTab === 'integracoes'  && <TabIntegracoes client={client} refetch={refetch} />}
         {activeTab === 'formularios'  && <TabFormularios clientId={client.id} client={client} />}
+        {activeTab === 'sentimento'   && <TabSentimento clientId={client.id} client={client} refetch={refetch} />}
         {activeTab === 'historico'    && <TabHistorico clientId={client.id} />}
       </div>
     </div>
